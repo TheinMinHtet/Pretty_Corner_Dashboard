@@ -48,6 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateTime, cn } from "@/lib/utils";
+import { computeInventoryStats } from "@/modules/analytics/metrics";
 
 export default function InventoryPage() {
   const { products, categories, stockHistory, adjustStock, adjustVariantStock } =
@@ -67,15 +68,7 @@ export default function InventoryPage() {
     setExpandedProducts((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const stats = useMemo(() => {
-    const total = products.length;
-    const outOfStock = products.filter((p) => p.stock === 0).length;
-    const lowStock = products.filter(
-      (p) => p.stock > 0 && p.stock <= p.lowStockThreshold
-    ).length;
-    const inStock = products.filter((p) => p.stock > p.lowStockThreshold).length;
-    return { total, inStock, lowStock, outOfStock };
-  }, [products]);
+  const stats = useMemo(() => computeInventoryStats(products), [products]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();

@@ -49,11 +49,8 @@ import {
   DATE_RANGE_LABELS,
   DateRange,
   filterOrdersByRange,
-  percentChange,
-  rangeStart,
-  sumRevenue,
-  topShare,
-} from "@/lib/analytics";
+  computeDashboardMetrics,
+} from "@/modules/analytics/metrics";
 import { OrderStatus } from "@/types/admin";
 
 export default function AdminDashboardPage() {
@@ -66,55 +63,7 @@ export default function AdminDashboardPage() {
   );
 
   const metrics = useMemo(() => {
-    const now = new Date();
-    const start = rangeStart(range, now);
-    const span = Math.max(now.getTime() - start, 1);
-
-    const current = filterOrdersByRange(orders, range, now);
-    const previous = orders.filter((order) => {
-      const created = new Date(order.createdAt).getTime();
-      return created >= start - span && created < start;
-    });
-
-    const revenue = sumRevenue(current);
-    const previousRevenue = sumRevenue(previous);
-    const billable = current.filter((o) => o.orderStatus !== "Cancelled");
-
-    const countBy = (status: OrderStatus) =>
-      current.filter((o) => o.orderStatus === status).length;
-
-    const totalOrders = current.length;
-    const share = (count: number) =>
-      totalOrders === 0 ? 0 : Math.round((count / totalOrders) * 100);
-
-    const pending = countBy("Pending");
-    const processing = countBy("Processing");
-    const completed = countBy("Delivered");
-    const cancelled = countBy("Cancelled");
-
-    return {
-      revenue,
-      previousRevenue,
-      revenueChange: percentChange(revenue, previousRevenue),
-      totalOrders,
-      ordersChange: percentChange(totalOrders, previous.length),
-      pending,
-      processing,
-      completed,
-      cancelled,
-      pendingShare: share(pending),
-      processingShare: share(processing),
-      completedShare: share(completed),
-      cancelledShare: share(cancelled),
-      avgOrderValue: billable.length > 0 ? revenue / billable.length : 0,
-      paidPayments: current.filter((o) => o.paymentStatus === "Paid").length,
-      pendingPayments: current.filter((o) => o.paymentStatus === "Pending").length,
-      failedPayments: current.filter(
-        (o) => o.paymentStatus === "Failed" || o.paymentStatus === "Expired"
-      ).length,
-      topPayment: topShare(current.map((o) => o.paymentMethod)),
-      topCity: topShare(current.map((o) => o.city)),
-    };
+    return computeDashboardMetrics(orders, range);
   }, [orders, range]);
 
   const changeLabel = (change: number | null) =>

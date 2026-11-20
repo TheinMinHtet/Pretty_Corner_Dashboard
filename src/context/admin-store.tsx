@@ -34,6 +34,11 @@ import {
   INITIAL_STOCK_HISTORY,
 } from "@/data/mock-data";
 import { generateId } from "@/lib/utils";
+import {
+  transitionOrderStatus,
+  settleOrderPayment,
+} from "@/modules/orders/order-lifecycle";
+import { applyStockAdjustment } from "@/modules/catalog/catalog-sync";
 
 const STORAGE_KEY = "pretty_corner_admin_v1";
 const AUTH_STORAGE_KEY = "pretty_corner_auth_v1";
@@ -312,117 +317,26 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
   const updateOrderStatus = useCallback(
     (orderId: string, status: OrderStatus, note?: string) => {
-      const now = new Date().toISOString();
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
         const prevStatus = target.orderStatus;
         if (prevStatus === status) return prev;
 
-        let updatedProducts = prev.products;
-        let updatedStockHistory = prev.stockHistory;
+        const {
+          updatedOrder,
+          updatedProducts: transitionProducts,
+          newAdjustments,
+          timelineNote,
+        } = transitionOrderStatus(
+          target,
+          status,
+          prev.products,
+          prev.settings.adminProfile.name,
+          note
+        );
 
-        // Auto Stock Restoration on Cancellation (PC-IS-004)
-        if (status === "Cancelled" && prevStatus !== "Cancelled") {
-          const newAdjustments: StockAdjustment[] = [];
-
-          updatedProducts = updatedProducts.map((p) => {
-            const itemsForProduct = target.items.filter((item) => item.productId === p.id);
-            if (itemsForProduct.length === 0) return p;
-
-            let stockIncrement = 0;
-            let runningStock = p.stock;
-            let updatedVariants = p.variants ? [...p.variants] : [];
-
-            for (const item of itemsForProduct) {
-              stockIncrement += item.quantity;
-
-              if (item.variantLabel && updatedVariants.length > 0) {
-                updatedVariants = updatedVariants.map((v) => {
-                  if (v.label === item.variantLabel) {
-                    return { ...v, quantity: v.quantity + item.quantity };
-                  }
-                  return v;
-                });
-              }
-
-              newAdjustments.push({
-                id: generateId("stk"),
-                productId: p.id,
-                productName: p.name,
-                sku: item.sku || p.sku,
-                variantLabel: item.variantLabel,
-                type: "increase",
-                quantity: item.quantity,
-                previousStock: runningStock,
-                newStock: runningStock + item.quantity,
-                reason: `Order ${target.reference} Cancelled - Stock Restored`,
-                performedBy: prev.settings.adminProfile.name,
-                createdAt: now,
-              });
-              runningStock += item.quantity;
-            }
-
-            return {
-              ...p,
-              stock: p.stock + stockIncrement,
-              variants: updatedVariants,
-              updatedAt: now,
-            };
-          });
-
-          updatedStockHistory = [...newAdjustments, ...updatedStockHistory];
-        } else if (prevStatus === "Cancelled" && status !== "Cancelled") {
-          // Re-deduct stock if reopening cancelled order
-          const newAdjustments: StockAdjustment[] = [];
-
-          updatedProducts = updatedProducts.map((p) => {
-            const itemsForProduct = target.items.filter((item) => item.productId === p.id);
-            if (itemsForProduct.length === 0) return p;
-
-            let stockDecrement = 0;
-            let runningStock = p.stock;
-            let updatedVariants = p.variants ? [...p.variants] : [];
-
-            for (const item of itemsForProduct) {
-              stockDecrement += item.quantity;
-
-              if (item.variantLabel && updatedVariants.length > 0) {
-                updatedVariants = updatedVariants.map((v) => {
-                  if (v.label === item.variantLabel) {
-                    return { ...v, quantity: Math.max(0, v.quantity - item.quantity) };
-                  }
-                  return v;
-                });
-              }
-
-              newAdjustments.push({
-                id: generateId("stk"),
-                productId: p.id,
-                productName: p.name,
-                sku: item.sku || p.sku,
-                variantLabel: item.variantLabel,
-                type: "decrease",
-                quantity: item.quantity,
-                previousStock: runningStock,
-                newStock: Math.max(0, runningStock - item.quantity),
-                reason: `Order ${target.reference} Reopened - Stock Deducted`,
-                performedBy: prev.settings.adminProfile.name,
-                createdAt: now,
-              });
-              runningStock = Math.max(0, runningStock - item.quantity);
-            }
-
-            return {
-              ...p,
-              stock: Math.max(0, p.stock - stockDecrement),
-              variants: updatedVariants,
-              updatedAt: now,
-            };
-          });
-
-          updatedStockHistory = [...newAdjustments, ...updatedStockHistory];
-        }
+        let updatedProducts = transitionProducts;
 
         // Best-seller counts follow delivery state (PC-SD-005)
         if ((prevStatus === "Delivered") !== (status === "Delivered")) {
@@ -440,25 +354,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         }
 
         const orders = prev.orders.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                orderStatus: status,
-                updatedAt: now,
-                timeline: [
-                  ...o.timeline,
-                  {
-                    status,
-                    timestamp: now,
-                    note: note || `Order marked as ${status}.`,
-                    actor: prev.settings.adminProfile.name,
-                  },
-                ],
-              }
-            : o
+          o.id === orderId ? updatedOrder : o
         );
-        let notifications = prev.notifications;
 
+        let notifications = prev.notifications;
         if (prev.settings.notifications.lowStockAlert) {
           for (const product of updatedProducts) {
             const before = prev.products.find((p) => p.id === product.id);
@@ -474,7 +373,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           type: "order",
           title: `Order ${target.reference} ${status}`,
           message:
-            note?.trim() ||
+            timelineNote ||
             `${target.customerName}'s order is now ${status}${
               status === "Cancelled" ? " and stock has been restored" : ""
             }.`,
@@ -485,7 +384,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           orders,
           products: updatedProducts,
-          stockHistory: updatedStockHistory,
+          stockHistory: [...newAdjustments, ...prev.stockHistory],
           notifications,
           activity: pushActivity(
             prev.activity,
@@ -502,7 +401,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
   const updatePaymentStatus = useCallback(
     (orderId: string, status: PaymentStatus) => {
-      const now = new Date().toISOString();
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
@@ -518,11 +416,15 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
               })
             : prev.notifications;
 
+        const updatedOrder = settleOrderPayment(
+          target,
+          { status },
+          prev.settings.adminProfile.name
+        );
+
         return {
           ...prev,
-          orders: prev.orders.map((o) =>
-            o.id === orderId ? { ...o, paymentStatus: status, updatedAt: now } : o
-          ),
+          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
           notifications,
           activity: pushActivity(
             prev.activity,
@@ -538,13 +440,21 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updatePaymentReference = useCallback((orderId: string, reference: string) => {
-    const now = new Date().toISOString();
-    setState((prev) => ({
-      ...prev,
-      orders: prev.orders.map((o) =>
-        o.id === orderId ? { ...o, transactionReference: reference, updatedAt: now } : o
-      ),
-    }));
+    setState((prev) => {
+      const target = prev.orders.find((o) => o.id === orderId);
+      if (!target) return prev;
+
+      const updatedOrder = settleOrderPayment(
+        target,
+        { reference },
+        prev.settings.adminProfile.name
+      );
+
+      return {
+        ...prev,
+        orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
+      };
+    });
   }, []);
 
   const processOrderRefund = useCallback(
@@ -552,35 +462,14 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       orderId: string,
       refund: Omit<RefundDetails, "refundedAt" | "processedBy">
     ) => {
-      const now = new Date().toISOString();
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
 
-        const fullRefundRecord: RefundDetails = {
-          ...refund,
-          refundedAt: now,
-          processedBy: prev.settings.adminProfile.name,
-        };
-
-        const updatedOrders = prev.orders.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                paymentStatus: "Refunded" as PaymentStatus,
-                refundDetails: fullRefundRecord,
-                updatedAt: now,
-                timeline: [
-                  ...o.timeline,
-                  {
-                    status: o.orderStatus,
-                    timestamp: now,
-                    note: `Refund processed: ${refund.isFullRefund ? "Full Refund" : "Partial Refund"} of ${refund.amount.toLocaleString()} MMK (Voucher: ${refund.transactionReference}). Reason: ${refund.reason}`,
-                    actor: prev.settings.adminProfile.name,
-                  },
-                ],
-              }
-            : o
+        const updatedOrder = settleOrderPayment(
+          target,
+          { refund },
+          prev.settings.adminProfile.name
         );
 
         const notifications = appendNotification(prev.notifications, {
@@ -592,7 +481,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
         return {
           ...prev,
-          orders: updatedOrders,
+          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
           notifications,
           activity: pushActivity(
             prev.activity,
@@ -730,41 +619,30 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       quantity: number,
       reason: string
     ) => {
-      const now = new Date().toISOString();
       setState((prev) => {
         const target = prev.products.find((p) => p.id === productId);
         if (!target || quantity <= 0) return prev;
-        const previousStock = target.stock;
-        const newStock =
-          type === "increase"
-            ? previousStock + quantity
-            : Math.max(0, previousStock - quantity);
 
-        const adjustment: StockAdjustment = {
-          id: generateId("stk"),
-          productId,
-          productName: target.name,
-          sku: target.sku,
+        const { updatedProduct, adjustment } = applyStockAdjustment(
+          target,
+          undefined,
           type,
           quantity,
-          previousStock,
-          newStock,
-          reason: reason || "Manual stock adjustment",
-          performedBy: prev.settings.adminProfile.name,
-          createdAt: now,
-        };
+          prev.settings.adminProfile.name,
+          reason
+        );
 
         const notifications = prev.settings.notifications.lowStockAlert
           ? appendNotification(
               prev.notifications,
-              buildStockAlert(target, previousStock, newStock)
+              buildStockAlert(target, target.stock, updatedProduct.stock)
             )
           : prev.notifications;
 
         return {
           ...prev,
           products: prev.products.map((p) =>
-            p.id === productId ? { ...p, stock: newStock, updatedAt: now } : p
+            p.id === productId ? updatedProduct : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
           notifications,
@@ -789,7 +667,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       quantity: number,
       reason: string
     ) => {
-      const now = new Date().toISOString();
       setState((prev) => {
         const targetProduct = prev.products.find((p) => p.id === productId);
         if (!targetProduct || quantity <= 0) return prev;
@@ -797,36 +674,19 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (!targetVariant) return prev;
 
         const prevVariantQty = targetVariant.quantity;
-        const newVariantQty =
-          type === "increase"
-            ? prevVariantQty + quantity
-            : Math.max(0, prevVariantQty - quantity);
 
-        const delta = newVariantQty - prevVariantQty;
-        const previousProductStock = targetProduct.stock;
-        const newProductStock = Math.max(0, previousProductStock + delta);
-
-        const updatedVariants = targetProduct.variants.map((v) =>
-          v.id === variantId ? { ...v, quantity: newVariantQty } : v
-        );
-
-        const adjustment: StockAdjustment = {
-          id: generateId("stk"),
-          productId,
-          productName: targetProduct.name,
-          sku: `${targetProduct.sku}-${targetVariant.skuSuffix || targetVariant.id}`,
+        const { updatedProduct, adjustment } = applyStockAdjustment(
+          targetProduct,
           variantId,
-          variantLabel: targetVariant.label,
           type,
           quantity,
-          previousStock: previousProductStock,
-          newStock: newProductStock,
-          reason:
-            reason ||
-            `Variant stock ${type === "increase" ? "restock" : "deduction"} (${targetVariant.label})`,
-          performedBy: prev.settings.adminProfile.name,
-          createdAt: now,
-        };
+          prev.settings.adminProfile.name,
+          reason
+        );
+
+        const newVariantQty =
+          updatedProduct.variants?.find((v) => v.id === variantId)?.quantity ??
+          prevVariantQty;
 
         const notifications = prev.settings.notifications.lowStockAlert
           ? appendNotification(
@@ -846,14 +706,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           products: prev.products.map((p) =>
-            p.id === productId
-              ? {
-                  ...p,
-                  stock: newProductStock,
-                  variants: updatedVariants,
-                  updatedAt: now,
-                }
-              : p
+            p.id === productId ? updatedProduct : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
           notifications,

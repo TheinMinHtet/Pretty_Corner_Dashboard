@@ -54,7 +54,9 @@ import {
   DateRange,
   filterOrdersByRange,
   sumRevenue,
-} from "@/lib/analytics";
+  computePaymentMethodStats,
+  computePaymentStatusStats,
+} from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -76,51 +78,15 @@ export default function SalesReportsPage() {
   );
 
   // Payment Breakdown Analytics (PC-SD-008)
-  const paymentMethodStats = useMemo(() => {
-    const methods = [
-      "KBZPay",
-      "WavePay",
-      "CB Pay",
-      "AYA Pay",
-      "Cash on Delivery",
-    ] as const;
-    const colors: Record<string, string> = {
-      KBZPay: "#38BDF8",
-      WavePay: "#F59E0B",
-      "CB Pay": "#EC4899",
-      "AYA Pay": "#EF4444",
-      "Cash on Delivery": "#10B981",
-    };
-    return methods.map((m) => {
-      const matched = rangeOrders.filter((o) => o.paymentMethod === m);
-      const totalAmount = matched.reduce(
-        (s, o) => s + (o.orderStatus !== "Cancelled" ? o.total : 0),
-        0
-      );
-      return {
-        name: m,
-        count: matched.length,
-        revenue: totalAmount,
-        color: colors[m] || "#D96B91",
-      };
-    });
-  }, [rangeOrders]);
+  const paymentMethodStats = useMemo(
+    () => computePaymentMethodStats(rangeOrders),
+    [rangeOrders]
+  );
 
-  const paymentStatusStats = useMemo(() => {
-    const statuses = ["Paid", "Pending", "Failed", "Expired", "Refunded"] as const;
-    const colors: Record<string, string> = {
-      Paid: "#10B981",
-      Pending: "#F59E0B",
-      Failed: "#EF4444",
-      Expired: "#F97316",
-      Refunded: "#8B5CF6",
-    };
-    return statuses.map((s) => ({
-      name: s,
-      count: rangeOrders.filter((o) => o.paymentStatus === s).length,
-      color: colors[s],
-    }));
-  }, [rangeOrders]);
+  const paymentStatusStats = useMemo(
+    () => computePaymentStatusStats(rangeOrders),
+    [rangeOrders]
+  );
 
   // Customer Segmentation Analytics (PC-SD-007)
   const customerRetentionStats = useMemo(() => {
