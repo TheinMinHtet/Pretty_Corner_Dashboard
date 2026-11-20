@@ -23,10 +23,8 @@ import {
   CreditCard,
   Users,
   Repeat,
-  PieChart as PieIcon,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
-import { REVENUE_SERIES } from "@/data/mock-data";
 import { OrderStatus } from "@/types/admin";
 import {
   Card,
@@ -51,6 +49,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCompactMMK, formatMMK } from "@/lib/utils";
+import {
+  buildOrderSeries,
+  DateRange,
+  filterOrdersByRange,
+  sumRevenue,
+  computePaymentMethodStats,
+  computePaymentStatusStats,
+} from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -64,59 +70,29 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 
 export default function SalesReportsPage() {
   const { orders, products, categories, customers } = useAdminStore();
-  const [dateRange, setDateRange] = useState<"7d" | "30d" | "6m">("30d");
+  const [dateRange, setDateRange] = useState<DateRange>("30d");
+
+  const rangeOrders = useMemo(
+    () => filterOrdersByRange(orders, dateRange),
+    [orders, dateRange]
+  );
 
   // Payment Breakdown Analytics (PC-SD-008)
-  const paymentMethodStats = useMemo(() => {
-    const methods = [
-      "KBZPay",
-      "WavePay",
-      "CB Pay",
-      "AYA Pay",
-      "Cash on Delivery",
-    ] as const;
-    const colors: Record<string, string> = {
-      KBZPay: "#38BDF8",
-      WavePay: "#F59E0B",
-      "CB Pay": "#EC4899",
-      "AYA Pay": "#EF4444",
-      "Cash on Delivery": "#10B981",
-    };
-    return methods.map((m) => {
-      const matched = orders.filter((o) => o.paymentMethod === m);
-      const totalAmount = matched.reduce(
-        (s, o) => s + (o.orderStatus !== "Cancelled" ? o.total : 0),
-        0
-      );
-      return {
-        name: m,
-        count: matched.length,
-        revenue: totalAmount,
-        color: colors[m] || "#D96B91",
-      };
-    });
-  }, [orders]);
+  const paymentMethodStats = useMemo(
+    () => computePaymentMethodStats(rangeOrders),
+    [rangeOrders]
+  );
 
-  const paymentStatusStats = useMemo(() => {
-    const statuses = ["Paid", "Pending", "Refunded", "Failed"] as const;
-    const colors: Record<string, string> = {
-      Paid: "#10B981",
-      Pending: "#F59E0B",
-      Refunded: "#8B5CF6",
-      Failed: "#EF4444",
-    };
-    return statuses.map((s) => ({
-      name: s,
-      count: orders.filter((o) => o.paymentStatus === s).length,
-      color: colors[s],
-    }));
-  }, [orders]);
+  const paymentStatusStats = useMemo(
+    () => computePaymentStatusStats(rangeOrders),
+    [rangeOrders]
+  );
 
   // Customer Segmentation Analytics (PC-SD-007)
   const customerRetentionStats = useMemo(() => {
     const customerOrderCounts: Record<string, { count: number; spend: number }> =
       {};
-    for (const o of orders) {
+    for (const o of rangeOrders) {
       if (!customerOrderCounts[o.customerId]) {
         customerOrderCounts[o.customerId] = { count: 0, spend: 0 };
       }
@@ -133,6 +109,7 @@ export default function SalesReportsPage() {
 
     for (const c of customers) {
       const stats = customerOrderCounts[c.id] || { count: 0, spend: 0 };
+      if (stats.count === 0) continue;
       if (stats.count > 1) {
         returningCustCount += 1;
         returningCustSpend += stats.spend;
@@ -142,7 +119,7 @@ export default function SalesReportsPage() {
       }
     }
 
-    const totalCust = customers.length || 1;
+    const totalCust = newCustCount + returningCustCount || 1;
     const repeatRate = Math.round((returningCustCount / totalCust) * 100);
 
     return {
@@ -152,35 +129,39 @@ export default function SalesReportsPage() {
       returningCustSpend,
       repeatRate,
     };
-  }, [customers, orders]);
+  }, [customers, rangeOrders]);
 
-  const trendData = useMemo(() => {
-    if (dateRange === "7d") return REVENUE_SERIES.daily;
-    if (dateRange === "30d") return REVENUE_SERIES.weekly;
-    return REVENUE_SERIES.monthly;
-  }, [dateRange]);
+  const trendData = useMemo(
+    () => buildOrderSeries(rangeOrders, dateRange),
+    [rangeOrders, dateRange]
+  );
 
   const summary = useMemo(() => {
-    const totalRev = trendData.reduce((s, d) => s + d.revenue, 0);
-    const totalOrd = trendData.reduce((s, d) => s + d.orders, 0);
+    const totalRev = sumRevenue(rangeOrders);
+    const totalOrd = rangeOrders.length;
     const aov = totalOrd > 0 ? totalRev / totalOrd : 0;
     return { totalRev, totalOrd, aov };
-  }, [trendData]);
+  }, [rangeOrders]);
 
   const salesByCategory = useMemo(() => {
-    return categories.map((cat, idx) => {
-      const catProducts = products.filter((p) => p.categoryId === cat.id);
-      const revenue = catProducts.reduce(
-        (sum, p) => sum + p.soldCount * (p.salePrice ?? p.regularPrice),
-        0
-      );
-      return {
-        name: cat.name,
-        revenue,
-        color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
-      };
-    });
-  }, [categories, products]);
+    const totals = new Map<string, number>();
+    for (const order of rangeOrders) {
+      if (order.orderStatus === "Cancelled") continue;
+      for (const item of order.items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) continue;
+        totals.set(
+          product.categoryId,
+          (totals.get(product.categoryId) ?? 0) + item.quantity * item.unitPrice
+        );
+      }
+    }
+    return categories.map((cat, idx) => ({
+      name: cat.name,
+      revenue: totals.get(cat.id) ?? 0,
+      color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+    }));
+  }, [categories, products, rangeOrders]);
 
   const ordersByStatus = useMemo(() => {
     const statuses: OrderStatus[] = [
@@ -194,11 +175,11 @@ export default function SalesReportsPage() {
     return statuses
       .map((s) => ({
         name: s,
-        value: orders.filter((o) => o.orderStatus === s).length,
+        value: rangeOrders.filter((o) => o.orderStatus === s).length,
         color: STATUS_COLORS[s],
       }))
       .filter((d) => d.value > 0);
-  }, [orders]);
+  }, [rangeOrders]);
 
   const bestSellers = useMemo(
     () =>
@@ -223,7 +204,7 @@ export default function SalesReportsPage() {
           <Calendar className="h-4 w-4 text-[#806B73]" />
           <Select
             value={dateRange}
-            onValueChange={(v) => setDateRange(v as "7d" | "30d" | "6m")}
+            onValueChange={(v) => setDateRange(v as DateRange)}
           >
             <SelectTrigger className="w-44">
               <SelectValue />

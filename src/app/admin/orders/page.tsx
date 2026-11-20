@@ -64,8 +64,17 @@ type SortField = "createdAt" | "total" | "reference";
 type SortDir = "asc" | "desc";
 
 export default function OrdersPage() {
-  const { orders } = useAdminStore();
+  const { orders, globalSearch, setGlobalSearch } = useAdminStore();
   const [search, setSearch] = useState("");
+
+  // Pick up the header global search (PC-AD shell) once, then clear it.
+  useEffect(() => {
+    if (globalSearch.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the shared search store
+      setSearch(globalSearch.trim());
+      setGlobalSearch("");
+    }
+  }, [globalSearch, setGlobalSearch]);
   const [statusFilter, setStatusFilter] = useState<"All" | OrderStatus>("All");
   const [paymentFilter, setPaymentFilter] = useState<"All" | PaymentStatus>("All");
   const [dateFilter, setDateFilter] = useState<"all" | "7d" | "30d">("all");
@@ -76,6 +85,7 @@ export default function OrdersPage() {
   const pageSize = 6;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client clock for hydration-safe "today" filters
     setClientNow(Date.now());
   }, []);
 

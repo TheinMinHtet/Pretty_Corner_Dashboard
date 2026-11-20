@@ -11,7 +11,8 @@ export type PaymentStatus =
   | "Paid"
   | "Failed"
   | "Expired"
-  | "Refunded";
+  | "Refunded"
+  | "Cancelled";
 
 export type ProductStatus = "Active" | "Draft" | "Archived";
 
@@ -94,6 +95,8 @@ export interface Order {
   township: string;
   city: string;
   nearbyLandmark?: string;
+  building?: string;
+  deliveryInstructions?: string;
   deliveryMethod?: "courier" | "pickup";
   coordinates?: {
     lat: number;
@@ -196,6 +199,13 @@ export interface StorePickupOptions {
   instructions: string;
 }
 
+export interface TownshipDeliveryFee {
+  id: string;
+  township: string;
+  city: string;
+  fee: number;
+}
+
 export interface StoreSettings {
   storeName: string;
   tagline: string;
@@ -207,9 +217,15 @@ export interface StoreSettings {
   yangonDeliveryFee: number;
   mandalayDeliveryFee: number;
   otherRegionDeliveryFee: number;
+  townshipDeliveryFees: TownshipDeliveryFee[];
   freeShippingThreshold: number;
   defaultLowStockThreshold: number;
   pickupOptions: StorePickupOptions;
+  socialLinks: {
+    facebook: string;
+    instagram: string;
+    tiktok: string;
+  };
   paymentMethods: {
     kbzPay: boolean;
     wavePay: boolean;

@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { Product, ProductStatus, ProductVariant } from "@/types/admin";
+import { reconcileProductStock } from "@/modules/catalog/catalog-sync";
 import {
   Card,
   CardContent,
@@ -174,10 +175,10 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
       return;
     }
 
-    const totalVariantStock =
-      variants.length > 0
-        ? variants.reduce((sum, v) => sum + Math.max(0, Number(v.quantity)), 0)
-        : Number(stock);
+    const totalVariantStock = reconcileProductStock({
+      stock: Number(stock),
+      variants,
+    } as Product);
 
     const payload = {
       name: name.trim(),
@@ -188,7 +189,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
       regularPrice: Number(regularPrice),
       salePrice: salePrice.trim() ? Number(salePrice) : undefined,
       images: images.length > 0 ? images : [DEFAULT_PLACEHOLDER_IMG],
-      stock: variants.length > 0 ? totalVariantStock : Number(stock),
+      stock: totalVariantStock,
       lowStockThreshold: Math.max(0, Number(lowStockThreshold) || 10),
       status,
       isContactLens,
@@ -569,7 +570,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                   disabled={variants.length > 0}
                   value={
                     variants.length > 0
-                      ? variants.reduce((s, v) => s + Number(v.quantity || 0), 0)
+                      ? reconcileProductStock({ variants, stock: 0 } as Product)
                       : stock
                   }
                   onChange={(e) => setStock(e.target.value)}

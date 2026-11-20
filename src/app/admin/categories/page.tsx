@@ -105,6 +105,8 @@ export default function CategoriesPage() {
   const getProductCount = (catId: string) =>
     products.filter((p) => p.categoryId === catId).length;
 
+  const deleteCount = deleteTarget ? getProductCount(deleteTarget.id) : 0;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -277,11 +279,25 @@ export default function CategoriesPage() {
           <DialogHeader>
             <DialogTitle>Delete Category</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete{" "}
-              <span className="font-semibold text-[#33272C]">
-                {deleteTarget?.name}
-              </span>
-              ? Products in this category will remain in your catalog.
+              {deleteCount > 0 ? (
+                <>
+                  <span className="font-semibold text-[#33272C]">
+                    {deleteTarget?.name}
+                  </span>{" "}
+                  still contains {deleteCount}{" "}
+                  {deleteCount === 1 ? "product" : "products"}. Move or delete
+                  those products first — removing the category would leave them
+                  uncategorized.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-[#33272C]">
+                    {deleteTarget?.name}
+                  </span>
+                  ? This cannot be undone.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -290,8 +306,9 @@ export default function CategoriesPage() {
             </Button>
             <Button
               variant="destructive"
+              disabled={deleteCount > 0}
               onClick={() => {
-                if (deleteTarget) {
+                if (deleteTarget && deleteCount === 0) {
                   deleteCategory(deleteTarget.id);
                   toast.success(`Deleted "${deleteTarget.name}"`);
                   setDeleteTarget(null);

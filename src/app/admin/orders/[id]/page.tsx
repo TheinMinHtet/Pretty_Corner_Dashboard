@@ -72,6 +72,7 @@ const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
   "Failed",
   "Expired",
   "Refunded",
+  "Cancelled",
 ];
 
 export default function OrderDetailsPage() {
@@ -120,6 +121,14 @@ export default function OrderDetailsPage() {
   }
 
   const handleUpdateStatus = () => {
+    if (
+      selectedStatus === "Cancelled" &&
+      order.orderStatus !== "Cancelled" &&
+      !statusNote.trim()
+    ) {
+      toast.error("A cancellation reason is required (PC-OM-008)");
+      return;
+    }
     updateOrderStatus(order.id, selectedStatus, statusNote.trim() || undefined);
     setStatusNote("");
     toast.success(`Order ${order.reference} updated to ${selectedStatus}`);
@@ -295,12 +304,32 @@ export default function OrderDetailsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Note (optional)</Label>
+                <Label>
+                  {selectedStatus === "Cancelled" ? (
+                    <>
+                      Cancellation Reason{" "}
+                      <span className="text-rose-600">*</span>
+                    </>
+                  ) : (
+                    "Note (optional)"
+                  )}
+                </Label>
                 <Input
                   value={statusNote}
                   onChange={(e) => setStatusNote(e.target.value)}
-                  placeholder="e.g., Handed to Royal Express rider"
+                  placeholder={
+                    selectedStatus === "Cancelled"
+                      ? "Required — e.g., Customer requested cancellation"
+                      : "e.g., Handed to Royal Express rider"
+                  }
                 />
+                {selectedStatus === "Cancelled" &&
+                  order.orderStatus !== "Cancelled" && (
+                    <p className="text-[11px] text-[#806B73]">
+                      Cancelling restores stock for every item. Refunds are
+                      recorded separately and never restore stock twice.
+                    </p>
+                  )}
               </div>
               <Button onClick={handleUpdateStatus} className="w-full">
                 Save Status Update
@@ -388,6 +417,26 @@ export default function OrderDetailsPage() {
                       {order.nearbyLandmark}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Building / apartment + delivery instructions (Section 6.2) */}
+              {(order.building || order.deliveryInstructions) && (
+                <div className="rounded-2xl border border-[#F0E1E6] bg-white p-3 space-y-1.5">
+                  {order.building && (
+                    <p className="text-xs text-[#33272C]">
+                      <span className="font-semibold">Building / Apartment:</span>{" "}
+                      {order.building}
+                    </p>
+                  )}
+                  {order.deliveryInstructions && (
+                    <p className="text-xs text-[#33272C]">
+                      <span className="font-semibold">
+                        Delivery instructions:
+                      </span>{" "}
+                      {order.deliveryInstructions}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -634,7 +683,9 @@ export default function OrderDetailsPage() {
               Process Order Refund
             </DialogTitle>
             <DialogDescription className="text-xs text-[#806B73]">
-              Record refund voucher and reason for {order.reference} (Total: {formatMMK(order.total)})
+              Record refund voucher and reason for {order.reference} (Total: {formatMMK(order.total)}).
+              Refunds never change stock — stock is restored only when an order
+              is cancelled.
             </DialogDescription>
           </DialogHeader>
 
