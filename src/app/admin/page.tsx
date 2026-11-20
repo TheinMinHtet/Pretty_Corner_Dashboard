@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Sparkles,
   Activity,
+  Package,
+  XCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import {
@@ -42,31 +44,81 @@ import {
   RevenueChartCard,
 } from "@/components/charts/dashboard-charts";
 import { formatDate, formatDateTime, formatMMK } from "@/lib/utils";
+import {
+  DATE_RANGES,
+  DATE_RANGE_LABELS,
+  DateRange,
+  filterOrdersByRange,
+  percentChange,
+  rangeStart,
+  sumRevenue,
+  topShare,
+} from "@/lib/analytics";
+import { OrderStatus } from "@/types/admin";
 
 export default function AdminDashboardPage() {
   const { orders, products, categories, activity } = useAdminStore();
+  const [range, setRange] = useState<DateRange>("30d");
+
+  const rangeOrders = useMemo(
+    () => filterOrdersByRange(orders, range),
+    [orders, range]
+  );
 
   const metrics = useMemo(() => {
-    const validOrders = orders.filter((o) => o.orderStatus !== "Cancelled");
-    const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
-    // Combine live orders with baseline historical boutique revenue for realistic MMK scale
-    const displayRevenue = 11520000 + totalRevenue;
-    const totalOrdersCount = 222 + orders.length;
-    const pendingCount = orders.filter((o) => o.orderStatus === "Pending").length;
-    const completedCount =
-      188 + orders.filter((o) => o.orderStatus === "Delivered").length;
-    const avgOrderValue =
-      validOrders.length > 0 ? totalRevenue / validOrders.length : 0;
+    const now = new Date();
+    const start = rangeStart(range, now);
+    const span = Math.max(now.getTime() - start, 1);
+
+    const current = filterOrdersByRange(orders, range, now);
+    const previous = orders.filter((order) => {
+      const created = new Date(order.createdAt).getTime();
+      return created >= start - span && created < start;
+    });
+
+    const revenue = sumRevenue(current);
+    const previousRevenue = sumRevenue(previous);
+    const billable = current.filter((o) => o.orderStatus !== "Cancelled");
+
+    const countBy = (status: OrderStatus) =>
+      current.filter((o) => o.orderStatus === status).length;
+
+    const totalOrders = current.length;
+    const share = (count: number) =>
+      totalOrders === 0 ? 0 : Math.round((count / totalOrders) * 100);
+
+    const pending = countBy("Pending");
+    const processing = countBy("Processing");
+    const completed = countBy("Delivered");
+    const cancelled = countBy("Cancelled");
 
     return {
-      displayRevenue,
-      totalOrdersCount,
-      pendingCount,
-      completedCount,
-      avgOrderValue,
-      liveRevenue: totalRevenue,
+      revenue,
+      previousRevenue,
+      revenueChange: percentChange(revenue, previousRevenue),
+      totalOrders,
+      ordersChange: percentChange(totalOrders, previous.length),
+      pending,
+      processing,
+      completed,
+      cancelled,
+      pendingShare: share(pending),
+      processingShare: share(processing),
+      completedShare: share(completed),
+      cancelledShare: share(cancelled),
+      avgOrderValue: billable.length > 0 ? revenue / billable.length : 0,
+      paidPayments: current.filter((o) => o.paymentStatus === "Paid").length,
+      pendingPayments: current.filter((o) => o.paymentStatus === "Pending").length,
+      failedPayments: current.filter(
+        (o) => o.paymentStatus === "Failed" || o.paymentStatus === "Expired"
+      ).length,
+      topPayment: topShare(current.map((o) => o.paymentMethod)),
+      topCity: topShare(current.map((o) => o.city)),
     };
-  }, [orders]);
+  }, [orders, range]);
+
+  const changeLabel = (change: number | null) =>
+    change === null ? "No prior data" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
 
   const recentOrders = useMemo(
     () =>
@@ -101,53 +153,75 @@ export default function AdminDashboardPage() {
 
   const kpis = [
     {
-      title: "Total Revenue",
-      value: formatMMK(metrics.displayRevenue),
-      change: "+14.2%",
-      positive: true,
-      comparison: "vs 10,590,000 MMK last month",
+      title: "Total Sales",
+      value: formatMMK(metrics.revenue),
+      change: changeLabel(metrics.revenueChange),
+      positive: (metrics.revenueChange ?? 0) >= 0,
+      comparison: `vs ${formatMMK(metrics.previousRevenue)} previous period`,
       icon: Banknote,
       accentBg: "bg-[#FCEEF2]",
       accentText: "text-[#D96B91]",
-      barWidth: "w-4/5",
+      width: 100,
     },
     {
       title: "Total Orders",
-      value: metrics.totalOrdersCount.toLocaleString("en-US"),
-      change: "+9.8%",
-      positive: true,
-      comparison: "vs 209 orders last month",
+      value: metrics.totalOrders.toLocaleString("en-US"),
+      change: changeLabel(metrics.ordersChange),
+      positive: (metrics.ordersChange ?? 0) >= 0,
+      comparison: `placed in the ${DATE_RANGE_LABELS[range]}`,
       icon: ShoppingBag,
       accentBg: "bg-sky-50",
       accentText: "text-sky-600",
-      barWidth: "w-3/4",
+      width: 100,
     },
     {
       title: "Pending Orders",
-      value: String(metrics.pendingCount),
-      change: metrics.pendingCount > 2 ? "+1 new" : "-2.4%",
-      positive: metrics.pendingCount <= 2,
-      comparison: "Awaiting confirmation",
+      value: String(metrics.pending),
+      change: `${metrics.pending} awaiting`,
+      positive: metrics.pendingShare <= 20,
+      comparison: `${metrics.pendingShare}% of orders in range`,
       icon: Clock,
       accentBg: "bg-amber-50",
       accentText: "text-amber-600",
-      barWidth: "w-2/5",
+      width: metrics.pendingShare,
+    },
+    {
+      title: "Processing",
+      value: String(metrics.processing),
+      change: `${metrics.processing} in progress`,
+      positive: true,
+      comparison: `${metrics.processingShare}% of orders in range`,
+      icon: Package,
+      accentBg: "bg-violet-50",
+      accentText: "text-violet-600",
+      width: metrics.processingShare,
     },
     {
       title: "Completed Orders",
-      value: metrics.completedCount.toLocaleString("en-US"),
-      change: "+11.5%",
+      value: String(metrics.completed),
+      change: `${metrics.completedShare}% fulfilled`,
       positive: true,
-      comparison: "96.4% fulfillment rate",
+      comparison: `${metrics.completed} delivered in range`,
       icon: CheckCircle2,
       accentBg: "bg-emerald-50",
       accentText: "text-emerald-600",
-      barWidth: "w-5/6",
+      width: metrics.completedShare,
+    },
+    {
+      title: "Cancelled Orders",
+      value: String(metrics.cancelled),
+      change: `${metrics.cancelled} cancelled`,
+      positive: metrics.cancelledShare === 0,
+      comparison: `${metrics.cancelledShare}% of orders in range`,
+      icon: XCircle,
+      accentBg: "bg-rose-50",
+      accentText: "text-rose-600",
+      width: metrics.cancelledShare,
     },
   ];
 
   const getCategoryName = (catId: string) =>
-    categories.find((c) => c.id === catId)?.name ?? "Beauty";
+    categories.find((c) => c.id === catId)?.name ?? "Uncategorized";
 
   return (
     <div className="space-y-6">
@@ -161,7 +235,22 @@ export default function AdminDashboardPage() {
             Monitor daily sales, order fulfillment, and beauty inventory at a glance.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-[#F0E1E6] bg-[#FDF6F8] p-0.5">
+            {DATE_RANGES.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setRange(option.value)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                  range === option.value
+                    ? "bg-white text-[#D96B91] shadow-2xs"
+                    : "text-[#806B73] hover:text-[#33272C]"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <Button variant="outline" asChild>
             <Link href="/admin/orders">Manage Orders</Link>
           </Button>
@@ -171,8 +260,8 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* KPI Cards (PC-SD-002, PC-SD-003) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -210,7 +299,8 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="mt-3 h-1 w-full rounded-full bg-[#FDF6F8] overflow-hidden">
                   <div
-                    className={`h-full rounded-full bg-[#E99AB5] ${kpi.barWidth}`}
+                    className="h-full rounded-full bg-[#E99AB5] transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, kpi.width))}%` }}
                   />
                 </div>
               </CardContent>
@@ -221,25 +311,27 @@ export default function AdminDashboardPage() {
 
       {/* Charts Row 1: Revenue (2 cols) + Order Status Distribution (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <RevenueChartCard />
-        <OrderStatusDistributionCard orders={orders} />
+        <RevenueChartCard orders={rangeOrders} range={range} />
+        <OrderStatusDistributionCard orders={rangeOrders} />
       </div>
 
       {/* Charts Row 2: Orders Trend + Sales Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <OrdersTrendCard />
+          <OrdersTrendCard orders={rangeOrders} range={range} />
         </div>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>Sales Summary</CardTitle>
-            <CardDescription>Recent active order batch metrics</CardDescription>
+            <CardDescription>
+              Selected range performance · {DATE_RANGE_LABELS[range]}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-xl bg-[#FDF6F8] border border-[#F0E1E6] p-3.5">
-              <p className="text-xs text-[#806B73]">Recent Batch Revenue</p>
+              <p className="text-xs text-[#806B73]">Revenue in range</p>
               <p className="text-lg font-bold text-[#33272C] mt-0.5">
-                {formatMMK(metrics.liveRevenue)}
+                {formatMMK(metrics.revenue)}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -256,13 +348,41 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-2.5">
+                <p className="text-[11px] text-emerald-700">Paid</p>
+                <p className="text-sm font-semibold text-emerald-800">
+                  {metrics.paidPayments}
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-2.5">
+                <p className="text-[11px] text-amber-700">Pending</p>
+                <p className="text-sm font-semibold text-amber-800">
+                  {metrics.pendingPayments}
+                </p>
+              </div>
+              <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-2.5">
+                <p className="text-[11px] text-rose-700">Failed / Expired</p>
+                <p className="text-sm font-semibold text-rose-800">
+                  {metrics.failedPayments}
+                </p>
+              </div>
+            </div>
             <div className="flex items-center justify-between text-xs pt-1 border-t border-[#F0E1E6]">
               <span className="text-[#806B73]">Top payment method</span>
-              <Badge variant="default">KBZPay (42%)</Badge>
+              <Badge variant="default">
+                {metrics.topPayment
+                  ? `${metrics.topPayment.value} (${metrics.topPayment.share}%)`
+                  : "No orders yet"}
+              </Badge>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-[#806B73]">Top city</span>
-              <span className="font-semibold text-[#33272C]">Yangon (84%)</span>
+              <span className="font-semibold text-[#33272C]">
+                {metrics.topCity
+                  ? `${metrics.topCity.value} (${metrics.topCity.share}%)`
+                  : "—"}
+              </span>
             </div>
           </CardContent>
         </Card>

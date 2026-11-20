@@ -118,6 +118,91 @@ interface AdminContextValue extends PersistedState {
   resetDemoData: () => void;
 }
 
+type NotificationDraft = Omit<
+  NotificationItem,
+  "id" | "read" | "createdAt"
+>;
+
+const MAX_NOTIFICATIONS = 50;
+
+/** Deep-merges persisted settings so newly added fields get defaults. */
+function mergeSettings(saved?: Partial<StoreSettings>): StoreSettings {
+  if (!saved) return INITIAL_SETTINGS;
+  return {
+    ...INITIAL_SETTINGS,
+    ...saved,
+    pickupOptions: { ...INITIAL_SETTINGS.pickupOptions, ...saved.pickupOptions },
+    paymentMethods: {
+      ...INITIAL_SETTINGS.paymentMethods,
+      ...saved.paymentMethods,
+    },
+    notifications: { ...INITIAL_SETTINGS.notifications, ...saved.notifications },
+    adminProfile: { ...INITIAL_SETTINGS.adminProfile, ...saved.adminProfile },
+    socialLinks: { ...INITIAL_SETTINGS.socialLinks, ...saved.socialLinks },
+    townshipDeliveryFees:
+      saved.townshipDeliveryFees ?? INITIAL_SETTINGS.townshipDeliveryFees,
+  };
+}
+
+/**
+ * Raises an out-of-stock or low-stock alert only when a product (or variant)
+ * *crosses* its configured threshold, so routine adjustments stay quiet.
+ */
+function buildStockAlert(
+  product: Product,
+  previousStock: number,
+  newStock: number,
+  variant?: { label: string; skuSuffix?: string }
+): NotificationDraft | null {
+  if (previousStock === newStock) return null;
+
+  const threshold = product.lowStockThreshold;
+  const label = variant ? `${product.name} · ${variant.label}` : product.name;
+  const sku = variant?.skuSuffix
+    ? `${product.sku}-${variant.skuSuffix}`
+    : product.sku;
+
+  if (newStock === 0 && previousStock > 0) {
+    return {
+      type: "stock",
+      title: `Out of stock — ${label}`,
+      message: `${label} (${sku}) is out of stock.`,
+      href: "/admin/inventory",
+    };
+  }
+
+  if (newStock > 0 && newStock <= threshold && previousStock > threshold) {
+    return {
+      type: "stock",
+      title: `Low stock — ${label}`,
+      message: `${label} has only ${newStock} units remaining (threshold ${threshold}).`,
+      href: "/admin/inventory",
+    };
+  }
+
+  return null;
+}
+
+/** Prepends a notification, de-duplicating unread alerts with the same title. */
+function appendNotification(
+  notifications: NotificationItem[],
+  draft: NotificationDraft | null
+): NotificationItem[] {
+  if (!draft) return notifications;
+  if (notifications.some((n) => !n.read && n.title === draft.title)) {
+    return notifications;
+  }
+  return [
+    {
+      ...draft,
+      id: generateId("notif"),
+      read: false,
+      createdAt: new Date().toISOString(),
+    },
+    ...notifications.slice(0, MAX_NOTIFICATIONS - 1),
+  ];
+}
+
 const AdminContext = createContext<AdminContextValue | null>(null);
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
@@ -130,6 +215,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
         setState({
           products: parsed.products ?? INITIAL_PRODUCTS,
           categories: parsed.categories ?? INITIAL_CATEGORIES,
@@ -139,7 +225,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           promotions: parsed.promotions ?? INITIAL_PROMOTIONS,
           notifications: parsed.notifications ?? INITIAL_NOTIFICATIONS,
           activity: parsed.activity ?? INITIAL_ACTIVITY,
-          settings: parsed.settings ?? INITIAL_SETTINGS,
+          settings: mergeSettings(parsed.settings),
         });
       }
     } catch {
@@ -184,6 +270,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const auth = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
       if (auth === "false") {
         setIsAuthenticated(false);
       } else {
@@ -195,8 +282,14 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback((email: string, pass: string): boolean => {
-    const trimmed = pass.trim();
-    if (trimmed === "admin123" || trimmed === "pretty2026" || trimmed.length >= 6) {
+    // Demo credential check. A production build must replace this with a
+    // server-verified session (PC-NFR-003).
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPass = pass.trim();
+    const validEmail = normalizedEmail === "admin@prettycorner.com";
+    const validPass = normalizedPass === "admin123" || normalizedPass === "pretty2026";
+
+    if (validEmail && validPass) {
       setIsAuthenticated(true);
       try {
         window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
@@ -238,6 +331,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             if (itemsForProduct.length === 0) return p;
 
             let stockIncrement = 0;
+            let runningStock = p.stock;
             let updatedVariants = p.variants ? [...p.variants] : [];
 
             for (const item of itemsForProduct) {
@@ -260,12 +354,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
                 variantLabel: item.variantLabel,
                 type: "increase",
                 quantity: item.quantity,
-                previousStock: p.stock,
-                newStock: p.stock + item.quantity,
+                previousStock: runningStock,
+                newStock: runningStock + item.quantity,
                 reason: `Order ${target.reference} Cancelled - Stock Restored`,
                 performedBy: prev.settings.adminProfile.name,
                 createdAt: now,
               });
+              runningStock += item.quantity;
             }
 
             return {
@@ -286,6 +381,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             if (itemsForProduct.length === 0) return p;
 
             let stockDecrement = 0;
+            let runningStock = p.stock;
             let updatedVariants = p.variants ? [...p.variants] : [];
 
             for (const item of itemsForProduct) {
@@ -308,12 +404,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
                 variantLabel: item.variantLabel,
                 type: "decrease",
                 quantity: item.quantity,
-                previousStock: p.stock,
-                newStock: Math.max(0, p.stock - item.quantity),
+                previousStock: runningStock,
+                newStock: Math.max(0, runningStock - item.quantity),
                 reason: `Order ${target.reference} Reopened - Stock Deducted`,
                 performedBy: prev.settings.adminProfile.name,
                 createdAt: now,
               });
+              runningStock = Math.max(0, runningStock - item.quantity);
             }
 
             return {
@@ -325,6 +422,21 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           });
 
           updatedStockHistory = [...newAdjustments, ...updatedStockHistory];
+        }
+
+        // Best-seller counts follow delivery state (PC-SD-005)
+        if ((prevStatus === "Delivered") !== (status === "Delivered")) {
+          const delta = status === "Delivered" ? 1 : -1;
+          updatedProducts = updatedProducts.map((p) => {
+            const quantity = target.items
+              .filter((item) => item.productId === p.id)
+              .reduce((sum, item) => sum + item.quantity, 0);
+            if (quantity === 0) return p;
+            return {
+              ...p,
+              soldCount: Math.max(0, p.soldCount + delta * quantity),
+            };
+          });
         }
 
         const orders = prev.orders.map((o) =>
@@ -345,11 +457,36 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
               }
             : o
         );
+        let notifications = prev.notifications;
+
+        if (prev.settings.notifications.lowStockAlert) {
+          for (const product of updatedProducts) {
+            const before = prev.products.find((p) => p.id === product.id);
+            if (!before) continue;
+            notifications = appendNotification(
+              notifications,
+              buildStockAlert(product, before.stock, product.stock)
+            );
+          }
+        }
+
+        notifications = appendNotification(notifications, {
+          type: "order",
+          title: `Order ${target.reference} ${status}`,
+          message:
+            note?.trim() ||
+            `${target.customerName}'s order is now ${status}${
+              status === "Cancelled" ? " and stock has been restored" : ""
+            }.`,
+          href: `/admin/orders/${orderId}`,
+        });
+
         return {
           ...prev,
           orders,
           products: updatedProducts,
           stockHistory: updatedStockHistory,
+          notifications,
           activity: pushActivity(
             prev.activity,
             `Order ${status}`,
@@ -369,11 +506,24 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
+
+        const isFailure = status === "Failed" || status === "Expired";
+        const notifications =
+          isFailure && prev.settings.notifications.paymentFailureAlert
+            ? appendNotification(prev.notifications, {
+                type: "order",
+                title: `Payment ${status.toLowerCase()} — ${target.reference}`,
+                message: `${target.paymentMethod} payment for ${target.customerName} (${target.total.toLocaleString()} MMK) did not complete.`,
+                href: `/admin/orders/${orderId}`,
+              })
+            : prev.notifications;
+
         return {
           ...prev,
           orders: prev.orders.map((o) =>
             o.id === orderId ? { ...o, paymentStatus: status, updatedAt: now } : o
           ),
+          notifications,
           activity: pushActivity(
             prev.activity,
             "Payment Updated",
@@ -433,9 +583,17 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             : o
         );
 
+        const notifications = appendNotification(prev.notifications, {
+          type: "order",
+          title: `Refund processed — ${target.reference}`,
+          message: `${refund.isFullRefund ? "Full" : "Partial"} refund of ${refund.amount.toLocaleString()} MMK issued to ${target.customerName}.`,
+          href: `/admin/orders/${orderId}`,
+        });
+
         return {
           ...prev,
           orders: updatedOrders,
+          notifications,
           activity: pushActivity(
             prev.activity,
             "Refund Processed",
@@ -596,12 +754,20 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           createdAt: now,
         };
 
+        const notifications = prev.settings.notifications.lowStockAlert
+          ? appendNotification(
+              prev.notifications,
+              buildStockAlert(target, previousStock, newStock)
+            )
+          : prev.notifications;
+
         return {
           ...prev,
           products: prev.products.map((p) =>
             p.id === productId ? { ...p, stock: newStock, updatedAt: now } : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
+          notifications,
           activity: pushActivity(
             prev.activity,
             "Stock Adjusted",
@@ -662,6 +828,21 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           createdAt: now,
         };
 
+        const notifications = prev.settings.notifications.lowStockAlert
+          ? appendNotification(
+              prev.notifications,
+              buildStockAlert(
+                targetProduct,
+                prevVariantQty,
+                newVariantQty,
+                {
+                  label: targetVariant.label,
+                  skuSuffix: targetVariant.skuSuffix,
+                }
+              )
+            )
+          : prev.notifications;
+
         return {
           ...prev,
           products: prev.products.map((p) =>
@@ -675,6 +856,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
               : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
+          notifications,
           activity: pushActivity(
             prev.activity,
             "Variant Stock Adjusted",

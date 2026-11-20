@@ -8,13 +8,14 @@ import {
   User,
   Save,
   RotateCcw,
-  MapPin,
   Building2,
-  Clock,
-  Navigation,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { INITIAL_SETTINGS } from "@/data/mock-data";
+import { StoreSettings } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -30,11 +31,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function SettingsPage() {
   const { settings, updateSettings, resetDemoData } = useAdminStore();
-  const [draft, setDraft] = useState(settings);
+  const [draft, setDraft] = useState<StoreSettings>(settings);
+
+  // Keep the editable draft in sync with persisted settings (including hydration).
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirroring persisted settings into the draft form
+    setDraft(settings);
+  }, [settings]);
 
   const handleSave = () => {
     updateSettings(draft);
     toast.success("Settings saved");
+  };
+
+  const handleReset = () => {
+    resetDemoData();
+    setDraft(INITIAL_SETTINGS);
+    toast.success("Demo data reset to defaults");
   };
 
   return (
@@ -51,10 +64,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => {
-              resetDemoData();
-              toast.success("Demo data reset to defaults");
-            }}
+            onClick={handleReset}
           >
             <RotateCcw className="h-4 w-4" /> Reset Demo Data
           </Button>
@@ -145,6 +155,75 @@ export default function SettingsPage() {
                   }
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label>Currency</Label>
+                <Input
+                  value={draft.currency}
+                  onChange={(e) =>
+                    setDraft({ ...draft, currency: e.target.value })
+                  }
+                  placeholder="MMK"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Social Channels</CardTitle>
+              <CardDescription>
+                Public links used on storefront content (PC-CT-006)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Facebook</Label>
+                <Input
+                  value={draft.socialLinks.facebook}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      socialLinks: {
+                        ...draft.socialLinks,
+                        facebook: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="https://facebook.com/..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Instagram</Label>
+                <Input
+                  value={draft.socialLinks.instagram}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      socialLinks: {
+                        ...draft.socialLinks,
+                        instagram: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="https://instagram.com/..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>TikTok</Label>
+                <Input
+                  value={draft.socialLinks.tiktok}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      socialLinks: {
+                        ...draft.socialLinks,
+                        tiktok: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="https://tiktok.com/@..."
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -211,6 +290,116 @@ export default function SettingsPage() {
                   }
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle>Township Delivery Rates</CardTitle>
+                  <CardDescription>
+                    Service-area overrides for rider dispatch (PC-AD-003)
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      townshipDeliveryFees: [
+                        ...draft.townshipDeliveryFees,
+                        {
+                          id: `town-${Date.now()}`,
+                          township: "",
+                          city: "Yangon",
+                          fee: draft.yangonDeliveryFee,
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Township
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {draft.townshipDeliveryFees.length === 0 ? (
+                <p className="text-xs text-[#806B73]">
+                  No township overrides yet — the regional fees above apply.
+                </p>
+              ) : (
+                draft.townshipDeliveryFees.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[1fr_1fr_120px_auto] items-center gap-2"
+                  >
+                    <Input
+                      value={row.township}
+                      placeholder="Township"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          townshipDeliveryFees: draft.townshipDeliveryFees.map(
+                            (r) =>
+                              r.id === row.id
+                                ? { ...r, township: e.target.value }
+                                : r
+                          ),
+                        })
+                      }
+                    />
+                    <Input
+                      value={row.city}
+                      placeholder="City"
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          townshipDeliveryFees: draft.townshipDeliveryFees.map(
+                            (r) =>
+                              r.id === row.id
+                                ? { ...r, city: e.target.value }
+                                : r
+                          ),
+                        })
+                      }
+                    />
+                    <Input
+                      type="number"
+                      value={row.fee}
+                      aria-label={`Delivery fee for ${row.township || "township"}`}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          townshipDeliveryFees: draft.townshipDeliveryFees.map(
+                            (r) =>
+                              r.id === row.id
+                                ? { ...r, fee: Number(e.target.value) }
+                                : r
+                          ),
+                        })
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove ${row.township || "township"}`}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          townshipDeliveryFees:
+                            draft.townshipDeliveryFees.filter(
+                              (r) => r.id !== row.id
+                            ),
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4 text-rose-500" />
+                    </Button>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 
@@ -453,17 +642,17 @@ export default function SettingsPage() {
                 {
                   key: "newOrderAlert",
                   label: "New Order Alerts",
-                  desc: "Notify immediately when a customer places an order",
+                  desc: "Notify immediately when an order is created (fires once checkout records an order)",
                 },
                 {
                   key: "lowStockAlert",
                   label: "Low-Stock Alerts",
-                  desc: "Warn when active SKUs drop below threshold",
+                  desc: "Warn when active SKUs cross their reorder threshold",
                 },
                 {
                   key: "paymentFailureAlert",
                   label: "Payment Failure Alerts",
-                  desc: "Alert when KBZPay or WavePay transactions fail",
+                  desc: "Alert when a payment is marked Failed or Expired",
                 },
                 {
                   key: "dailySummaryEmail",

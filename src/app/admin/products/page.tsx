@@ -56,9 +56,25 @@ import { formatMMK } from "@/lib/utils";
 type SortKey = "name" | "price" | "stock";
 
 export default function ProductsPage() {
-  const { products, categories, updateProduct, deleteProduct } = useAdminStore();
+  const {
+    products,
+    categories,
+    updateProduct,
+    deleteProduct,
+    globalSearch,
+    setGlobalSearch,
+  } = useAdminStore();
 
   const [search, setSearch] = useState("");
+
+  // Pick up the header global search once, then clear it.
+  React.useEffect(() => {
+    if (globalSearch.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the shared search store
+      setSearch(globalSearch.trim());
+      setGlobalSearch("");
+    }
+  }, [globalSearch, setGlobalSearch]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "low" | "out">("all");
   const [statusFilter, setStatusFilter] = useState<"All" | ProductStatus>("All");

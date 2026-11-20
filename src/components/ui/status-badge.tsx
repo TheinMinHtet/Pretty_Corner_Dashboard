@@ -27,6 +27,7 @@ export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
     Failed: "destructive",
     Expired: "secondary",
     Refunded: "purple",
+    Cancelled: "secondary",
   };
 
   return <Badge variant={variantMap[status]}>{status}</Badge>;

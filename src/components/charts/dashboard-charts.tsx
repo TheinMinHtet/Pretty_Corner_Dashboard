@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -22,11 +22,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { REVENUE_SERIES } from "@/data/mock-data";
 import { Order, OrderStatus } from "@/types/admin";
 import { formatCompactMMK, formatMMK } from "@/lib/utils";
-
-type Period = "daily" | "weekly" | "monthly";
+import {
+  buildOrderSeries,
+  DateRange,
+  DATE_RANGE_LABELS,
+} from "@/lib/analytics";
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   Pending: "#F59E0B",
@@ -37,9 +39,17 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   Cancelled: "#F43F5E",
 };
 
-export function RevenueChartCard() {
-  const [period, setPeriod] = useState<Period>("daily");
-  const data = REVENUE_SERIES[period];
+export function RevenueChartCard({
+  orders,
+  range,
+}: {
+  orders: Order[];
+  range: DateRange;
+}) {
+  const data = useMemo(
+    () => buildOrderSeries(orders, range),
+    [orders, range]
+  );
 
   return (
     <Card className="col-span-1 lg:col-span-2">
@@ -47,23 +57,8 @@ export function RevenueChartCard() {
         <div>
           <CardTitle>Revenue Overview</CardTitle>
           <CardDescription>
-            Gross boutique sales performance in MMK
+            Gross boutique sales for the {DATE_RANGE_LABELS[range]} in MMK
           </CardDescription>
-        </div>
-        <div className="inline-flex rounded-lg border border-[#F0E1E6] bg-[#FDF6F8] p-0.5 self-start">
-          {(["daily", "weekly", "monthly"] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-all cursor-pointer ${
-                period === p
-                  ? "bg-white text-[#D96B91] shadow-2xs"
-                  : "text-[#806B73] hover:text-[#33272C]"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
         </div>
       </CardHeader>
       <CardContent className="h-[280px] pt-2">
@@ -120,14 +115,25 @@ export function RevenueChartCard() {
   );
 }
 
-export function OrdersTrendCard() {
-  const data = REVENUE_SERIES.daily;
+export function OrdersTrendCard({
+  orders,
+  range,
+}: {
+  orders: Order[];
+  range: DateRange;
+}) {
+  const data = useMemo(
+    () => buildOrderSeries(orders, range),
+    [orders, range]
+  );
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle>Orders Over Time</CardTitle>
-        <CardDescription>Daily order volume (last 7 days)</CardDescription>
+        <CardDescription>
+          Order volume over the {DATE_RANGE_LABELS[range]}
+        </CardDescription>
       </CardHeader>
       <CardContent className="h-[240px] pt-2">
         <ResponsiveContainer width="100%" height="100%">

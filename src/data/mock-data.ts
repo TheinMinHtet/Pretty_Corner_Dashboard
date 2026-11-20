@@ -461,6 +461,8 @@ export const INITIAL_ORDERS: Order[] = [
     township: "Bahan",
     city: "Yangon",
     nearbyLandmark: "Near Pearl Condo, opposite City Mart",
+    building: "Pearl Condo, Tower B, Unit 4B",
+    deliveryInstructions: "Call on arrival; leave with lobby guard if unavailable.",
     deliveryMethod: "courier",
     coordinates: { lat: 16.8189, lng: 96.1561 },
     items: [
@@ -1101,8 +1103,19 @@ export const INITIAL_SETTINGS: StoreSettings = {
   yangonDeliveryFee: 2500,
   mandalayDeliveryFee: 4500,
   otherRegionDeliveryFee: 5500,
+  townshipDeliveryFees: [
+    { id: "town-bahan", township: "Bahan", city: "Yangon", fee: 2500 },
+    { id: "town-hlaing", township: "Hlaing", city: "Yangon", fee: 3000 },
+    { id: "town-mayangone", township: "Mayangone", city: "Yangon", fee: 3500 },
+    { id: "town-chanayethazan", township: "Chanayethazan", city: "Mandalay", fee: 4500 },
+  ],
   freeShippingThreshold: 100000,
   defaultLowStockThreshold: 10,
+  socialLinks: {
+    facebook: "https://facebook.com/prettycornermm",
+    instagram: "https://instagram.com/prettycornermm",
+    tiktok: "",
+  },
   pickupOptions: {
     enabled: true,
     storeName: "Pretty Corner Flagship Boutique",

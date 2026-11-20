@@ -98,7 +98,7 @@ export default function InventoryPage() {
   }, [products, search, stockFilter]);
 
   const getCategoryName = (id: string) =>
-    categories.find((c) => c.id === id)?.name ?? "Beauty";
+    categories.find((c) => c.id === id)?.name ?? "Uncategorized";
 
   const openAdjust = (
     product: Product,
@@ -366,8 +366,10 @@ export default function InventoryPage() {
                         {hasVariants &&
                           isExpanded &&
                           p.variants.map((v) => {
+                            const variantThreshold = p.lowStockThreshold;
                             const isVarOut = v.quantity === 0;
-                            const isVarLow = v.quantity > 0 && v.quantity <= 3;
+                            const isVarLow =
+                              v.quantity > 0 && v.quantity <= variantThreshold;
                             return (
                               <TableRow
                                 key={v.id}
@@ -391,7 +393,7 @@ export default function InventoryPage() {
                                   {v.quantity} units
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                                  3 units
+                                  {variantThreshold} units
                                 </TableCell>
                                 <TableCell>
                                   {isVarOut ? (

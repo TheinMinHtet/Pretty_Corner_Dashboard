@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
       toast.success("Welcome back to Pretty Corner Admin");
       router.push("/admin");
     } else {
-      toast.error("Invalid credentials. Try demo password: admin123");
+      toast.error("Invalid credentials. Demo login: admin@prettycorner.com / admin123");
     }
   };
 
