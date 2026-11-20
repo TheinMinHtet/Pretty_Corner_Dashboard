@@ -18,6 +18,7 @@ import {
   PaymentStatus,
   Product,
   Promotion,
+  RefundDetails,
   StockAdjustment,
   StoreSettings,
 } from "@/types/admin";
@@ -35,6 +36,7 @@ import {
 import { generateId } from "@/lib/utils";
 
 const STORAGE_KEY = "pretty_corner_admin_v1";
+const AUTH_STORAGE_KEY = "pretty_corner_auth_v1";
 
 interface PersistedState {
   products: Product[];
@@ -65,9 +67,19 @@ interface AdminContextValue extends PersistedState {
   globalSearch: string;
   setGlobalSearch: (q: string) => void;
 
+  // Authentication
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => boolean;
+  logout: () => void;
+
   // Orders
   updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => void;
   updatePaymentStatus: (orderId: string, status: PaymentStatus) => void;
+  updatePaymentReference: (orderId: string, reference: string) => void;
+  processOrderRefund: (
+    orderId: string,
+    refund: Omit<RefundDetails, "refundedAt" | "processedBy">
+  ) => void;
 
   // Products
   addProduct: (product: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount">) => Product;
@@ -82,6 +94,13 @@ interface AdminContextValue extends PersistedState {
   // Inventory
   adjustStock: (
     productId: string,
+    type: "increase" | "decrease",
+    quantity: number,
+    reason: string
+  ) => void;
+  adjustVariantStock: (
+    productId: string,
+    variantId: string,
     type: "increase" | "decrease",
     quantity: number,
     reason: string
@@ -160,12 +179,154 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      const auth = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (auth === "false") {
+        setIsAuthenticated(false);
+      } else {
+        setIsAuthenticated(true);
+      }
+    } catch {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const login = useCallback((email: string, pass: string): boolean => {
+    const trimmed = pass.trim();
+    if (trimmed === "admin123" || trimmed === "pretty2026" || trimmed.length >= 6) {
+      setIsAuthenticated(true);
+      try {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
+      } catch {
+        // ignore
+      }
+      return true;
+    }
+    return false;
+  }, []);
+
+  const logout = useCallback(() => {
+    setIsAuthenticated(false);
+    try {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, "false");
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const updateOrderStatus = useCallback(
     (orderId: string, status: OrderStatus, note?: string) => {
       const now = new Date().toISOString();
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
+        const prevStatus = target.orderStatus;
+        if (prevStatus === status) return prev;
+
+        let updatedProducts = prev.products;
+        let updatedStockHistory = prev.stockHistory;
+
+        // Auto Stock Restoration on Cancellation (PC-IS-004)
+        if (status === "Cancelled" && prevStatus !== "Cancelled") {
+          const newAdjustments: StockAdjustment[] = [];
+
+          updatedProducts = updatedProducts.map((p) => {
+            const itemsForProduct = target.items.filter((item) => item.productId === p.id);
+            if (itemsForProduct.length === 0) return p;
+
+            let stockIncrement = 0;
+            let updatedVariants = p.variants ? [...p.variants] : [];
+
+            for (const item of itemsForProduct) {
+              stockIncrement += item.quantity;
+
+              if (item.variantLabel && updatedVariants.length > 0) {
+                updatedVariants = updatedVariants.map((v) => {
+                  if (v.label === item.variantLabel) {
+                    return { ...v, quantity: v.quantity + item.quantity };
+                  }
+                  return v;
+                });
+              }
+
+              newAdjustments.push({
+                id: generateId("stk"),
+                productId: p.id,
+                productName: p.name,
+                sku: item.sku || p.sku,
+                variantLabel: item.variantLabel,
+                type: "increase",
+                quantity: item.quantity,
+                previousStock: p.stock,
+                newStock: p.stock + item.quantity,
+                reason: `Order ${target.reference} Cancelled - Stock Restored`,
+                performedBy: prev.settings.adminProfile.name,
+                createdAt: now,
+              });
+            }
+
+            return {
+              ...p,
+              stock: p.stock + stockIncrement,
+              variants: updatedVariants,
+              updatedAt: now,
+            };
+          });
+
+          updatedStockHistory = [...newAdjustments, ...updatedStockHistory];
+        } else if (prevStatus === "Cancelled" && status !== "Cancelled") {
+          // Re-deduct stock if reopening cancelled order
+          const newAdjustments: StockAdjustment[] = [];
+
+          updatedProducts = updatedProducts.map((p) => {
+            const itemsForProduct = target.items.filter((item) => item.productId === p.id);
+            if (itemsForProduct.length === 0) return p;
+
+            let stockDecrement = 0;
+            let updatedVariants = p.variants ? [...p.variants] : [];
+
+            for (const item of itemsForProduct) {
+              stockDecrement += item.quantity;
+
+              if (item.variantLabel && updatedVariants.length > 0) {
+                updatedVariants = updatedVariants.map((v) => {
+                  if (v.label === item.variantLabel) {
+                    return { ...v, quantity: Math.max(0, v.quantity - item.quantity) };
+                  }
+                  return v;
+                });
+              }
+
+              newAdjustments.push({
+                id: generateId("stk"),
+                productId: p.id,
+                productName: p.name,
+                sku: item.sku || p.sku,
+                variantLabel: item.variantLabel,
+                type: "decrease",
+                quantity: item.quantity,
+                previousStock: p.stock,
+                newStock: Math.max(0, p.stock - item.quantity),
+                reason: `Order ${target.reference} Reopened - Stock Deducted`,
+                performedBy: prev.settings.adminProfile.name,
+                createdAt: now,
+              });
+            }
+
+            return {
+              ...p,
+              stock: Math.max(0, p.stock - stockDecrement),
+              variants: updatedVariants,
+              updatedAt: now,
+            };
+          });
+
+          updatedStockHistory = [...newAdjustments, ...updatedStockHistory];
+        }
+
         const orders = prev.orders.map((o) =>
           o.id === orderId
             ? {
@@ -187,10 +348,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         return {
           ...prev,
           orders,
+          products: updatedProducts,
+          stockHistory: updatedStockHistory,
           activity: pushActivity(
             prev.activity,
             `Order ${status}`,
-            `${target.reference} updated to ${status}`,
+            `${target.reference} updated to ${status}${status === "Cancelled" ? " (Stock Restored)" : ""}`,
             "order",
             prev.settings.adminProfile.name
           ),
@@ -215,6 +378,68 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             prev.activity,
             "Payment Updated",
             `${target.reference} payment status changed to ${status}`,
+            "order",
+            prev.settings.adminProfile.name
+          ),
+        };
+      });
+    },
+    [pushActivity]
+  );
+
+  const updatePaymentReference = useCallback((orderId: string, reference: string) => {
+    const now = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      orders: prev.orders.map((o) =>
+        o.id === orderId ? { ...o, transactionReference: reference, updatedAt: now } : o
+      ),
+    }));
+  }, []);
+
+  const processOrderRefund = useCallback(
+    (
+      orderId: string,
+      refund: Omit<RefundDetails, "refundedAt" | "processedBy">
+    ) => {
+      const now = new Date().toISOString();
+      setState((prev) => {
+        const target = prev.orders.find((o) => o.id === orderId);
+        if (!target) return prev;
+
+        const fullRefundRecord: RefundDetails = {
+          ...refund,
+          refundedAt: now,
+          processedBy: prev.settings.adminProfile.name,
+        };
+
+        const updatedOrders = prev.orders.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                paymentStatus: "Refunded" as PaymentStatus,
+                refundDetails: fullRefundRecord,
+                updatedAt: now,
+                timeline: [
+                  ...o.timeline,
+                  {
+                    status: o.orderStatus,
+                    timestamp: now,
+                    note: `Refund processed: ${refund.isFullRefund ? "Full Refund" : "Partial Refund"} of ${refund.amount.toLocaleString()} MMK (Voucher: ${refund.transactionReference}). Reason: ${refund.reason}`,
+                    actor: prev.settings.adminProfile.name,
+                  },
+                ],
+              }
+            : o
+        );
+
+        return {
+          ...prev,
+          orders: updatedOrders,
+          activity: pushActivity(
+            prev.activity,
+            "Refund Processed",
+            `${target.reference} refunded ${refund.amount.toLocaleString()} MMK`,
             "order",
             prev.settings.adminProfile.name
           ),
@@ -390,6 +615,79 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     [pushActivity]
   );
 
+  const adjustVariantStock = useCallback(
+    (
+      productId: string,
+      variantId: string,
+      type: "increase" | "decrease",
+      quantity: number,
+      reason: string
+    ) => {
+      const now = new Date().toISOString();
+      setState((prev) => {
+        const targetProduct = prev.products.find((p) => p.id === productId);
+        if (!targetProduct || quantity <= 0) return prev;
+        const targetVariant = targetProduct.variants?.find((v) => v.id === variantId);
+        if (!targetVariant) return prev;
+
+        const prevVariantQty = targetVariant.quantity;
+        const newVariantQty =
+          type === "increase"
+            ? prevVariantQty + quantity
+            : Math.max(0, prevVariantQty - quantity);
+
+        const delta = newVariantQty - prevVariantQty;
+        const previousProductStock = targetProduct.stock;
+        const newProductStock = Math.max(0, previousProductStock + delta);
+
+        const updatedVariants = targetProduct.variants.map((v) =>
+          v.id === variantId ? { ...v, quantity: newVariantQty } : v
+        );
+
+        const adjustment: StockAdjustment = {
+          id: generateId("stk"),
+          productId,
+          productName: targetProduct.name,
+          sku: `${targetProduct.sku}-${targetVariant.skuSuffix || targetVariant.id}`,
+          variantId,
+          variantLabel: targetVariant.label,
+          type,
+          quantity,
+          previousStock: previousProductStock,
+          newStock: newProductStock,
+          reason:
+            reason ||
+            `Variant stock ${type === "increase" ? "restock" : "deduction"} (${targetVariant.label})`,
+          performedBy: prev.settings.adminProfile.name,
+          createdAt: now,
+        };
+
+        return {
+          ...prev,
+          products: prev.products.map((p) =>
+            p.id === productId
+              ? {
+                  ...p,
+                  stock: newProductStock,
+                  variants: updatedVariants,
+                  updatedAt: now,
+                }
+              : p
+          ),
+          stockHistory: [adjustment, ...prev.stockHistory],
+          activity: pushActivity(
+            prev.activity,
+            "Variant Stock Adjusted",
+            `${targetProduct.name} [${targetVariant.label}] ${type === "increase" ? "+" : "-"}${quantity} units`,
+            "inventory",
+            prev.settings.adminProfile.name
+          ),
+        };
+      });
+    },
+    [pushActivity]
+  );
+
   const addPromotion = useCallback(
     (promo: Omit<Promotion, "id" | "usageCount">): Promotion => {
       const created: Promotion = {
@@ -480,8 +778,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       hydrated,
       globalSearch,
       setGlobalSearch,
+      isAuthenticated,
+      login,
+      logout,
       updateOrderStatus,
       updatePaymentStatus,
+      updatePaymentReference,
+      processOrderRefund,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -489,6 +792,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       updateCategory,
       deleteCategory,
       adjustStock,
+      adjustVariantStock,
       addPromotion,
       updatePromotion,
       deletePromotion,
@@ -501,8 +805,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       state,
       hydrated,
       globalSearch,
+      isAuthenticated,
+      login,
+      logout,
       updateOrderStatus,
       updatePaymentStatus,
+      updatePaymentReference,
+      processOrderRefund,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -510,6 +819,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       updateCategory,
       deleteCategory,
       adjustStock,
+      adjustVariantStock,
       addPromotion,
       updatePromotion,
       deletePromotion,

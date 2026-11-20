@@ -105,7 +105,9 @@ export default function OrdersPage() {
           const match =
             o.reference.toLowerCase().includes(q) ||
             o.customerName.toLowerCase().includes(q) ||
-            o.customerPhone.toLowerCase().includes(q);
+            o.customerPhone.toLowerCase().includes(q) ||
+            (o.transactionReference && o.transactionReference.toLowerCase().includes(q)) ||
+            (o.nearbyLandmark && o.nearbyLandmark.toLowerCase().includes(q));
           if (!match) return false;
         }
         return true;
@@ -325,6 +327,11 @@ export default function OrdersPage() {
                         <span className="text-[10px] text-[#806B73] pl-1">
                           {order.paymentMethod}
                         </span>
+                        {order.transactionReference && (
+                          <span className="text-[10px] font-mono text-[#D96B91] pl-1 truncate max-w-[130px]">
+                            {order.transactionReference}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

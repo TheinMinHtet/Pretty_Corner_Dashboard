@@ -10,6 +10,7 @@ import {
   MapPin,
   ShoppingBag,
   Calendar,
+  Navigation,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { Customer } from "@/types/admin";
@@ -244,6 +245,12 @@ export default function CustomersPage() {
                     <p className="text-[#806B73]">
                       {addr.township}, {addr.city}
                     </p>
+                    {addr.nearbyLandmark && (
+                      <p className="text-[11px] text-[#D96B91] flex items-center gap-1 pt-0.5 font-medium">
+                        <Navigation className="h-3 w-3 shrink-0" />
+                        <span>Landmark: {addr.nearbyLandmark}</span>
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

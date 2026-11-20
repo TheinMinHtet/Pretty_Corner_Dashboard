@@ -8,6 +8,10 @@ import {
   User,
   Save,
   RotateCcw,
+  MapPin,
+  Building2,
+  Clock,
+  Navigation,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -250,6 +254,163 @@ export default function SettingsPage() {
                 );
               })}
             </CardContent>
+          </Card>
+
+          {/* In-Store Pickup Configuration (PC-AD-004) */}
+          <Card className="rounded-[32px] border-[#F0E1E6]">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-[#D96B91]" />
+                    In-Store Pickup (Self-Collection)
+                  </CardTitle>
+                  <CardDescription>
+                    Enable shoppers to pick up online orders directly from your physical boutique
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#806B73]">
+                    {draft.pickupOptions?.enabled ? "Enabled" : "Disabled"}
+                  </span>
+                  <Switch
+                    checked={draft.pickupOptions?.enabled ?? true}
+                    onCheckedChange={(checked) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...(draft.pickupOptions || {
+                            storeName: "Pretty Corner Flagship",
+                            address: "No. 15, Sayar San Rd",
+                            township: "Bahan",
+                            city: "Yangon",
+                            operatingHours: "10:00 AM - 7:30 PM",
+                            contactPhone: "09-770011223",
+                            instructions: "Present your order reference at collection desk.",
+                          }),
+                          enabled: checked,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            {draft.pickupOptions?.enabled && (
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label>Pickup Location Name</Label>
+                  <Input
+                    value={draft.pickupOptions.storeName}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...draft.pickupOptions,
+                          storeName: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="e.g. Pretty Corner Flagship Boutique"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Collection Operating Hours</Label>
+                  <Input
+                    value={draft.pickupOptions.operatingHours}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...draft.pickupOptions,
+                          operatingHours: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="e.g. 10:00 AM - 7:30 PM (Daily)"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Store Address</Label>
+                  <Input
+                    value={draft.pickupOptions.address}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...draft.pickupOptions,
+                          address: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Street address & township"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Township & City</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={draft.pickupOptions.township}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          pickupOptions: {
+                            ...draft.pickupOptions,
+                            township: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Township (e.g. Bahan)"
+                    />
+                    <Input
+                      value={draft.pickupOptions.city}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          pickupOptions: {
+                            ...draft.pickupOptions,
+                            city: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="City (e.g. Yangon)"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Boutique Desk Phone</Label>
+                  <Input
+                    value={draft.pickupOptions.contactPhone}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...draft.pickupOptions,
+                          contactPhone: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="09-xxxxxxxxx"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Customer Pickup Instructions</Label>
+                  <Input
+                    value={draft.pickupOptions.instructions}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        pickupOptions: {
+                          ...draft.pickupOptions,
+                          instructions: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Instructions displayed to customers choosing in-store collection..."
+                  />
+                </div>
+              </CardContent>
+            )}
           </Card>
         </TabsContent>
 

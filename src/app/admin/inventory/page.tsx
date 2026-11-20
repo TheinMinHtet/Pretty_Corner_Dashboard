@@ -11,6 +11,9 @@ import {
   Minus,
   History,
   SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -44,18 +47,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, cn } from "@/lib/utils";
 
 export default function InventoryPage() {
-  const { products, categories, stockHistory, adjustStock } = useAdminStore();
+  const { products, categories, stockHistory, adjustStock, adjustVariantStock } =
+    useAdminStore();
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "low" | "out">("all");
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
 
   // Adjustment Dialog state
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string>("parent");
   const [adjustType, setAdjustType] = useState<"increase" | "decrease">("increase");
   const [adjustQty, setAdjustQty] = useState("10");
   const [adjustReason, setAdjustReason] = useState("");
+
+  const toggleExpand = (id: string) => {
+    setExpandedProducts((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const stats = useMemo(() => {
     const total = products.length;
@@ -90,8 +100,13 @@ export default function InventoryPage() {
   const getCategoryName = (id: string) =>
     categories.find((c) => c.id === id)?.name ?? "Beauty";
 
-  const openAdjust = (product: Product, defaultType: "increase" | "decrease" = "increase") => {
+  const openAdjust = (
+    product: Product,
+    defaultType: "increase" | "decrease" = "increase",
+    variantId: string = "parent"
+  ) => {
     setAdjustTarget(product);
+    setSelectedVariantId(variantId);
     setAdjustType(defaultType);
     setAdjustQty("10");
     setAdjustReason("");
@@ -105,16 +120,34 @@ export default function InventoryPage() {
       toast.error("Please enter a valid positive quantity");
       return;
     }
-    adjustStock(
-      adjustTarget.id,
-      adjustType,
-      qty,
-      adjustReason.trim() ||
-        (adjustType === "increase" ? "Restock shipment" : "Manual stock deduction")
-    );
-    toast.success(
-      `Stock ${adjustType === "increase" ? "increased" : "decreased"} by ${qty} for ${adjustTarget.name}`
-    );
+
+    if (selectedVariantId && selectedVariantId !== "parent") {
+      const variant = adjustTarget.variants.find((v) => v.id === selectedVariantId);
+      adjustVariantStock(
+        adjustTarget.id,
+        selectedVariantId,
+        adjustType,
+        qty,
+        adjustReason.trim() ||
+          (adjustType === "increase"
+            ? `Restock shipment (${variant?.label || "Variant"})`
+            : `Manual stock deduction (${variant?.label || "Variant"})`)
+      );
+      toast.success(
+        `Variant [${variant?.label || "Variant"}] stock ${adjustType === "increase" ? "increased" : "decreased"} by ${qty}`
+      );
+    } else {
+      adjustStock(
+        adjustTarget.id,
+        adjustType,
+        qty,
+        adjustReason.trim() ||
+          (adjustType === "increase" ? "Restock shipment" : "Manual stock deduction")
+      );
+      toast.success(
+        `Stock ${adjustType === "increase" ? "increased" : "decreased"} by ${qty} for ${adjustTarget.name}`
+      );
+    }
     setAdjustTarget(null);
   };
 
@@ -247,51 +280,154 @@ export default function InventoryPage() {
                   {filteredProducts.map((p) => {
                     const isOut = p.stock === 0;
                     const isLow = p.stock > 0 && p.stock <= p.lowStockThreshold;
+                    const hasVariants = Boolean(p.variants && p.variants.length > 0);
+                    const isExpanded = Boolean(expandedProducts[p.id]);
+
                     return (
-                      <TableRow key={p.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={p.images[0]}
-                              alt={p.name}
-                              className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0"
-                            />
-                            <span className="font-medium text-[#33272C] truncate max-w-[200px]">
-                              {p.name}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell font-mono text-xs text-[#806B73]">
-                          {p.sku}
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                          {getCategoryName(p.categoryId)}
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {p.stock} units
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                          {p.lowStockThreshold} units
-                        </TableCell>
-                        <TableCell>
-                          {isOut ? (
-                            <Badge variant="destructive">Out of Stock</Badge>
-                          ) : isLow ? (
-                            <Badge variant="warning">Low Stock</Badge>
-                          ) : (
-                            <Badge variant="success">In Stock</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="primarySoft"
-                            size="sm"
-                            onClick={() => openAdjust(p, isOut || isLow ? "increase" : "decrease")}
-                          >
-                            Adjust Stock
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <React.Fragment key={p.id}>
+                        <TableRow className={cn(isExpanded && "bg-[#FDF6F8]/60")}>
+                          <TableCell>
+                            <div className="flex items-center gap-2.5">
+                              {hasVariants ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(p.id)}
+                                  className="h-6 w-6 rounded-md hover:bg-[#F0E1E6]/60 flex items-center justify-center text-[#806B73] transition-colors cursor-pointer"
+                                  title={isExpanded ? "Collapse variants" : "Expand variants"}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="w-6" />
+                              )}
+                              <img
+                                src={p.images[0]}
+                                alt={p.name}
+                                className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-[#33272C] truncate max-w-[200px]">
+                                    {p.name}
+                                  </span>
+                                  {hasVariants && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#FCEEF2] text-[#D96B91]">
+                                      <Layers className="h-3 w-3" />
+                                      {p.variants.length} vars
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell font-mono text-xs text-[#806B73]">
+                            {p.sku}
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                            {getCategoryName(p.categoryId)}
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {p.stock} units
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                            {p.lowStockThreshold} units
+                          </TableCell>
+                          <TableCell>
+                            {isOut ? (
+                              <Badge variant="destructive">Out of Stock</Badge>
+                            ) : isLow ? (
+                              <Badge variant="warning">Low Stock</Badge>
+                            ) : (
+                              <Badge variant="success">In Stock</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="primarySoft"
+                              size="sm"
+                              onClick={() =>
+                                openAdjust(
+                                  p,
+                                  isOut || isLow ? "increase" : "decrease",
+                                  "parent"
+                                )
+                              }
+                            >
+                              Adjust Stock
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+
+                        {/* Expandable Variant Sub-rows (PC-IS-007) */}
+                        {hasVariants &&
+                          isExpanded &&
+                          p.variants.map((v) => {
+                            const isVarOut = v.quantity === 0;
+                            const isVarLow = v.quantity > 0 && v.quantity <= 3;
+                            return (
+                              <TableRow
+                                key={v.id}
+                                className="bg-[#FAF2F5]/40 border-b border-[#F0E1E6]/40"
+                              >
+                                <TableCell className="pl-12">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-[#D96B91]" />
+                                    <span className="text-xs font-medium text-[#33272C]">
+                                      {v.label}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell font-mono text-[11px] text-[#806B73]">
+                                  {p.sku}-{v.skuSuffix || v.id}
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                                  Variant
+                                </TableCell>
+                                <TableCell className="text-xs font-semibold text-[#33272C]">
+                                  {v.quantity} units
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                                  3 units
+                                </TableCell>
+                                <TableCell>
+                                  {isVarOut ? (
+                                    <Badge variant="destructive" className="text-[10px] py-0 px-2">
+                                      Out
+                                    </Badge>
+                                  ) : isVarLow ? (
+                                    <Badge variant="warning" className="text-[10px] py-0 px-2">
+                                      Low
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="success" className="text-[10px] py-0 px-2">
+                                      Available
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs px-2.5 rounded-xl border-[#F0E1E6] hover:border-[#D96B91]"
+                                    onClick={() =>
+                                      openAdjust(
+                                        p,
+                                        isVarOut || isVarLow ? "increase" : "decrease",
+                                        v.id
+                                      )
+                                    }
+                                  >
+                                    Adjust Variant
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                      </React.Fragment>
                     );
                   })}
                 </TableBody>
@@ -318,9 +454,16 @@ export default function InventoryPage() {
                   {stockHistory.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell>
-                        <p className="font-medium text-[#33272C]">
-                          {entry.productName}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium text-[#33272C]">
+                            {entry.productName}
+                          </p>
+                          {entry.variantLabel && (
+                            <span className="px-1.5 py-0.5 rounded-full bg-[#FCEEF2] text-[#D96B91] text-[10px] font-semibold">
+                              {entry.variantLabel}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] font-mono text-[#806B73]">
                           {entry.sku}
                         </p>
@@ -364,18 +507,47 @@ export default function InventoryPage() {
         open={Boolean(adjustTarget)}
         onOpenChange={(open) => !open && setAdjustTarget(null)}
       >
-        <DialogContent>
+        <DialogContent className="rounded-[32px] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Adjust Stock</DialogTitle>
-            <DialogDescription>
-              {adjustTarget?.name} (Current: {adjustTarget?.stock} units)
+            <DialogTitle className="font-serif text-xl font-bold text-[#33272C]">
+              Adjust Stock Level
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#806B73]">
+              {adjustTarget?.name} (Current total: {adjustTarget?.stock} units)
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdjustSubmit} className="space-y-4">
+            {adjustTarget && adjustTarget.variants && adjustTarget.variants.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="adj-variant" className="text-xs font-semibold text-[#33272C]">
+                  Adjustment Scope
+                </Label>
+                <Select
+                  value={selectedVariantId}
+                  onValueChange={(val) => setSelectedVariantId(val)}
+                >
+                  <SelectTrigger id="adj-variant" className="h-10 rounded-xl border-[#F0E1E6]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="parent">
+                      Entire Product Total ({adjustTarget.stock} units)
+                    </SelectItem>
+                    {adjustTarget.variants.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        Variant: {v.label} ({v.quantity} units)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant={adjustType === "increase" ? "default" : "outline"}
+                className="h-10 rounded-xl"
                 onClick={() => setAdjustType("increase")}
               >
                 <Plus className="h-4 w-4" /> Increase Stock
@@ -383,6 +555,7 @@ export default function InventoryPage() {
               <Button
                 type="button"
                 variant={adjustType === "decrease" ? "destructive" : "outline"}
+                className="h-10 rounded-xl"
                 onClick={() => setAdjustType("decrease")}
               >
                 <Minus className="h-4 w-4" /> Decrease Stock
@@ -390,46 +563,76 @@ export default function InventoryPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="adj-qty">Quantity</Label>
+              <Label htmlFor="adj-qty" className="text-xs font-semibold text-[#33272C]">
+                Quantity to {adjustType === "increase" ? "Add" : "Deduct"}
+              </Label>
               <Input
                 id="adj-qty"
                 type="number"
                 min={1}
                 value={adjustQty}
                 onChange={(e) => setAdjustQty(e.target.value)}
+                className="h-10 rounded-xl border-[#F0E1E6]"
               />
               {adjustTarget && (
                 <p className="text-xs text-[#806B73]">
-                  New stock will be:{" "}
-                  <span className="font-semibold text-[#33272C]">
-                    {adjustType === "increase"
-                      ? adjustTarget.stock + (Number(adjustQty) || 0)
-                      : Math.max(0, adjustTarget.stock - (Number(adjustQty) || 0))}{" "}
-                    units
-                  </span>
+                  {selectedVariantId !== "parent" &&
+                  adjustTarget.variants?.find((v) => v.id === selectedVariantId) ? (
+                    <>
+                      Target Variant (
+                      {adjustTarget.variants.find((v) => v.id === selectedVariantId)?.label}) stock will be:{" "}
+                      <span className="font-semibold text-[#33272C]">
+                        {adjustType === "increase"
+                          ? (adjustTarget.variants.find((v) => v.id === selectedVariantId)?.quantity || 0) +
+                            (Number(adjustQty) || 0)
+                          : Math.max(
+                              0,
+                              (adjustTarget.variants.find((v) => v.id === selectedVariantId)?.quantity || 0) -
+                                (Number(adjustQty) || 0)
+                            )}{" "}
+                        units
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      New total product stock will be:{" "}
+                      <span className="font-semibold text-[#33272C]">
+                        {adjustType === "increase"
+                          ? adjustTarget.stock + (Number(adjustQty) || 0)
+                          : Math.max(0, adjustTarget.stock - (Number(adjustQty) || 0))}{" "}
+                        units
+                      </span>
+                    </>
+                  )}
                 </p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="adj-reason">Adjustment Reason</Label>
+              <Label htmlFor="adj-reason" className="text-xs font-semibold text-[#33272C]">
+                Adjustment Reason / Note
+              </Label>
               <Input
                 id="adj-reason"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
                 placeholder="e.g., Restock shipment arrived / Damaged item"
+                className="h-10 rounded-xl border-[#F0E1E6]"
               />
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-2">
               <Button
                 type="button"
                 variant="outline"
+                className="rounded-xl"
                 onClick={() => setAdjustTarget(null)}
               >
                 Cancel
               </Button>
-              <Button type="submit">Apply Adjustment</Button>
+              <Button type="submit" className="rounded-xl bg-[#D96B91] hover:bg-[#c2567c] text-white">
+                Apply Adjustment
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -22,6 +22,7 @@ import {
   CheckCheck,
   RotateCcw,
   User,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAdminStore } from "@/context/admin-store";
@@ -91,7 +92,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     globalSearch,
     setGlobalSearch,
     resetDemoData,
+    isAuthenticated,
+    logout,
   } = useAdminStore();
+
+  React.useEffect(() => {
+    if (!isAuthenticated && pathname !== "/admin/login") {
+      router.push("/admin/login");
+    }
+  }, [isAuthenticated, pathname, router]);
+
+  if (pathname === "/admin/login") {
+    return <main className="min-h-screen bg-[#FFFCFC]">{children}</main>;
+  }
+
+  if (!isAuthenticated) {
+    return <div className="min-h-screen bg-[#FFFCFC]" />;
+  }
 
   const pendingOrdersCount = useMemo(
     () => orders.filter((o) => o.orderStatus === "Pending").length,
@@ -469,6 +486,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 >
                   <RotateCcw className="h-4 w-4" />
                   Reset Demo Data
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    logout();
+                    toast.info("Signed out from administrator session");
+                    router.push("/admin/login");
+                  }}
+                  className="text-rose-600 focus:text-rose-600"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

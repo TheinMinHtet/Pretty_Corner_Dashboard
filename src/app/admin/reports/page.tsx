@@ -15,7 +15,16 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Banknote, ShoppingBag, TrendingUp, Calendar } from "lucide-react";
+import {
+  Banknote,
+  ShoppingBag,
+  TrendingUp,
+  Calendar,
+  CreditCard,
+  Users,
+  Repeat,
+  PieChart as PieIcon,
+} from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { REVENUE_SERIES } from "@/data/mock-data";
 import { OrderStatus } from "@/types/admin";
@@ -54,8 +63,96 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 };
 
 export default function SalesReportsPage() {
-  const { orders, products, categories } = useAdminStore();
+  const { orders, products, categories, customers } = useAdminStore();
   const [dateRange, setDateRange] = useState<"7d" | "30d" | "6m">("30d");
+
+  // Payment Breakdown Analytics (PC-SD-008)
+  const paymentMethodStats = useMemo(() => {
+    const methods = [
+      "KBZPay",
+      "WavePay",
+      "CB Pay",
+      "AYA Pay",
+      "Cash on Delivery",
+    ] as const;
+    const colors: Record<string, string> = {
+      KBZPay: "#38BDF8",
+      WavePay: "#F59E0B",
+      "CB Pay": "#EC4899",
+      "AYA Pay": "#EF4444",
+      "Cash on Delivery": "#10B981",
+    };
+    return methods.map((m) => {
+      const matched = orders.filter((o) => o.paymentMethod === m);
+      const totalAmount = matched.reduce(
+        (s, o) => s + (o.orderStatus !== "Cancelled" ? o.total : 0),
+        0
+      );
+      return {
+        name: m,
+        count: matched.length,
+        revenue: totalAmount,
+        color: colors[m] || "#D96B91",
+      };
+    });
+  }, [orders]);
+
+  const paymentStatusStats = useMemo(() => {
+    const statuses = ["Paid", "Pending", "Refunded", "Failed"] as const;
+    const colors: Record<string, string> = {
+      Paid: "#10B981",
+      Pending: "#F59E0B",
+      Refunded: "#8B5CF6",
+      Failed: "#EF4444",
+    };
+    return statuses.map((s) => ({
+      name: s,
+      count: orders.filter((o) => o.paymentStatus === s).length,
+      color: colors[s],
+    }));
+  }, [orders]);
+
+  // Customer Segmentation Analytics (PC-SD-007)
+  const customerRetentionStats = useMemo(() => {
+    const customerOrderCounts: Record<string, { count: number; spend: number }> =
+      {};
+    for (const o of orders) {
+      if (!customerOrderCounts[o.customerId]) {
+        customerOrderCounts[o.customerId] = { count: 0, spend: 0 };
+      }
+      customerOrderCounts[o.customerId].count += 1;
+      if (o.orderStatus !== "Cancelled") {
+        customerOrderCounts[o.customerId].spend += o.total;
+      }
+    }
+
+    let newCustCount = 0;
+    let returningCustCount = 0;
+    let newCustSpend = 0;
+    let returningCustSpend = 0;
+
+    for (const c of customers) {
+      const stats = customerOrderCounts[c.id] || { count: 0, spend: 0 };
+      if (stats.count > 1) {
+        returningCustCount += 1;
+        returningCustSpend += stats.spend;
+      } else {
+        newCustCount += 1;
+        newCustSpend += stats.spend;
+      }
+    }
+
+    const totalCust = customers.length || 1;
+    const repeatRate = Math.round((returningCustCount / totalCust) * 100);
+
+    return {
+      newCustCount,
+      returningCustCount,
+      newCustSpend,
+      returningCustSpend,
+      repeatRate,
+    };
+  }, [customers, orders]);
 
   const trendData = useMemo(() => {
     if (dateRange === "7d") return REVENUE_SERIES.daily;
@@ -319,6 +416,154 @@ export default function SalesReportsPage() {
                   <span className="font-semibold text-[#33272C]">{s.value}</span>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Payment & Customer Segmentation Analytics (PC-SD-007, PC-SD-008) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Payment Methods & Transaction Breakdown */}
+        <Card className="rounded-[32px] border-[#F0E1E6]">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-[#D96B91]" />
+                  Payment Channels & Settlements
+                </CardTitle>
+                <CardDescription>
+                  Volume and revenue distribution across payment providers
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-2">
+            {/* Status overview badges */}
+            <div className="grid grid-cols-4 gap-2">
+              {paymentStatusStats.map((st) => (
+                <div
+                  key={st.name}
+                  className="rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] p-2.5 text-center"
+                >
+                  <p className="text-[10px] text-[#806B73] font-semibold">{st.name}</p>
+                  <p
+                    className="text-base font-bold mt-0.5"
+                    style={{ color: st.color }}
+                  >
+                    {st.count}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Methods breakdown list */}
+            <div className="space-y-2.5 pt-1">
+              {paymentMethodStats.map((pm) => (
+                <div
+                  key={pm.name}
+                  className="flex items-center justify-between p-2.5 rounded-2xl bg-white border border-[#F0E1E6]/80 text-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: pm.color }}
+                    />
+                    <div>
+                      <p className="font-semibold text-[#33272C]">{pm.name}</p>
+                      <p className="text-[10px] text-[#806B73]">
+                        {pm.count} {pm.count === 1 ? "order" : "orders"} processed
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-[#33272C]">
+                      {formatMMK(pm.revenue)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Customer Segmentation & Retention */}
+        <Card className="rounded-[32px] border-[#F0E1E6]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-bold flex items-center gap-2">
+              <Users className="h-4 w-4 text-[#D96B91]" />
+              Customer Retention & Segmentation
+            </CardTitle>
+            <CardDescription>
+              First-time buyers vs. repeat beauty enthusiasts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-2">
+            {/* Hero Retention Metric */}
+            <div className="rounded-2xl border border-[#F0E1E6] bg-[#FCEEF2]/40 p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[#806B73] font-semibold flex items-center gap-1.5">
+                  <Repeat className="h-3.5 w-3.5 text-[#D96B91]" />
+                  Repeat Customer Rate
+                </p>
+                <p className="text-3xl font-black text-[#33272C] mt-1">
+                  {customerRetentionStats.repeatRate}%
+                </p>
+                <p className="text-[11px] text-[#806B73] mt-0.5">
+                  Proportion of customers with 2+ completed purchases
+                </p>
+              </div>
+              <div className="h-14 w-14 rounded-full bg-white border border-[#F0E1E6] flex items-center justify-center font-serif text-lg font-bold text-[#D96B91] shadow-xs">
+                {customerRetentionStats.returningCustCount}/
+                {customerRetentionStats.newCustCount +
+                  customerRetentionStats.returningCustCount}
+              </div>
+            </div>
+
+            {/* Split cards: New vs Returning */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-[#F0E1E6] bg-white p-3.5 space-y-1">
+                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                  New Shoppers
+                </span>
+                <p className="text-xl font-bold text-[#33272C] pt-1">
+                  {customerRetentionStats.newCustCount}
+                </p>
+                <p className="text-[11px] text-[#806B73]">
+                  Revenue: {formatCompactMMK(customerRetentionStats.newCustSpend)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[#F0E1E6] bg-white p-3.5 space-y-1">
+                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FCEEF2] text-[#D96B91] border border-[#F0E1E6]">
+                  Returning Shoppers
+                </span>
+                <p className="text-xl font-bold text-[#33272C] pt-1">
+                  {customerRetentionStats.returningCustCount}
+                </p>
+                <p className="text-[11px] text-[#806B73]">
+                  Revenue:{" "}
+                  {formatCompactMMK(customerRetentionStats.returningCustSpend)}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Bar Distribution */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-xs text-[#806B73]">
+                <span>New ({100 - customerRetentionStats.repeatRate}%)</span>
+                <span>Returning ({customerRetentionStats.repeatRate}%)</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full bg-sky-100 overflow-hidden flex">
+                <div
+                  className="bg-sky-400 h-full"
+                  style={{ width: `${100 - customerRetentionStats.repeatRate}%` }}
+                />
+                <div
+                  className="bg-[#D96B91] h-full"
+                  style={{ width: `${customerRetentionStats.repeatRate}%` }}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

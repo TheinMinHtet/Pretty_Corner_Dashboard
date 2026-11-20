@@ -73,6 +73,16 @@ export interface OrderTimelineEvent {
   actor: string;
 }
 
+export interface RefundDetails {
+  amount: number;
+  isFullRefund: boolean;
+  reason: string;
+  transactionReference: string;
+  refundedAt: string;
+  processedBy: string;
+  notes?: string;
+}
+
 export interface Order {
   id: string;
   reference: string;
@@ -83,6 +93,8 @@ export interface Order {
   deliveryAddress: string;
   township: string;
   city: string;
+  nearbyLandmark?: string;
+  deliveryMethod?: "courier" | "pickup";
   coordinates?: {
     lat: number;
     lng: number;
@@ -94,6 +106,8 @@ export interface Order {
   total: number;
   paymentMethod: "KBZPay" | "WavePay" | "CB Pay" | "AYA Pay" | "Cash on Delivery";
   paymentStatus: PaymentStatus;
+  transactionReference?: string;
+  refundDetails?: RefundDetails;
   orderStatus: OrderStatus;
   notes?: string;
   timeline: OrderTimelineEvent[];
@@ -107,6 +121,7 @@ export interface CustomerAddress {
   address: string;
   township: string;
   city: string;
+  nearbyLandmark?: string;
   isDefault: boolean;
 }
 
@@ -126,6 +141,8 @@ export interface StockAdjustment {
   productId: string;
   productName: string;
   sku: string;
+  variantId?: string;
+  variantLabel?: string;
   type: "increase" | "decrease";
   quantity: number;
   previousStock: number;
@@ -168,6 +185,17 @@ export interface ActivityLogItem {
   category: "order" | "product" | "inventory" | "promotion" | "settings";
 }
 
+export interface StorePickupOptions {
+  enabled: boolean;
+  storeName: string;
+  address: string;
+  township: string;
+  city: string;
+  operatingHours: string;
+  contactPhone: string;
+  instructions: string;
+}
+
 export interface StoreSettings {
   storeName: string;
   tagline: string;
@@ -181,6 +209,7 @@ export interface StoreSettings {
   otherRegionDeliveryFee: number;
   freeShippingThreshold: number;
   defaultLowStockThreshold: number;
+  pickupOptions: StorePickupOptions;
   paymentMethods: {
     kbzPay: boolean;
     wavePay: boolean;

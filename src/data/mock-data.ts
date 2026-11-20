@@ -343,6 +343,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 42, Kabar Aye Pagoda Rd, Apt 4B",
         township: "Bahan",
         city: "Yangon",
+        nearbyLandmark: "Near Pearl Condo, opposite City Mart",
         isDefault: true,
       },
     ],
@@ -361,6 +362,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "Suite 302, Junction City Tower, Bogyoke Rd",
         township: "Pabedan",
         city: "Yangon",
+        nearbyLandmark: "Junction City Tower Office Entrance, Level 3",
         isDefault: true,
       },
       {
@@ -369,6 +371,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 18, Shin Saw Pu St",
         township: "Sanchaung",
         city: "Yangon",
+        nearbyLandmark: "Near Asia Royal Hospital",
         isDefault: false,
       },
     ],
@@ -386,6 +389,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 109, 73rd St, Between 30th & 31st St",
         township: "Chanayethazan",
         city: "Mandalay",
+        nearbyLandmark: "Near 73rd St Market Junction",
         isDefault: true,
       },
     ],
@@ -402,6 +406,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 7B, Thitsar Rd, Ward 9",
         township: "Yankin",
         city: "Yangon",
+        nearbyLandmark: "Behind Yankin Centre, near KBZ Bank",
         isDefault: true,
       },
     ],
@@ -419,6 +424,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "Diamond Inya Palace, Tower A-1204",
         township: "Mayangone",
         city: "Yangon",
+        nearbyLandmark: "Beside Inya Lake Jogging Trail Entrance",
         isDefault: true,
       },
     ],
@@ -435,6 +441,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 24, Myay Ni Gone Zay St",
         township: "Sanchaung",
         city: "Yangon",
+        nearbyLandmark: "Opposite Dagon Centre II main gate",
         isDefault: true,
       },
     ],
@@ -453,6 +460,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "No. 42, Kabar Aye Pagoda Rd, Apt 4B",
     township: "Bahan",
     city: "Yangon",
+    nearbyLandmark: "Near Pearl Condo, opposite City Mart",
+    deliveryMethod: "courier",
     coordinates: { lat: 16.8189, lng: 96.1561 },
     items: [
       {
@@ -482,6 +491,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 66000,
     paymentMethod: "KBZPay",
     paymentStatus: "Paid",
+    transactionReference: "KBZ-PAY-98234812",
     orderStatus: "Pending",
     notes: "Please call 15 mins before arriving.",
     timeline: [
@@ -505,6 +515,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "Suite 302, Junction City Tower, Bogyoke Rd",
     township: "Pabedan",
     city: "Yangon",
+    nearbyLandmark: "Junction City Tower Office Entrance, Level 3",
+    deliveryMethod: "courier",
     coordinates: { lat: 16.7793, lng: 96.1534 },
     items: [
       {
@@ -534,6 +546,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 90450,
     paymentMethod: "WavePay",
     paymentStatus: "Paid",
+    transactionReference: "WAVE-TRX-5510294",
     orderStatus: "Confirmed",
     timeline: [
       {
@@ -562,6 +575,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "No. 109, 73rd St, Between 30th & 31st St",
     township: "Chanayethazan",
     city: "Mandalay",
+    nearbyLandmark: "Near 73rd St Market Junction",
+    deliveryMethod: "courier",
     coordinates: { lat: 21.9747, lng: 96.0836 },
     items: [
       {
@@ -591,6 +606,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 117500,
     paymentMethod: "CB Pay",
     paymentStatus: "Paid",
+    transactionReference: "CBPAY-TRX-882190",
     orderStatus: "Processing",
     timeline: [
       {
@@ -624,6 +640,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "No. 7B, Thitsar Rd, Ward 9",
     township: "Yankin",
     city: "Yangon",
+    nearbyLandmark: "Behind Yankin Centre, near KBZ Bank",
+    deliveryMethod: "courier",
     coordinates: { lat: 16.8351, lng: 96.1652 },
     items: [
       {
@@ -653,6 +671,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 55500,
     paymentMethod: "Cash on Delivery",
     paymentStatus: "Pending",
+    transactionReference: "COD-VERIFY-1045",
     orderStatus: "Shipped",
     timeline: [
       {
@@ -693,6 +712,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "Diamond Inya Palace, Tower A-1204",
     township: "Mayangone",
     city: "Yangon",
+    nearbyLandmark: "Beside Inya Lake Jogging Trail Entrance",
+    deliveryMethod: "courier",
     coordinates: { lat: 16.8501, lng: 96.1297 },
     items: [
       {
@@ -722,6 +743,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 70000,
     paymentMethod: "KBZPay",
     paymentStatus: "Paid",
+    transactionReference: "KBZ-PAY-77610234",
     orderStatus: "Delivered",
     timeline: [
       {
@@ -764,9 +786,11 @@ export const INITIAL_ORDERS: Order[] = [
     customerId: "cust-6",
     customerName: "Nang Kham Phaung",
     customerPhone: "09-441122334",
-    deliveryAddress: "No. 24, Myay Ni Gone Zay St",
-    township: "Sanchaung",
+    deliveryAddress: "Pretty Corner Flagship Store (In-Store Pickup)",
+    township: "Bahan",
     city: "Yangon",
+    nearbyLandmark: "No. 15, Sayar San Rd, Bahan",
+    deliveryMethod: "pickup",
     coordinates: { lat: 16.8038, lng: 96.1364 },
     items: [
       {
@@ -786,6 +810,7 @@ export const INITIAL_ORDERS: Order[] = [
     total: 47500,
     paymentMethod: "AYA Pay",
     paymentStatus: "Paid",
+    transactionReference: "AYA-PAY-3310928",
     orderStatus: "Delivered",
     timeline: [
       {
@@ -820,6 +845,8 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "No. 42, Kabar Aye Pagoda Rd, Apt 4B",
     township: "Bahan",
     city: "Yangon",
+    nearbyLandmark: "Near Pearl Condo, opposite City Mart",
+    deliveryMethod: "courier",
     items: [
       {
         id: "oi-12",
@@ -838,6 +865,16 @@ export const INITIAL_ORDERS: Order[] = [
     total: 64500,
     paymentMethod: "WavePay",
     paymentStatus: "Refunded",
+    transactionReference: "WAVE-TRX-4401928",
+    refundDetails: {
+      amount: 64500,
+      isFullRefund: true,
+      reason: "Customer requested cancellation (duplicate order)",
+      transactionReference: "WAVE-REFUND-99120",
+      refundedAt: "2026-11-10T12:15:00Z",
+      processedBy: "Aye Chan (Admin)",
+      notes: "Full refund issued via WavePay merchant console.",
+    },
     orderStatus: "Cancelled",
     notes: "Customer requested cancellation due to duplicate order.",
     timeline: [
@@ -1066,6 +1103,17 @@ export const INITIAL_SETTINGS: StoreSettings = {
   otherRegionDeliveryFee: 5500,
   freeShippingThreshold: 100000,
   defaultLowStockThreshold: 10,
+  pickupOptions: {
+    enabled: true,
+    storeName: "Pretty Corner Flagship Boutique",
+    address: "No. 15, Sayar San Rd, Bahan Township",
+    township: "Bahan",
+    city: "Yangon",
+    operatingHours: "10:00 AM - 7:30 PM (Daily)",
+    contactPhone: "09-770011223",
+    instructions:
+      "Please present your Order Reference ID (e.g. PC-2026-XXXX) at the front desk for instant collection.",
+  },
   paymentMethods: {
     kbzPay: true,
     wavePay: true,
