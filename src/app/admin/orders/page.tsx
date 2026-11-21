@@ -48,7 +48,6 @@ const ORDER_STATUSES: ("All" | OrderStatus)[] = [
   "Processing",
   "Shipped",
   "Delivered",
-  "Cancelled",
 ];
 
 const PAYMENT_STATUSES: ("All" | PaymentStatus)[] = [
@@ -57,7 +56,6 @@ const PAYMENT_STATUSES: ("All" | PaymentStatus)[] = [
   "Paid",
   "Failed",
   "Expired",
-  "Refunded",
 ];
 
 type SortField = "createdAt" | "total" | "reference";
