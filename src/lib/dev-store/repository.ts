@@ -886,8 +886,13 @@ const globalForStore = globalThis as unknown as {
 };
 
 export function getStoreRepository(): StoreRepository {
-  if (!globalForStore.__prettyCornerRepo) {
-    globalForStore.__prettyCornerRepo = isSupabaseConfigured()
+  const useSupabase = isSupabaseConfigured();
+  if (
+    !globalForStore.__prettyCornerRepo ||
+    (useSupabase &&
+      !(globalForStore.__prettyCornerRepo instanceof SupabaseStoreRepository))
+  ) {
+    globalForStore.__prettyCornerRepo = useSupabase
       ? new SupabaseStoreRepository()
       : new JsonFileStoreRepository();
   }

@@ -465,7 +465,14 @@ export class SupabaseStoreRepository implements StoreRepository {
       .select("*")
       .maybeSingle();
 
-    if (error || !data) return null;
+    if (error) {
+      throw new Error(`Supabase updateProduct failed: ${error.message}`);
+    }
+    if (!data) {
+      throw new Error(
+        "Supabase blocked updating this product (Row-Level Security). Add SUPABASE_SERVICE_ROLE_KEY to PrettyCornerDashboard/.env.local for admin write access."
+      );
+    }
     return mapProductRow(data as SbProductRow);
   }
 
