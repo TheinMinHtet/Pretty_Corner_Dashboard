@@ -87,6 +87,12 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const [variants, setVariants] = useState<ProductVariant[]>(
     initialProduct?.variants ?? []
   );
+  const [benefitsText, setBenefitsText] = useState(
+    initialProduct?.benefits?.join("\n") ?? ""
+  );
+  const [usage, setUsage] = useState(initialProduct?.usage ?? "");
+  const [badge, setBadge] = useState(initialProduct?.badge ?? "");
+  const [tagline, setTagline] = useState(initialProduct?.tagline ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,6 +186,11 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
       variants,
     } as Product);
 
+    const parsedBenefits = benefitsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
     const payload = {
       name: name.trim(),
       description: description.trim(),
@@ -194,6 +205,10 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
       status,
       isContactLens,
       variants,
+      benefits: parsedBenefits,
+      usage: usage.trim(),
+      badge: badge.trim() || undefined,
+      tagline: tagline.trim() || undefined,
     };
 
     if (mode === "create") {
@@ -294,6 +309,62 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                     placeholder="e.g., OLENS, rom&nd, Pretty Corner"
                   />
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Storefront Content: Why We Love It & How to Use */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle>Storefront Content</CardTitle>
+              <CardDescription>
+                Controls the &ldquo;Why we love it&rdquo; and &ldquo;How to use&rdquo; sections on the customer product page
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-badge">Badge (Optional)</Label>
+                  <Input
+                    id="prod-badge"
+                    value={badge}
+                    onChange={(e) => setBadge(e.target.value)}
+                    placeholder="e.g., BESTSELLER, NEW, DAILY ESSENTIAL"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-tagline">Tagline (Optional)</Label>
+                  <Input
+                    id="prod-tagline"
+                    value={tagline}
+                    onChange={(e) => setTagline(e.target.value)}
+                    placeholder="e.g., HYDRATE + PLUMP"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prod-benefits">
+                  Why We Love It — Key Benefits (one bullet per line)
+                </Label>
+                <Textarea
+                  id="prod-benefits"
+                  rows={4}
+                  value={benefitsText}
+                  onChange={(e) => setBenefitsText(e.target.value)}
+                  placeholder={"Deep hydration with multi-molecular hyaluronic acid\nUltra-lightweight finish that sinks in effortlessly\nSuitable for all skin types"}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prod-usage">How to Use</Label>
+                <Textarea
+                  id="prod-usage"
+                  rows={3}
+                  value={usage}
+                  onChange={(e) => setUsage(e.target.value)}
+                  placeholder="After gentle cleansing and toning, dispense 2–3 drops..."
+                />
               </div>
             </CardContent>
           </Card>

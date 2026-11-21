@@ -184,8 +184,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           item.href === "/admin/orders"
             ? pendingOrdersCount
             : item.href === "/admin/inventory"
-            ? lowStockCount
-            : 0;
+              ? lowStockCount
+              : 0;
 
         const linkContent = (
           <Link
@@ -375,7 +375,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       className={cn(
                         "truncate hover:text-[#D96B91] transition-colors",
                         idx === breadcrumbs.length - 1 &&
-                          "text-[#33272C] font-medium"
+                        "text-[#33272C] font-medium"
                       )}
                     >
                       {crumb.label}
