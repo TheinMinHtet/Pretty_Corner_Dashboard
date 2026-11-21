@@ -36,6 +36,13 @@
       "skillPath": "skills/engineering/codebase-design/SKILL.md",
       "computedHash": "d40f025dc1b0f2020663260f38f2bcb8d6ed3523afb11e5fda624b01238677e8"
     },
+    "design-doc-mermaid": {
+      "source": "SpillwaveSolutions/design-doc-mermaid",
+      "commit": "c36d83503d2ba9c1e51638dc2d8a34758a377dea",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "964fe47363d1c14bd000215d9ad9461d8210f0ed809599abac8fc10847b0f130"
+    },
     "diagnosing-bugs": {
       "source": "mattpocock/skills",
       "commit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",

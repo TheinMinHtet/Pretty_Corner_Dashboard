@@ -176,6 +176,7 @@ export interface Promotion {
   endDate: string;
   active: boolean;
   bannerColor: string;
+  bannerImage?: string;
   featuredProductIds: string[];
   usageCount: number;
 }

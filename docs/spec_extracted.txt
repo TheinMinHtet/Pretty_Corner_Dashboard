@@ -1,0 +1,752 @@
+PRETTY CORNER
+E-commerce WebsiteSoftware Feature Specification
+Version 1.0  |  17 November 2026
+Project
+Pretty Corner E-commerce Website
+Document type
+Software Feature Specification
+Prepared for
+Project stakeholders and development team
+Status
+Proposed scope for review and approval
+Design direction: Mobile-first • Pink & White • Guest Shopping
+Document Control
+Field
+Details
+Document title
+Pretty Corner — Software Feature Specification
+Version
+1.0
+Date
+17 November 2026
+Primary audience
+Business owner, project stakeholders, designers, developers and testers
+Purpose
+Define the functional scope and key business requirements of the Pretty Corner e-commerce website.
+Revision History
+Version
+Date
+Description
+1.0
+17 November 2026
+Initial consolidated feature specification.
+Table of Contents
+1. Project Overview
+2. Product Goals and Scope
+3. User Roles
+4. Functional Requirements
+5. Payment Gateway Integration
+6. Map-Based Delivery Address
+7. Business Rules and Workflows
+8. User Experience and Design Requirements
+9. Non-Functional Requirements
+10. MVP and Future Enhancements
+11. Assumptions, Dependencies and Open Decisions
+12. Acceptance and Approval
+1. Project Overview
+Pretty Corner is a mobile-first e-commerce website intended to provide customers with a simple and convenient way to browse beauty products, place orders and complete payments online. The platform will also provide administrative capabilities for managing products, customers, orders, inventory, payments, notifications and sales performance.
+1.1 Project Information
+Attribute
+Requirement
+Shop name
+Pretty Corner
+Business category
+Beauty and personal-care products, including cosmetics, skincare, contact lenses, eyelashes and accessories as applicable.
+Visual identity
+Pink and white primary color palette.
+Platform
+Responsive web application.
+Design approach
+Mobile-first.
+Customer authentication
+Customer registration and login are not required. Customers can shop and place orders as guests.
+Administrative authentication
+Secure login is required for authorized administrators.
+Payment gateway
+MyanMyanPay.
+Delivery location
+Interactive map-based location selection with readable address and coordinate capture.
+1.2 Reference Websites
+ZinMie Cosmetics — https://zinmiecosmetics.com/
+Pinky Contact Lens — https://pinkycontactlens.com/shop
+These websites are provided as visual and functional references. Pretty Corner will use its own branding, content, layout and implementation.
+2. Product Goals and Scope
+2.1 Primary Goals
+Provide an accessible online storefront where customers can discover and purchase products without creating an account.
+Allow administrators to manage products, categories, prices, images and inventory.
+Support online payments through the MyanMyanPay payment gateway.
+Capture accurate delivery locations using an interactive map and manual address details.
+Centralize customer, order and payment information for administrative operations.
+Automatically synchronize product stock with order activity.
+Provide a sales dashboard and notifications to support day-to-day business operations.
+2.2 In Scope
+The scope includes the customer storefront, guest shopping and checkout, payment integration, delivery address mapping, administrative dashboard, product and inventory management, customer and order management, notifications, and sales reporting.
+2.3 Out of Scope for the Initial Release
+Mandatory customer accounts, customer registration and customer login.
+Native iOS or Android applications.
+Automated courier-company integrations unless separately agreed.
+Advanced loyalty, membership or rewards programs.
+Multi-vendor marketplace functionality.
+3. User Roles
+Role
+Description
+Access
+Guest Customer
+Browses products, manages a cart, submits delivery information and places orders without registration.
+Public storefront and guest checkout.
+Administrator
+Manages the store's products, categories, inventory, orders, customers, payments, promotions and reports.
+Authenticated admin dashboard.
+Order/Operations Staff (optional)
+Assists with order confirmation, preparation, delivery coordination and customer communication.
+Permission-controlled administrative functions.
+4. Functional Requirements
+The following requirements define the functional capabilities expected from the system. Priority labels indicate implementation importance: Must = required for the initial release; Should = desirable; Could = optional or suitable for a later phase.
+4.1 Product Management
+Requirement ID
+Feature
+Description
+Priority
+PC-PM-001
+Create products
+Administrators shall be able to add products with names, descriptions, prices, categories and other relevant details.
+Must
+PC-PM-002
+Edit products
+Administrators shall be able to update product information, pricing, images and availability.
+Must
+PC-PM-003
+Delete or archive products
+Administrators shall be able to remove or archive products while preserving historical order records.
+Must
+PC-PM-004
+Product image management
+Administrators shall be able to upload and manage multiple images for each product.
+Must
+PC-PM-005
+Category management
+Administrators shall be able to create, edit, organize and delete product categories.
+Must
+PC-PM-006
+Product variants
+The system shall support product options such as color, size, lens power or other applicable attributes.
+Should
+PC-PM-007
+SKU management
+The system should support unique product or variant identifiers.
+Should
+PC-PM-008
+Pricing and discounts
+Administrators shall be able to configure regular prices and promotional prices.
+Must
+PC-PM-009
+Product visibility
+Administrators shall be able to publish, hide or mark products as unavailable.
+Must
+4.2 Online Shopping
+Requirement ID
+Feature
+Description
+Priority
+PC-OS-001
+Homepage
+The storefront shall display promotional banners, featured products, product categories and selected recommendations.
+Must
+PC-OS-002
+Product listing
+Customers shall be able to browse products with images, names, prices and availability.
+Must
+PC-OS-003
+Product search
+Customers shall be able to search for products by name or keyword.
+Must
+PC-OS-004
+Product filtering
+Customers should be able to filter by category, brand, price and availability.
+Should
+PC-OS-005
+Product sorting
+Customers should be able to sort products by newest, price and popularity.
+Should
+PC-OS-006
+Product detail page
+Each product shall have a detail page with description, images, price, variants and stock status.
+Must
+PC-OS-007
+Shopping cart
+Customers shall be able to add products, remove products and change quantities.
+Must
+PC-OS-008
+Cart summary
+The cart shall display item totals, subtotal, applicable delivery fee and order total.
+Must
+PC-OS-009
+Guest checkout
+Customers shall be able to place orders without registering or logging in.
+Must
+PC-OS-010
+Order confirmation
+The system shall display an order reference and order summary after successful order submission.
+Must
+PC-OS-011
+Wishlist
+Customers could save products to a wishlist using a browser-based mechanism without requiring an account.
+Could
+PC-OS-012
+Related products
+The storefront could display similar or complementary products.
+Could
+PC-OS-013
+Promotional display
+The storefront should display discounts, sale labels, bestsellers and featured products where configured.
+Should
+4.3 Customer Management
+Requirement ID
+Feature
+Description
+Priority
+PC-CM-001
+Customer record creation
+The system shall create or update a customer record using information submitted during checkout.
+Must
+PC-CM-002
+Customer profile
+Administrators shall be able to view customer names, phone numbers and associated contact details.
+Must
+PC-CM-003
+Customer address records
+Administrators shall be able to view delivery addresses associated with a customer.
+Must
+PC-CM-004
+Order history
+Administrators shall be able to view a customer's previous orders.
+Must
+PC-CM-005
+Purchase history
+Administrators should be able to review products purchased by a customer.
+Should
+PC-CM-006
+Customer search
+Administrators shall be able to search customer records by name or phone number.
+Must
+PC-CM-007
+Returning customer identification
+The system should identify repeat customers using a reliable customer identifier, such as a normalized phone number.
+Should
+PC-CM-008
+Customer data privacy
+Customer information shall only be accessible to authorized administrative users and used for order-related purposes.
+Must
+4.4 Order Management
+Requirement ID
+Feature
+Description
+Priority
+PC-OM-001
+Order listing
+Administrators shall be able to view and search submitted orders.
+Must
+PC-OM-002
+Order details
+The system shall store and display order items, quantities, prices, totals, customer information and delivery details.
+Must
+PC-OM-003
+Order confirmation
+Authorized staff shall be able to confirm newly received orders.
+Must
+PC-OM-004
+Order status updates
+Authorized staff shall be able to update order statuses through the defined workflow.
+Must
+PC-OM-005
+Payment status visibility
+Administrators shall be able to view the payment status associated with each order.
+Must
+PC-OM-006
+Delivery information
+Administrators shall be able to view text addresses, landmarks and map coordinates for delivery.
+Must
+PC-OM-007
+Customer order tracking
+Customers should be able to check order status using an order reference and an appropriate verification detail, without an account.
+Should
+PC-OM-008
+Order cancellation
+Authorized staff shall be able to cancel eligible orders and record a reason.
+Must
+PC-OM-009
+Refund recording
+Administrators should be able to record refund information and status where applicable.
+Should
+PC-OM-010
+Order history retention
+The system shall retain historical order records even if associated products are later edited or archived.
+Must
+4.5 Inventory Synchronization
+Requirement ID
+Feature
+Description
+Priority
+PC-IS-001
+Stock management
+Administrators shall be able to view and update available stock quantities.
+Must
+PC-IS-002
+Automatic stock update
+The system shall update inventory in response to confirmed order/payment events according to the agreed stock-reservation policy.
+Must
+PC-IS-003
+Storefront availability
+Product availability shown on the storefront shall reflect current sellable inventory.
+Must
+PC-IS-004
+Stock restoration
+The system shall release reserved stock or restore deducted stock when an eligible order is cancelled or payment expires, according to the inventory policy.
+Must
+PC-IS-005
+Low-stock alerts
+The system should notify administrators when a product or variant reaches its configured low-stock threshold.
+Should
+PC-IS-006
+Out-of-stock prevention
+The system shall prevent customers from ordering quantities exceeding available sellable stock.
+Must
+PC-IS-007
+Variant-level inventory
+The system should maintain separate stock quantities for product variants where applicable.
+Should
+PC-IS-008
+Stock adjustment history
+The system should record stock changes, including manual adjustments and order-related changes.
+Should
+PC-IS-009
+Concurrent purchase protection
+Inventory updates shall use atomic or transactional controls to prevent overselling during simultaneous purchases.
+Must
+4.6 Sales Dashboard
+Requirement ID
+Feature
+Description
+Priority
+PC-SD-001
+Dashboard overview
+The admin dashboard shall display key sales and order metrics.
+Must
+PC-SD-002
+Total sales
+The dashboard shall show sales totals for a selected period, using a clearly defined revenue calculation.
+Must
+PC-SD-003
+Order metrics
+The dashboard shall show total, pending, processing, completed and cancelled order counts.
+Must
+PC-SD-004
+Sales trends
+The dashboard should provide daily, weekly and monthly sales charts.
+Should
+PC-SD-005
+Best-selling products
+The dashboard should identify products with the highest sales quantities or revenue.
+Should
+PC-SD-006
+Inventory indicators
+The dashboard should highlight low-stock and out-of-stock products.
+Should
+PC-SD-007
+Customer statistics
+The dashboard could show new and returning customer statistics.
+Could
+PC-SD-008
+Payment statistics
+The dashboard should summarize successful, pending and failed payment transactions.
+Should
+PC-SD-009
+Date filtering
+Administrators should be able to filter dashboard metrics by date range.
+Should
+4.7 Notifications
+Requirement ID
+Feature
+Description
+Priority
+PC-NT-001
+Order confirmation notification
+The system shall generate an order confirmation notification after an order is successfully submitted.
+Must
+PC-NT-002
+Payment confirmation notification
+The system shall generate a payment confirmation notification after payment is verified.
+Must
+PC-NT-003
+Payment failure notification
+The system should inform customers when a payment fails or expires.
+Should
+PC-NT-004
+Order status notifications
+The system shall support notifications for confirmed, processing, shipped, delivered and cancelled orders.
+Must
+PC-NT-005
+New order alert
+The system shall notify administrators when a new order is received.
+Must
+PC-NT-006
+Low-stock notification
+The system should notify administrators when stock reaches a configured threshold.
+Should
+PC-NT-007
+Notification channels
+The system should support an extensible notification mechanism for channels such as email or SMS, subject to provider availability and configuration.
+Should
+PC-NT-008
+Admin in-app notifications
+The admin dashboard should provide an in-app notification area for operational alerts.
+Should
+4.8 Promotions and Content Management
+Requirement ID
+Feature
+Description
+Priority
+PC-CT-001
+Promotional banners
+Administrators should be able to manage homepage promotional banners.
+Should
+PC-CT-002
+Discount management
+Administrators should be able to configure promotional prices or discounts.
+Should
+PC-CT-003
+Featured products
+Administrators should be able to select products for featured sections.
+Should
+PC-CT-004
+Bestseller display
+The storefront should support a bestseller section based on configured or sales-derived ranking.
+Should
+PC-CT-005
+Static content pages
+The website shall provide About Us, Contact Us, FAQ, Shipping Policy, Return Policy, Privacy Policy and Terms and Conditions pages.
+Must
+PC-CT-006
+Social media links
+The website should display the shop's configured social media and contact links.
+Should
+4.9 Admin and Store Configuration
+Requirement ID
+Feature
+Description
+Priority
+PC-AD-001
+Admin authentication
+The admin dashboard shall require secure authentication.
+Must
+PC-AD-002
+Role-based access
+The system should support permission-based access for different administrative roles.
+Should
+PC-AD-003
+Delivery fee configuration
+Administrators should be able to configure delivery fees by service area or township.
+Should
+PC-AD-004
+Delivery method configuration
+The system should support configured delivery and pickup options, if offered by the shop.
+Should
+PC-AD-005
+Store settings
+Authorized administrators should be able to manage relevant store details and operational settings.
+Should
+5. Payment Gateway Integration
+Pretty Corner will use MyanMyanPay as its selected payment gateway. The integration shall be implemented on the backend and follow the current official API documentation and merchant onboarding requirements.
+5.1 Integration Scope
+Connect the backend to MyanMyanPay using credentials issued for the merchant account.
+Create payment transactions using the correct order reference and payable amount.
+Present the payment instructions or QR checkout returned by the provider.
+Receive provider payment notifications/webhooks where supported.
+Verify webhook authenticity and transaction details on the server before changing an order's payment status.
+Retrieve transaction status from the provider when reconciliation or confirmation is required.
+Handle pending, successful, failed, expired, cancelled and refunded states as supported by the provider.
+Record provider transaction references and relevant audit information.
+5.2 Payment Workflow
+Customer submits checkout details and confirms the order.
+The backend validates the order, pricing and stock availability, then creates an order with a pending payment state.
+The backend creates a payment request with MyanMyanPay using the order reference and amount.
+The storefront displays the provider's payment instructions or QR experience.
+The backend receives a webhook or checks the transaction status through the provider's API.
+The backend verifies the transaction and updates the payment record and order state.
+The system triggers the appropriate customer and administrator notifications.
+5.3 Payment Security and Reliability
+API credentials and secret keys shall be stored securely on the server and shall not be exposed to the browser.
+Payment status shall never be trusted solely from a client-side redirect or browser message.
+Webhook signatures or the provider's prescribed verification mechanism shall be validated.
+Payment processing shall be idempotent so duplicate webhook deliveries do not create duplicate payment or stock updates.
+The system shall log transaction references and processing outcomes without logging secret credentials.
+The exact supported payment methods, transaction lifecycle, webhook behavior, fees and refund capabilities must be confirmed with MyanMyanPay during merchant onboarding.
+Official references: https://myanmyanpay.com/  |  https://docs.myanmyanpay.com/
+6. Map-Based Delivery Address
+The checkout shall provide an interactive map-based location selection feature to help customers provide accurate delivery locations. The map provider and geocoding service are implementation decisions to be confirmed.
+6.1 Functional Requirements
+Requirement ID
+Feature
+Description
+Priority
+PC-MAP-001
+Interactive map
+Display an interactive map during checkout so customers can select a delivery location.
+Must
+PC-MAP-002
+Current location
+Allow customers to request their current device location after granting browser/device permission.
+Should
+PC-MAP-003
+Draggable location pin
+Allow customers to place or adjust a marker to identify the delivery point.
+Must
+PC-MAP-004
+Reverse geocoding
+Convert selected coordinates into a readable address when supported by the selected provider.
+Must
+PC-MAP-005
+Address search
+Allow customers to search for a place or address on the map.
+Should
+PC-MAP-006
+Manual address details
+Allow customers to enter township, street, building, apartment and landmark details manually.
+Must
+PC-MAP-007
+Coordinate storage
+Store latitude and longitude with the associated order delivery address.
+Must
+PC-MAP-008
+Address confirmation
+Require customers to review and confirm the selected location and address before order submission.
+Must
+PC-MAP-009
+Map fallback
+Allow manual address entry when map loading, geolocation or geocoding is unavailable.
+Must
+6.2 Delivery Address Data
+Data field
+Purpose
+Customer name and phone number
+Identify the recipient and enable delivery contact.
+Township / city
+Support local delivery operations and fee calculation.
+Street address
+Provide the textual delivery address.
+Building / apartment
+Identify the exact building or unit where applicable.
+Nearby landmark
+Help delivery personnel locate the destination.
+Latitude and longitude
+Provide a map coordinate for the selected delivery point.
+Delivery instructions
+Capture additional guidance from the customer.
+6.3 Location Privacy
+The website shall request device location permission only when the customer chooses to use current location. Customers must be able to select a map location or enter an address manually. Location data shall be collected for order delivery and handled according to the site's privacy policy.
+7. Business Rules and Workflows
+7.1 Guest Checkout Rules
+Customer registration and login shall not be required to browse products, add items to the cart or place an order.
+Checkout shall collect the minimum customer and delivery information required to fulfill an order.
+An order reference shall be generated for each submitted order.
+Customers may be offered order lookup using an order reference and phone-based verification; this must not expose another customer's information.
+7.2 Order and Payment Rules
+An order and its line items shall preserve a snapshot of product names, selected variants, quantities and prices at the time of purchase.
+Payment status and fulfillment status shall be tracked separately.
+An order shall not be marked paid until the backend has verified the payment with MyanMyanPay.
+Duplicate payment callbacks shall not create duplicate payment records or repeat stock deductions.
+Refunds and cancellations shall be recorded with their status and relevant references.
+7.3 Inventory Rules
+The system shall prevent the sellable quantity from becoming negative.
+Inventory changes shall be performed atomically or transactionally.
+The project shall define whether stock is reserved when an order is created or when payment succeeds. The recommended approach is temporary reservation during payment, followed by finalization on verified payment.
+Expired or failed payment attempts shall release reserved stock.
+Cancellation and refund workflows shall follow an explicitly defined stock-restoration policy to avoid duplicate restoration.
+7.4 Recommended Order Statuses
+Status
+Meaning
+Pending
+Order has been submitted and is awaiting review or payment completion.
+Confirmed
+The shop has accepted the order.
+Processing
+The shop is preparing the order.
+Shipped
+The order has been handed to delivery.
+Delivered
+The customer has received the order.
+Cancelled
+The order has been cancelled.
+7.5 Payment Statuses
+Status
+Meaning
+Pending
+Payment has been initiated but not verified as successful.
+Successful / Paid
+The provider has confirmed the payment.
+Failed
+The payment attempt failed.
+Expired
+The payment request expired.
+Cancelled
+The payment was cancelled where supported.
+Refunded
+A refund has been processed or recorded according to provider confirmation.
+8. User Experience and Design Requirements
+8.1 Visual Direction
+Element
+Guideline
+Brand
+Pretty Corner
+Primary colors
+Pink and white.
+Design style
+Clean, modern, friendly and feminine.
+Layout
+Mobile-first responsive design.
+Product presentation
+High-quality product photography, clear prices and readable descriptions.
+Navigation
+Simple navigation with clear shopping and checkout actions.
+8.2 Mobile Experience
+Design and validate the main customer journeys on mobile screen sizes before desktop refinement.
+Use touch-friendly controls and readable typography.
+Provide clear product images and concise product information.
+Keep the Add to Cart action prominent on product detail pages.
+Display a cart item count in the shopping navigation.
+Consider bottom navigation for Home, Shop, Cart and Contact.
+Optimize images and page assets for mobile network conditions.
+Keep checkout steps short and provide clear validation messages.
+Allow customers to review their order and delivery location before submission.
+Preserve the shopping cart between page visits where practical, using an appropriate browser-side persistence mechanism.
+9. Non-Functional Requirements
+Requirement ID
+Category
+Requirement
+PC-NFR-001
+Responsive design
+The website shall support common mobile, tablet and desktop screen sizes.
+PC-NFR-002
+Performance
+Pages and images shall be optimized to provide a responsive experience on typical mobile connections.
+PC-NFR-003
+Security
+Administrative functions and sensitive operations shall require server-side authorization.
+PC-NFR-004
+Data protection
+Customer, order and payment data shall be protected against unauthorized access.
+PC-NFR-005
+Payment integrity
+Payment verification shall occur on the backend using the gateway's prescribed verification process.
+PC-NFR-006
+Data consistency
+Order, payment and inventory updates shall use appropriate transactional and idempotency controls.
+PC-NFR-007
+Availability and error handling
+The system shall handle temporary payment or map-provider failures with clear user guidance and safe retry behavior.
+PC-NFR-008
+Maintainability
+The application shall be structured into clear functional modules to support future enhancements.
+PC-NFR-009
+Auditability
+Important administrative changes, payment events and stock adjustments should be recorded.
+PC-NFR-010
+Privacy
+The website shall collect only information needed for its stated business purposes and explain its use in the privacy policy.
+10. MVP and Future Enhancements
+10.1 Minimum Viable Product (MVP)
+The initial release should prioritize a complete and reliable purchase journey, supported by the administrative functions required to operate the shop.
+Area
+MVP scope
+Storefront
+Homepage, categories, product listing, product details, search and basic product filtering.
+Product administration
+Create, edit, archive products; manage categories, images, prices and stock.
+Shopping
+Shopping cart and guest checkout.
+Customer and delivery
+Customer details, manual address fields, interactive map pin and coordinate capture.
+Payment
+MyanMyanPay integration, payment verification and transaction status.
+Orders
+Order creation, order listing, order details and status management.
+Inventory
+Stock availability, reservation/deduction policy and overselling prevention.
+Admin
+Secure admin login and core dashboard.
+Notifications
+New order, order confirmation and verified payment notifications.
+Content
+Contact, About, shipping and return policy pages.
+10.2 Future Enhancements
+Wishlist and product reviews.
+Advanced product filtering and sorting.
+Discount codes and campaign management.
+Advanced sales analytics and downloadable reports.
+Customer segmentation and repeat-purchase insights.
+Automated email or SMS notification providers.
+Courier integrations and delivery status synchronization.
+Enhanced customer order lookup and saved address functionality without mandatory accounts.
+More advanced promotion and recommendation features.
+11. Assumptions, Dependencies and Open Decisions
+11.1 Assumptions
+Pretty Corner will operate as a single-shop e-commerce website rather than a multi-vendor marketplace.
+Customers will not be required to register or log in.
+Administrators will use a protected dashboard.
+The product catalog and order operations will be managed by the shop's authorized staff.
+The shop will provide product images, descriptions, prices, stock quantities, delivery rules and policy content.
+11.2 External Dependencies
+Dependency
+Purpose / Confirmation required
+MyanMyanPay merchant account and API
+Merchant onboarding, credentials, supported payment flows, transaction status API, webhook verification, fees, settlement and refund capabilities.
+Map and geocoding provider
+Map display, address search, reverse geocoding, usage limits, pricing, API keys and regional coverage.
+Hosting and database
+Application deployment, database hosting, backups, file/image storage and monitoring.
+Notification provider (if external)
+Email/SMS delivery, sender setup, cost and delivery constraints.
+11.3 Open Decisions Before Development
+ID
+Decision
+Details
+OD-01
+Map provider
+Select the map and geocoding provider. Confirm address coverage and pricing for the target delivery areas.
+OD-02
+Payment details
+Confirm MyanMyanPay merchant onboarding, supported payment methods, webhook behavior, and refund/cancellation capabilities.
+OD-03
+Delivery pricing
+Decide whether delivery fees are fixed, township-based or confirmed manually by staff.
+OD-04
+Cash on Delivery
+Confirm whether Cash on Delivery will be offered alongside online payment.
+OD-05
+Product categories and variants
+Confirm the final product catalog and variant attributes, especially for contact lenses.
+OD-06
+Customer notifications
+Choose initial notification channels, such as admin in-app notifications, email or SMS.
+OD-07
+Order lookup
+Confirm the verification method for customers checking order status without an account.
+OD-08
+Inventory reservation
+Confirm the reservation duration and stock restoration rules for failed, expired and cancelled orders.
+12. Acceptance and Approval
+This document defines the proposed functional scope for Pretty Corner. It should be reviewed by the business owner and relevant project stakeholders before detailed UI/UX design, technical architecture and implementation begin.
+12.1 Review Checklist
+The business owner has reviewed the functional modules and feature descriptions.
+The MyanMyanPay integration requirements have been confirmed against the merchant's actual API access.
+The map provider and address-selection approach have been selected.
+Product categories, variants and inventory rules have been confirmed.
+Delivery fees, delivery methods and payment options have been agreed.
+MVP features and future enhancements have been approved.
+12.2 Approval
+Role
+Name / Signature
+Date
+Business Owner / Client
+Project Lead
+Development Representative
