@@ -183,7 +183,6 @@ export function OrderStatusDistributionCard({ orders }: { orders: Order[] }) {
       "Processing",
       "Shipped",
       "Delivered",
-      "Cancelled",
     ];
     return statuses
       .map((status) => ({
