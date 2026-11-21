@@ -12,13 +12,9 @@ import {
   Clock,
   CheckCircle2,
   Package,
-  ExternalLink,
-  Compass,
-  RotateCcw,
   Copy,
   Check,
   ReceiptText,
-  ShieldAlert,
   Store,
   Truck,
   Navigation,
@@ -63,7 +59,6 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
   "Processing",
   "Shipped",
   "Delivered",
-  "Cancelled",
 ];
 
 const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
@@ -71,8 +66,6 @@ const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
   "Paid",
   "Failed",
   "Expired",
-  "Refunded",
-  "Cancelled",
 ];
 
 export default function OrderDetailsPage() {
@@ -82,7 +75,6 @@ export default function OrderDetailsPage() {
     updateOrderStatus,
     updatePaymentStatus,
     updatePaymentReference,
-    processOrderRefund,
   } = useAdminStore();
   const order = orders.find((o) => o.id === params.id);
 
@@ -95,14 +87,6 @@ export default function OrderDetailsPage() {
   const [isEditingTrx, setIsEditingTrx] = useState(false);
   const [trxInput, setTrxInput] = useState(order?.transactionReference ?? "");
   const [copiedTrx, setCopiedTrx] = useState(false);
-
-  // Refund Dialog state
-  const [refundOpen, setRefundOpen] = useState(false);
-  const [refundAmount, setRefundAmount] = useState(order ? order.total.toString() : "0");
-  const [refundIsFull, setRefundIsFull] = useState(true);
-  const [refundReason, setRefundReason] = useState("Customer cancellation request");
-  const [refundVoucher, setRefundVoucher] = useState("");
-  const [refundNotes, setRefundNotes] = useState("");
 
   if (!order) {
     return (
@@ -121,14 +105,6 @@ export default function OrderDetailsPage() {
   }
 
   const handleUpdateStatus = () => {
-    if (
-      selectedStatus === "Cancelled" &&
-      order.orderStatus !== "Cancelled" &&
-      !statusNote.trim()
-    ) {
-      toast.error("A cancellation reason is required (PC-OM-008)");
-      return;
-    }
     updateOrderStatus(order.id, selectedStatus, statusNote.trim() || undefined);
     setStatusNote("");
     toast.success(`Order ${order.reference} updated to ${selectedStatus}`);
@@ -304,32 +280,12 @@ export default function OrderDetailsPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>
-                  {selectedStatus === "Cancelled" ? (
-                    <>
-                      Cancellation Reason{" "}
-                      <span className="text-rose-600">*</span>
-                    </>
-                  ) : (
-                    "Note (optional)"
-                  )}
-                </Label>
+                <Label>Note (optional)</Label>
                 <Input
                   value={statusNote}
                   onChange={(e) => setStatusNote(e.target.value)}
-                  placeholder={
-                    selectedStatus === "Cancelled"
-                      ? "Required — e.g., Customer requested cancellation"
-                      : "e.g., Handed to Royal Express rider"
-                  }
+                  placeholder="e.g., Handed to Royal Express rider"
                 />
-                {selectedStatus === "Cancelled" &&
-                  order.orderStatus !== "Cancelled" && (
-                    <p className="text-[11px] text-[#806B73]">
-                      Cancelling restores stock for every item. Refunds are
-                      recorded separately and never restore stock twice.
-                    </p>
-                  )}
               </div>
               <Button onClick={handleUpdateStatus} className="w-full">
                 Save Status Update
@@ -439,45 +395,6 @@ export default function OrderDetailsPage() {
                   )}
                 </div>
               )}
-
-              {/* GPS Coordinates & Google Maps Dispatch Link */}
-              <div className="rounded-2xl border border-[#F0E1E6] bg-[#FAF2F5]/50 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Compass className="h-3.5 w-3.5 text-[#D96B91]" />
-                    <span className="font-semibold text-[#33272C] text-xs">
-                      GPS Dispatch Pin
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-mono text-[#806B73] mt-0.5">
-                    {order.coordinates
-                      ? `${order.coordinates.lat.toFixed(4)}, ${order.coordinates.lng.toFixed(4)}`
-                      : "Street address dispatch target"}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="rounded-xl border-[#F0E1E6] hover:border-[#D96B91] hover:bg-[#FCEEF2] text-[#D96B91] text-xs h-8 px-3"
-                >
-                  <a
-                    href={
-                      order.coordinates
-                        ? `https://www.google.com/maps/search/?api=1&query=${order.coordinates.lat},${order.coordinates.lng}`
-                        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                            `${order.deliveryAddress}, ${order.township}, ${order.city}`
-                          )}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5"
-                  >
-                    <span>Open in Google Maps</span>
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
@@ -599,235 +516,10 @@ export default function OrderDetailsPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Process Refund Action Trigger (PC-OM-009) */}
-              <div className="pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRefundAmount(order.total.toString());
-                    setRefundIsFull(true);
-                    setRefundVoucher("");
-                    setRefundNotes("");
-                    setRefundOpen(true);
-                  }}
-                  className="w-full rounded-xl border-dashed border-[#F0E1E6] hover:border-[#D96B91] hover:bg-[#FCEEF2] text-xs font-semibold text-[#806B73] hover:text-[#D96B91] h-10"
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                  {order.refundDetails ? "Update / Re-record Refund" : "Process Customer Refund"}
-                </Button>
-              </div>
             </CardContent>
           </Card>
-
-          {/* Refund Audit Card (When order has refund recorded) */}
-          {order.refundDetails && (
-            <Card className="rounded-[32px] border-amber-200 bg-amber-50/40">
-              <CardHeader className="pb-3 border-b border-amber-200/60">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm text-amber-900 font-bold">
-                    <ShieldAlert className="h-4 w-4 text-amber-600" />
-                    Refund Audit Details
-                  </CardTitle>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/70 text-amber-900">
-                    {order.refundDetails.isFullRefund ? "Full Refund" : "Partial Refund"}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2.5 text-xs pt-3.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-amber-800">Refund Amount</span>
-                  <span className="font-bold text-amber-950 text-sm">
-                    {formatMMK(order.refundDetails.amount)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-amber-800">Bank / Gateway Voucher</span>
-                  <span className="font-mono font-semibold text-amber-950">
-                    {order.refundDetails.transactionReference}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-amber-800">Refund Reason</span>
-                  <span className="font-medium text-amber-950">
-                    {order.refundDetails.reason}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-amber-800">Processed By</span>
-                  <span className="text-amber-950">
-                    {order.refundDetails.processedBy}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-amber-700">
-                  <span>Processed Date</span>
-                  <span>{formatDateTime(order.refundDetails.refundedAt)}</span>
-                </div>
-                {order.refundDetails.notes && (
-                  <p className="text-[11px] text-amber-900 bg-white/70 p-2 rounded-xl border border-amber-200/60 mt-1">
-                    <span className="font-semibold">Staff note:</span> {order.refundDetails.notes}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
-
-      {/* Process Refund Dialog (PC-OM-009) */}
-      <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
-        <DialogContent className="rounded-[32px] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-xl font-bold text-[#33272C]">
-              Process Order Refund
-            </DialogTitle>
-            <DialogDescription className="text-xs text-[#806B73]">
-              Record refund voucher and reason for {order.reference} (Total: {formatMMK(order.total)}).
-              Refunds never change stock — stock is restored only when an order
-              is cancelled.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const amount = Number(refundAmount);
-              if (Number.isNaN(amount) || amount <= 0) {
-                toast.error("Please enter a valid positive refund amount");
-                return;
-              }
-              if (!refundVoucher.trim()) {
-                toast.error("Please provide the gateway/bank refund voucher number");
-                return;
-              }
-
-              processOrderRefund(order.id, {
-                amount,
-                isFullRefund: refundIsFull,
-                reason: refundReason,
-                transactionReference: refundVoucher.trim(),
-                notes: refundNotes.trim() || undefined,
-              });
-
-              toast.success(`Refund of ${formatMMK(amount)} recorded successfully`);
-              setRefundOpen(false);
-            }}
-            className="space-y-4"
-          >
-            {/* Full vs Partial Toggle */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant={refundIsFull ? "default" : "outline"}
-                className="h-10 rounded-xl"
-                onClick={() => {
-                  setRefundIsFull(true);
-                  setRefundAmount(order.total.toString());
-                }}
-              >
-                Full Refund ({formatMMK(order.total)})
-              </Button>
-              <Button
-                type="button"
-                variant={!refundIsFull ? "default" : "outline"}
-                className="h-10 rounded-xl"
-                onClick={() => setRefundIsFull(false)}
-              >
-                Partial Refund
-              </Button>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ref-amount" className="text-xs font-semibold text-[#33272C]">
-                Refund Amount (MMK)
-              </Label>
-              <Input
-                id="ref-amount"
-                type="number"
-                min={1}
-                max={order.total}
-                value={refundAmount}
-                disabled={refundIsFull}
-                onChange={(e) => setRefundAmount(e.target.value)}
-                className="h-10 rounded-xl border-[#F0E1E6]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ref-reason" className="text-xs font-semibold text-[#33272C]">
-                Reason for Refund
-              </Label>
-              <Select value={refundReason} onValueChange={setRefundReason}>
-                <SelectTrigger id="ref-reason" className="h-10 rounded-xl border-[#F0E1E6]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Customer cancellation request">
-                    Customer cancellation request
-                  </SelectItem>
-                  <SelectItem value="Out of stock product">
-                    Out of stock product
-                  </SelectItem>
-                  <SelectItem value="Defective or damaged cosmetic item">
-                    Defective or damaged cosmetic item
-                  </SelectItem>
-                  <SelectItem value="Courier delivery failure / return">
-                    Courier delivery failure / return
-                  </SelectItem>
-                  <SelectItem value="Duplicate order placed by customer">
-                    Duplicate order placed by customer
-                  </SelectItem>
-                  <SelectItem value="Other administrative adjustment">
-                    Other administrative adjustment
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ref-voucher" className="text-xs font-semibold text-[#33272C]">
-                Bank / Gateway Refund Voucher Reference *
-              </Label>
-              <Input
-                id="ref-voucher"
-                value={refundVoucher}
-                onChange={(e) => setRefundVoucher(e.target.value)}
-                placeholder="e.g. KBZ-REF-99214 / WAVE-RF-8812"
-                className="h-10 rounded-xl border-[#F0E1E6]"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ref-notes" className="text-xs font-semibold text-[#33272C]">
-                Staff Notes (Optional)
-              </Label>
-              <Input
-                id="ref-notes"
-                value={refundNotes}
-                onChange={(e) => setRefundNotes(e.target.value)}
-                placeholder="Internal audit notes..."
-                className="h-10 rounded-xl border-[#F0E1E6]"
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-xl"
-                onClick={() => setRefundOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" className="rounded-xl bg-[#D96B91] hover:bg-[#c2567c] text-white">
-                Record Refund
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

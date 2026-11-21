@@ -28,9 +28,11 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  slug?: string;
   name: string;
   description: string;
   categoryId: string;
+  subcategory?: string;
   brand: string;
   sku: string;
   regularPrice: number;
@@ -42,6 +44,15 @@ export interface Product {
   isContactLens?: boolean;
   variants: ProductVariant[];
   soldCount: number;
+  badge?: string;
+  tagline?: string;
+  subtitle?: string;
+  benefits?: string[];
+  usage?: string;
+  ingredients?: string;
+  specs?: string;
+  rating?: number;
+  reviewsCount?: number;
   createdAt: string;
   updatedAt: string;
 }

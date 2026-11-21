@@ -156,17 +156,6 @@ export default function AdminDashboardPage() {
       accentText: "text-emerald-600",
       width: metrics.completedShare,
     },
-    {
-      title: "Cancelled Orders",
-      value: String(metrics.cancelled),
-      change: `${metrics.cancelled} cancelled`,
-      positive: metrics.cancelledShare === 0,
-      comparison: `${metrics.cancelledShare}% of orders in range`,
-      icon: XCircle,
-      accentBg: "bg-rose-50",
-      accentText: "text-rose-600",
-      width: metrics.cancelledShare,
-    },
   ];
 
   const getCategoryName = (catId: string) =>

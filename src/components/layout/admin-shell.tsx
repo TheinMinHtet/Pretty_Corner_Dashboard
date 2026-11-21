@@ -185,8 +185,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           item.href === "/admin/orders"
             ? pendingOrdersCount
             : item.href === "/admin/inventory"
-            ? lowStockCount
-            : 0;
+              ? lowStockCount
+              : 0;
 
         const linkContent = (
           <Link
@@ -324,6 +324,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-[#F0E1E6] bg-white/95 backdrop-blur-xs px-4 sm:px-6">
           <div className="flex items-center gap-3 min-w-0">
+            {/* Desktop Expand Sidebar Button (when collapsed) */}
+            {collapsed && (
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setCollapsed(false)}
+                    aria-label="Expand sidebar"
+                    className="hidden lg:inline-flex h-8 w-8 shrink-0 text-[#806B73]"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Expand sidebar</TooltipContent>
+              </Tooltip>
+            )}
+
             {/* Mobile Menu */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -358,7 +376,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       className={cn(
                         "truncate hover:text-[#D96B91] transition-colors",
                         idx === breadcrumbs.length - 1 &&
-                          "text-[#33272C] font-medium"
+                        "text-[#33272C] font-medium"
                       )}
                     >
                       {crumb.label}

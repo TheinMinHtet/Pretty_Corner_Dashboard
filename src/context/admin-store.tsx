@@ -22,17 +22,7 @@ import {
   StockAdjustment,
   StoreSettings,
 } from "@/types/admin";
-import {
-  INITIAL_ACTIVITY,
-  INITIAL_CATEGORIES,
-  INITIAL_CUSTOMERS,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_ORDERS,
-  INITIAL_PRODUCTS,
-  INITIAL_PROMOTIONS,
-  INITIAL_SETTINGS,
-  INITIAL_STOCK_HISTORY,
-} from "@/data/mock-data";
+import { INITIAL_SETTINGS } from "@/data/mock-data";
 import { generateId } from "@/lib/utils";
 import {
   transitionOrderStatus,
@@ -40,7 +30,6 @@ import {
 } from "@/modules/orders/order-lifecycle";
 import { applyStockAdjustment } from "@/modules/catalog/catalog-sync";
 
-const STORAGE_KEY = "pretty_corner_admin_v1";
 const AUTH_STORAGE_KEY = "pretty_corner_auth_v1";
 
 interface PersistedState {
@@ -55,15 +44,15 @@ interface PersistedState {
   settings: StoreSettings;
 }
 
-const DEFAULT_STATE: PersistedState = {
-  products: INITIAL_PRODUCTS,
-  categories: INITIAL_CATEGORIES,
-  orders: INITIAL_ORDERS,
-  customers: INITIAL_CUSTOMERS,
-  stockHistory: INITIAL_STOCK_HISTORY,
-  promotions: INITIAL_PROMOTIONS,
-  notifications: INITIAL_NOTIFICATIONS,
-  activity: INITIAL_ACTIVITY,
+const EMPTY_INITIAL_STATE: PersistedState = {
+  products: [],
+  categories: [],
+  orders: [],
+  customers: [],
+  stockHistory: [],
+  promotions: [],
+  notifications: [],
+  activity: [],
   settings: INITIAL_SETTINGS,
 };
 
@@ -87,7 +76,9 @@ interface AdminContextValue extends PersistedState {
   ) => void;
 
   // Products
-  addProduct: (product: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount">) => Product;
+  addProduct: (
+    product: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount">
+  ) => Product;
   updateProduct: (productId: string, updates: Partial<Product>) => void;
   deleteProduct: (productId: string) => void;
 
@@ -130,7 +121,6 @@ type NotificationDraft = Omit<
 
 const MAX_NOTIFICATIONS = 50;
 
-/** Deep-merges persisted settings so newly added fields get defaults. */
 function mergeSettings(saved?: Partial<StoreSettings>): StoreSettings {
   if (!saved) return INITIAL_SETTINGS;
   return {
@@ -149,10 +139,6 @@ function mergeSettings(saved?: Partial<StoreSettings>): StoreSettings {
   };
 }
 
-/**
- * Raises an out-of-stock or low-stock alert only when a product (or variant)
- * *crosses* its configured threshold, so routine adjustments stay quiet.
- */
 function buildStockAlert(
   product: Product,
   previousStock: number,
@@ -188,7 +174,6 @@ function buildStockAlert(
   return null;
 }
 
-/** Prepends a notification, de-duplicating unread alerts with the same title. */
 function appendNotification(
   notifications: NotificationItem[],
   draft: NotificationDraft | null
@@ -211,43 +196,55 @@ function appendNotification(
 const AdminContext = createContext<AdminContextValue | null>(null);
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PersistedState>(DEFAULT_STATE);
+  const [state, setState] = useState<PersistedState>(EMPTY_INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
 
-  useEffect(() => {
+  const refreshFromApi = useCallback(async () => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<PersistedState>;
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
-        setState({
-          products: parsed.products ?? INITIAL_PRODUCTS,
-          categories: parsed.categories ?? INITIAL_CATEGORIES,
-          orders: parsed.orders ?? INITIAL_ORDERS,
-          customers: parsed.customers ?? INITIAL_CUSTOMERS,
-          stockHistory: parsed.stockHistory ?? INITIAL_STOCK_HISTORY,
-          promotions: parsed.promotions ?? INITIAL_PROMOTIONS,
-          notifications: parsed.notifications ?? INITIAL_NOTIFICATIONS,
-          activity: parsed.activity ?? INITIAL_ACTIVITY,
-          settings: mergeSettings(parsed.settings),
-        });
-      }
-    } catch {
-      // Fallback to default state if storage is unavailable
+      const res = await fetch("/api/admin/bootstrap", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as Partial<PersistedState>;
+      setState({
+        products: data.products ?? [],
+        categories: data.categories ?? [],
+        orders: data.orders ?? [],
+        customers: data.customers ?? [],
+        stockHistory: data.stockHistory ?? [],
+        promotions: data.promotions ?? [],
+        notifications: data.notifications ?? [],
+        activity: data.activity ?? [],
+        settings: mergeSettings(data.settings),
+      });
+    } catch (error) {
+      console.error("Failed to load admin store from API:", error);
     } finally {
       setHydrated(true);
     }
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Ignore quota errors
-    }
-  }, [state, hydrated]);
+    void refreshFromApi();
+  }, [refreshFromApi]);
+
+  const persistMutation = useCallback(
+    async (url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => {
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+        if (!res.ok) {
+          console.error(`API ${method} ${url} failed:`, await res.text());
+        }
+        await refreshFromApi();
+      } catch (error) {
+        console.error(`API ${method} ${url} error:`, error);
+      }
+    },
+    [refreshFromApi]
+  );
 
   const pushActivity = useCallback(
     (
@@ -275,7 +272,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const auth = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
       if (auth === "false") {
         setIsAuthenticated(false);
       } else {
@@ -287,12 +283,11 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback((email: string, pass: string): boolean => {
-    // Demo credential check. A production build must replace this with a
-    // server-verified session (PC-NFR-003).
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPass = pass.trim();
     const validEmail = normalizedEmail === "admin@prettycorner.com";
-    const validPass = normalizedPass === "admin123" || normalizedPass === "pretty2026";
+    const validPass =
+      normalizedPass === "admin123" || normalizedPass === "pretty2026";
 
     if (validEmail && validPass) {
       setIsAuthenticated(true);
@@ -337,8 +332,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         );
 
         let updatedProducts = transitionProducts;
-
-        // Best-seller counts follow delivery state (PC-SD-005)
         if ((prevStatus === "Delivered") !== (status === "Delivered")) {
           const delta = status === "Delivered" ? 1 : -1;
           updatedProducts = updatedProducts.map((p) => {
@@ -389,14 +382,19 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           activity: pushActivity(
             prev.activity,
             `Order ${status}`,
-            `${target.reference} updated to ${status}${status === "Cancelled" ? " (Stock Restored)" : ""}`,
+            `${target.reference} updated to ${status}`,
             "order",
             prev.settings.adminProfile.name
           ),
         };
       });
+
+      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+        orderStatus: status,
+        note,
+      });
     },
-    [pushActivity]
+    [persistMutation, pushActivity]
   );
 
   const updatePaymentStatus = useCallback(
@@ -404,28 +402,14 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
-
-        const isFailure = status === "Failed" || status === "Expired";
-        const notifications =
-          isFailure && prev.settings.notifications.paymentFailureAlert
-            ? appendNotification(prev.notifications, {
-                type: "order",
-                title: `Payment ${status.toLowerCase()} — ${target.reference}`,
-                message: `${target.paymentMethod} payment for ${target.customerName} (${target.total.toLocaleString()} MMK) did not complete.`,
-                href: `/admin/orders/${orderId}`,
-              })
-            : prev.notifications;
-
         const updatedOrder = settleOrderPayment(
           target,
           { status },
           prev.settings.adminProfile.name
         );
-
         return {
           ...prev,
           orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
-          notifications,
           activity: pushActivity(
             prev.activity,
             "Payment Updated",
@@ -435,27 +419,36 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           ),
         };
       });
+
+      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+        paymentStatus: status,
+      });
     },
-    [pushActivity]
+    [persistMutation, pushActivity]
   );
 
-  const updatePaymentReference = useCallback((orderId: string, reference: string) => {
-    setState((prev) => {
-      const target = prev.orders.find((o) => o.id === orderId);
-      if (!target) return prev;
+  const updatePaymentReference = useCallback(
+    (orderId: string, reference: string) => {
+      setState((prev) => {
+        const target = prev.orders.find((o) => o.id === orderId);
+        if (!target) return prev;
+        const updatedOrder = settleOrderPayment(
+          target,
+          { reference },
+          prev.settings.adminProfile.name
+        );
+        return {
+          ...prev,
+          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
+        };
+      });
 
-      const updatedOrder = settleOrderPayment(
-        target,
-        { reference },
-        prev.settings.adminProfile.name
-      );
-
-      return {
-        ...prev,
-        orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
-      };
-    });
-  }, []);
+      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+        transactionReference: reference,
+      });
+    },
+    [persistMutation]
+  );
 
   const processOrderRefund = useCallback(
     (
@@ -465,47 +458,39 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
-
         const updatedOrder = settleOrderPayment(
           target,
           { refund },
           prev.settings.adminProfile.name
         );
-
-        const notifications = appendNotification(prev.notifications, {
-          type: "order",
-          title: `Refund processed — ${target.reference}`,
-          message: `${refund.isFullRefund ? "Full" : "Partial"} refund of ${refund.amount.toLocaleString()} MMK issued to ${target.customerName}.`,
-          href: `/admin/orders/${orderId}`,
-        });
-
         return {
           ...prev,
           orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
-          notifications,
-          activity: pushActivity(
-            prev.activity,
-            "Refund Processed",
-            `${target.reference} refunded ${refund.amount.toLocaleString()} MMK`,
-            "order",
-            prev.settings.adminProfile.name
-          ),
         };
       });
+
+      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+        refund,
+      });
     },
-    [pushActivity]
+    [persistMutation]
   );
 
   const addProduct = useCallback(
-    (productData: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount">): Product => {
+    (
+      productData: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount">
+    ): Product => {
       const now = new Date().toISOString();
+      const tempId = generateId("prod");
       const newProduct: Product = {
         ...productData,
-        id: generateId("prod"),
+        id: tempId,
+        slug: productData.slug || tempId,
         soldCount: 0,
         createdAt: now,
         updatedAt: now,
       };
+
       setState((prev) => ({
         ...prev,
         products: [newProduct, ...prev.products],
@@ -517,9 +502,15 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           prev.settings.adminProfile.name
         ),
       }));
+
+      void persistMutation("/api/products", "POST", {
+        ...productData,
+        id: tempId,
+      });
+
       return newProduct;
     },
-    [pushActivity]
+    [persistMutation, pushActivity]
   );
 
   const updateProduct = useCallback(
@@ -542,8 +533,14 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           ),
         };
       });
+
+      void persistMutation(
+        `/api/products/${encodeURIComponent(productId)}`,
+        "PATCH",
+        updates
+      );
     },
-    [pushActivity]
+    [persistMutation, pushActivity]
   );
 
   const deleteProduct = useCallback(
@@ -563,8 +560,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           ),
         };
       });
+
+      void persistMutation(
+        `/api/products/${encodeURIComponent(productId)}`,
+        "DELETE"
+      );
     },
-    [pushActivity]
+    [persistMutation, pushActivity]
   );
 
   const addCategory = useCallback(
@@ -577,17 +579,11 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => ({
         ...prev,
         categories: [...prev.categories, newCat],
-        activity: pushActivity(
-          prev.activity,
-          "Category Created",
-          `Added category ${newCat.name}`,
-          "product",
-          prev.settings.adminProfile.name
-        ),
       }));
+      void persistMutation("/api/categories", "POST", cat);
       return newCat;
     },
-    [pushActivity]
+    [persistMutation]
   );
 
   const updateCategory = useCallback(
@@ -598,8 +594,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           c.id === categoryId ? { ...c, ...updates } : c
         ),
       }));
+      void persistMutation(
+        `/api/categories/${encodeURIComponent(categoryId)}`,
+        "PATCH",
+        updates
+      );
     },
-    []
+    [persistMutation]
   );
 
   const deleteCategory = useCallback(
@@ -608,8 +609,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         categories: prev.categories.filter((c) => c.id !== categoryId),
       }));
+      void persistMutation(
+        `/api/categories/${encodeURIComponent(categoryId)}`,
+        "DELETE"
+      );
     },
-    []
+    [persistMutation]
   );
 
   const adjustStock = useCallback(
@@ -622,7 +627,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.products.find((p) => p.id === productId);
         if (!target || quantity <= 0) return prev;
-
         const { updatedProduct, adjustment } = applyStockAdjustment(
           target,
           undefined,
@@ -631,32 +635,23 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           prev.settings.adminProfile.name,
           reason
         );
-
-        const notifications = prev.settings.notifications.lowStockAlert
-          ? appendNotification(
-              prev.notifications,
-              buildStockAlert(target, target.stock, updatedProduct.stock)
-            )
-          : prev.notifications;
-
         return {
           ...prev,
           products: prev.products.map((p) =>
             p.id === productId ? updatedProduct : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
-          notifications,
-          activity: pushActivity(
-            prev.activity,
-            "Stock Adjusted",
-            `${type === "increase" ? "+" : "-"}${quantity} units for ${target.name}`,
-            "inventory",
-            prev.settings.adminProfile.name
-          ),
         };
       });
+
+      void persistMutation("/api/inventory/adjust", "POST", {
+        productId,
+        type,
+        quantity,
+        reason,
+      });
     },
-    [pushActivity]
+    [persistMutation]
   );
 
   const adjustVariantStock = useCallback(
@@ -670,11 +665,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const targetProduct = prev.products.find((p) => p.id === productId);
         if (!targetProduct || quantity <= 0) return prev;
-        const targetVariant = targetProduct.variants?.find((v) => v.id === variantId);
-        if (!targetVariant) return prev;
-
-        const prevVariantQty = targetVariant.quantity;
-
         const { updatedProduct, adjustment } = applyStockAdjustment(
           targetProduct,
           variantId,
@@ -683,44 +673,24 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           prev.settings.adminProfile.name,
           reason
         );
-
-        const newVariantQty =
-          updatedProduct.variants?.find((v) => v.id === variantId)?.quantity ??
-          prevVariantQty;
-
-        const notifications = prev.settings.notifications.lowStockAlert
-          ? appendNotification(
-              prev.notifications,
-              buildStockAlert(
-                targetProduct,
-                prevVariantQty,
-                newVariantQty,
-                {
-                  label: targetVariant.label,
-                  skuSuffix: targetVariant.skuSuffix,
-                }
-              )
-            )
-          : prev.notifications;
-
         return {
           ...prev,
           products: prev.products.map((p) =>
             p.id === productId ? updatedProduct : p
           ),
           stockHistory: [adjustment, ...prev.stockHistory],
-          notifications,
-          activity: pushActivity(
-            prev.activity,
-            "Variant Stock Adjusted",
-            `${targetProduct.name} [${targetVariant.label}] ${type === "increase" ? "+" : "-"}${quantity} units`,
-            "inventory",
-            prev.settings.adminProfile.name
-          ),
         };
       });
+
+      void persistMutation("/api/inventory/adjust", "POST", {
+        productId,
+        variantId,
+        type,
+        quantity,
+        reason,
+      });
     },
-    [pushActivity]
+    [persistMutation]
   );
 
   const addPromotion = useCallback(
@@ -733,17 +703,11 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => ({
         ...prev,
         promotions: [created, ...prev.promotions],
-        activity: pushActivity(
-          prev.activity,
-          "Promotion Created",
-          `Launched ${created.title} (${created.code})`,
-          "promotion",
-          prev.settings.adminProfile.name
-        ),
       }));
+      void persistMutation("/api/promotions", "POST", promo);
       return created;
     },
-    [pushActivity]
+    [persistMutation]
   );
 
   const updatePromotion = useCallback(
@@ -754,58 +718,64 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           p.id === promoId ? { ...p, ...updates } : p
         ),
       }));
+      void persistMutation(
+        `/api/promotions/${encodeURIComponent(promoId)}`,
+        "PATCH",
+        updates
+      );
     },
-    []
+    [persistMutation]
   );
 
-  const deletePromotion = useCallback((promoId: string) => {
-    setState((prev) => ({
-      ...prev,
-      promotions: prev.promotions.filter((p) => p.id !== promoId),
-    }));
-  }, []);
+  const deletePromotion = useCallback(
+    (promoId: string) => {
+      setState((prev) => ({
+        ...prev,
+        promotions: prev.promotions.filter((p) => p.id !== promoId),
+      }));
+      void persistMutation(
+        `/api/promotions/${encodeURIComponent(promoId)}`,
+        "DELETE"
+      );
+    },
+    [persistMutation]
+  );
 
   const updateSettings = useCallback(
     (updates: Partial<StoreSettings>) => {
       setState((prev) => ({
         ...prev,
         settings: { ...prev.settings, ...updates },
-        activity: pushActivity(
-          prev.activity,
-          "Settings Updated",
-          "Updated store configuration",
-          "settings",
-          prev.settings.adminProfile.name
-        ),
       }));
+      void persistMutation("/api/settings", "PATCH", updates);
     },
-    [pushActivity]
+    [persistMutation]
   );
 
-  const markNotificationRead = useCallback((id: string) => {
-    setState((prev) => ({
-      ...prev,
-      notifications: prev.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n
-      ),
-    }));
-  }, []);
+  const markNotificationRead = useCallback(
+    (id: string) => {
+      setState((prev) => ({
+        ...prev,
+        notifications: prev.notifications.map((n) =>
+          n.id === id ? { ...n, read: true } : n
+        ),
+      }));
+      void persistMutation("/api/notifications/read", "POST", { id });
+    },
+    [persistMutation]
+  );
 
   const markAllNotificationsRead = useCallback(() => {
     setState((prev) => ({
       ...prev,
       notifications: prev.notifications.map((n) => ({ ...n, read: true })),
     }));
-  }, []);
+    void persistMutation("/api/notifications/read", "POST", {});
+  }, [persistMutation]);
 
   const resetDemoData = useCallback(() => {
-    setState(DEFAULT_STATE);
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-  }, []);
+    void persistMutation("/api/admin/reset", "POST");
+  }, [persistMutation]);
 
   const value = useMemo<AdminContextValue>(
     () => ({
