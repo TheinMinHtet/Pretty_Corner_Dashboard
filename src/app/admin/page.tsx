@@ -10,8 +10,11 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
+  AlertTriangle,
+  Sparkles,
   Activity,
   Package,
+  XCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import {
@@ -51,7 +54,7 @@ import {
 import { OrderStatus } from "@/types/admin";
 
 export default function AdminDashboardPage() {
-  const { orders, activity } = useAdminStore();
+  const { orders, products, categories, activity } = useAdminStore();
   const [range, setRange] = useState<DateRange>("30d");
 
   const rangeOrders = useMemo(
@@ -75,6 +78,26 @@ export default function AdminDashboardPage() {
         )
         .slice(0, 5),
     [orders]
+  );
+
+  const bestSellingProducts = useMemo(
+    () =>
+      [...products]
+        .filter((p) => p.status !== "Archived")
+        .sort((a, b) => b.soldCount - a.soldCount)
+        .slice(0, 5),
+    [products]
+  );
+
+  const lowStockProducts = useMemo(
+    () =>
+      products
+        .filter(
+          (p) => p.status === "Active" && p.stock <= p.lowStockThreshold
+        )
+        .sort((a, b) => a.stock - b.stock)
+        .slice(0, 5),
+    [products]
   );
 
   const kpis = [
@@ -135,6 +158,9 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  const getCategoryName = (catId: string) =>
+    categories.find((c) => c.id === catId)?.name ?? "Uncategorized";
+
   return (
     <div className="space-y-6">
       {/* Welcome / Quick Action Strip */}
@@ -165,6 +191,9 @@ export default function AdminDashboardPage() {
           </div>
           <Button variant="outline" asChild>
             <Link href="/admin/orders">Manage Orders</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/admin/products/new">+ Add Product</Link>
           </Button>
         </div>
       </div>
@@ -243,11 +272,17 @@ export default function AdminDashboardPage() {
                 {formatMMK(metrics.revenue)}
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-[#F0E1E6] p-3">
                 <p className="text-[11px] text-[#806B73]">Avg. Order Value</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
                   {formatMMK(metrics.avgOrderValue)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[#F0E1E6] p-3">
+                <p className="text-[11px] text-[#806B73]">Active Catalog</p>
+                <p className="text-sm font-semibold text-[#33272C] mt-0.5">
+                  {products.filter((p) => p.status === "Active").length} products
                 </p>
               </div>
             </div>
@@ -291,9 +326,9 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Orders */}
-      <div>
-        <Card>
+      {/* Recent Orders + Best Selling Products */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <Card className="xl:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
               <CardTitle>Recent Orders</CardTitle>
@@ -356,10 +391,105 @@ export default function AdminDashboardPage() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Best-Selling Products */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div>
+              <CardTitle className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-[#D96B91]" /> Best Sellers
+              </CardTitle>
+              <CardDescription>Top performing beauty items</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/products" className="text-[#D96B91]">
+                Catalog
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {bestSellingProducts.map((product) => (
+              <Link
+                key={product.id}
+                href={`/admin/products/${product.id}`}
+                className="flex items-center gap-3 rounded-xl border border-[#F0E1E6]/80 p-2.5 hover:bg-[#FCEEF2]/40 transition-colors"
+              >
+                <img
+                  src={product.images[0]}
+                  alt={product.name}
+                  className="h-11 w-11 rounded-lg object-cover border border-[#F0E1E6] shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[#33272C] truncate">
+                    {product.name}
+                  </p>
+                  <p className="text-[11px] text-[#806B73]">
+                    {getCategoryName(product.categoryId)} · {product.soldCount} sold
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-[#D96B91] whitespace-nowrap">
+                  {formatMMK(product.salePrice ?? product.regularPrice)}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Recent Activity */}
-      <div>
+      {/* Low Stock Products + Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div>
+              <CardTitle className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-amber-500" /> Low-Stock
+                Alerts
+              </CardTitle>
+              <CardDescription>
+                Products at or below reorder threshold
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/inventory" className="text-[#D96B91]">
+                Manage Stock <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {lowStockProducts.length === 0 ? (
+              <p className="text-sm text-[#806B73] py-6 text-center">
+                All active products are well stocked.
+              </p>
+            ) : (
+              lowStockProducts.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[#F0E1E6] px-3.5 py-2.5"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={item.images[0]}
+                      alt={item.name}
+                      className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-[#33272C] truncate">
+                        {item.name}
+                      </p>
+                      <p className="text-[11px] text-[#806B73]">
+                        SKU: {item.sku} · Threshold: {item.lowStockThreshold}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={item.stock === 0 ? "destructive" : "warning"}>
+                    {item.stock === 0 ? "Out of stock" : `${item.stock} left`}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-1.5">

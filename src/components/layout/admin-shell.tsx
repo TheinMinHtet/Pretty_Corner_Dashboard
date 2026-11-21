@@ -56,6 +56,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag, matchPrefix: true },
+  { label: "Products", href: "/admin/products", icon: Sparkles, matchPrefix: true },
   { label: "Categories", href: "/admin/categories", icon: FolderTree, matchPrefix: true },
   { label: "Inventory", href: "/admin/inventory", icon: Boxes, matchPrefix: true },
   { label: "Customers", href: "/admin/customers", icon: Users, matchPrefix: true },
@@ -378,11 +379,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Input
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Search orders, SKU..."
+                placeholder="Search orders, products, SKU..."
                 className="pl-9 bg-[#FDF6F8] border-[#F0E1E6] focus-visible:bg-white h-9 text-xs"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && globalSearch.trim()) {
-                    router.push("/admin/orders");
+                    const q = globalSearch.trim();
+                    if (q.toUpperCase().startsWith("PC-2026")) {
+                      router.push("/admin/orders");
+                    } else {
+                      router.push("/admin/products");
+                    }
                   }
                 }}
               />
