@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useSyncExternalStore } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -68,14 +68,12 @@ const NOTIFICATION_TONES = {
   system: "bg-slate-100 text-slate-600",
 } as const;
 
-const emptySubscribe = () => () => {};
-
 function useIsMounted() {
-  return useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false
-  );
+  const [mounted, setMounted] = useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+  return mounted;
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -188,6 +186,31 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     return <main className="min-h-screen bg-[#FFFCFC]">{children}</main>;
   }
 
+  // Wait for client mount before branching on client-only auth/storage state
+  // so SSR and initial hydration render identical markup.
+  if (!mounted) {
+    return (
+      <div
+        suppressHydrationWarning
+        className="flex min-h-screen bg-[#FFFCFC] items-center justify-center"
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FCEEF2] border border-[#F0E1E6] font-serif text-lg font-bold text-[#B73D67] shadow-xs">
+            PC
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium text-[#806B73]">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#B73D67] border-t-transparent" />
+            <span>{t.loadingPrettyCorner}</span>
+          </div>
+        </div>
+        {/* Render children hidden to satisfy Next.js instant navigation validation */}
+        <div className="hidden" aria-hidden="true">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#FFFCFC]">
@@ -277,25 +300,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       })}
     </nav>
   );
-
-  if (!mounted) {
-    return (
-      <div
-        suppressHydrationWarning
-        className="flex min-h-screen bg-[#FFFCFC] items-center justify-center"
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FCEEF2] border border-[#F0E1E6] font-serif text-lg font-bold text-[#B73D67] shadow-xs">
-            PC
-          </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-[#806B73]">
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#B73D67] border-t-transparent" />
-            <span>{t.loadingPrettyCorner}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div suppressHydrationWarning className="flex min-h-screen bg-[#FFFCFC]">
