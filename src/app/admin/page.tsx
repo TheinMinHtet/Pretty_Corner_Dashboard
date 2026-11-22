@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Banknote,
   ShoppingBag,
@@ -14,9 +15,9 @@ import {
   Sparkles,
   Activity,
   Package,
-  XCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import {
   Card,
   CardContent,
@@ -46,15 +47,15 @@ import {
 import { formatDate, formatDateTime, formatMMK } from "@/lib/utils";
 import {
   DATE_RANGES,
-  DATE_RANGE_LABELS,
   DateRange,
   filterOrdersByRange,
   computeDashboardMetrics,
+  deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
-import { OrderStatus } from "@/types/admin";
 
 export default function AdminDashboardPage() {
   const { orders, products, categories, activity } = useAdminStore();
+  const { t } = useLanguage();
   const [range, setRange] = useState<DateRange>("30d");
 
   const rangeOrders = useMemo(
@@ -67,7 +68,7 @@ export default function AdminDashboardPage() {
   }, [orders, range]);
 
   const changeLabel = (change: number | null) =>
-    change === null ? "No prior data" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
+    change === null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
 
   const recentOrders = useMemo(
     () =>
@@ -81,12 +82,8 @@ export default function AdminDashboardPage() {
   );
 
   const bestSellingProducts = useMemo(
-    () =>
-      [...products]
-        .filter((p) => p.status !== "Archived")
-        .sort((a, b) => b.soldCount - a.soldCount)
-        .slice(0, 5),
-    [products]
+    () => deriveTopSellingProducts(orders, products, 5),
+    [orders, products]
   );
 
   const lowStockProducts = useMemo(
@@ -100,57 +97,63 @@ export default function AdminDashboardPage() {
     [products]
   );
 
+  const localizedDateRangeLabels: Record<DateRange, string> = {
+    "7d": t.range7d,
+    "30d": t.range30d,
+    "6m": t.range6m,
+  };
+
   const kpis = [
     {
-      title: "Total Sales",
+      title: t.totalSales,
       value: formatMMK(metrics.revenue),
       change: changeLabel(metrics.revenueChange),
       positive: (metrics.revenueChange ?? 0) >= 0,
-      comparison: `vs ${formatMMK(metrics.previousRevenue)} previous period`,
+      comparison: `vs ${formatMMK(metrics.previousRevenue)}`,
       icon: Banknote,
       accentBg: "bg-[#FCEEF2]",
       accentText: "text-[#D96B91]",
       width: 100,
     },
     {
-      title: "Total Orders",
+      title: t.totalOrders,
       value: metrics.totalOrders.toLocaleString("en-US"),
       change: changeLabel(metrics.ordersChange),
       positive: (metrics.ordersChange ?? 0) >= 0,
-      comparison: `placed in the ${DATE_RANGE_LABELS[range]}`,
+      comparison: localizedDateRangeLabels[range],
       icon: ShoppingBag,
       accentBg: "bg-sky-50",
       accentText: "text-sky-600",
       width: 100,
     },
     {
-      title: "Pending Orders",
+      title: t.pendingOrders,
       value: String(metrics.pending),
-      change: `${metrics.pending} awaiting`,
+      change: `${metrics.pending}`,
       positive: metrics.pendingShare <= 20,
-      comparison: `${metrics.pendingShare}% of orders in range`,
+      comparison: `${metrics.pendingShare}% (${t.totalOrders})`,
       icon: Clock,
       accentBg: "bg-amber-50",
       accentText: "text-amber-600",
       width: metrics.pendingShare,
     },
     {
-      title: "Processing",
+      title: t.statusProcessing,
       value: String(metrics.processing),
-      change: `${metrics.processing} in progress`,
+      change: `${metrics.processing}`,
       positive: true,
-      comparison: `${metrics.processingShare}% of orders in range`,
+      comparison: `${metrics.processingShare}%`,
       icon: Package,
       accentBg: "bg-violet-50",
       accentText: "text-violet-600",
       width: metrics.processingShare,
     },
     {
-      title: "Completed Orders",
+      title: t.statusDelivered,
       value: String(metrics.completed),
-      change: `${metrics.completedShare}% fulfilled`,
+      change: `${metrics.completedShare}%`,
       positive: true,
-      comparison: `${metrics.completed} delivered in range`,
+      comparison: `${metrics.completed}`,
       icon: CheckCircle2,
       accentBg: "bg-emerald-50",
       accentText: "text-emerald-600",
@@ -181,24 +184,24 @@ export default function AdminDashboardPage() {
                 onClick={() => setRange(option.value)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                   range === option.value
-                    ? "bg-white text-[#D96B91] shadow-2xs"
+                    ? "bg-white text-[#D96B91] shadow-2xs font-semibold"
                     : "text-[#806B73] hover:text-[#33272C]"
                 }`}
               >
-                {option.label}
+                {localizedDateRangeLabels[option.value] ?? option.label}
               </button>
             ))}
           </div>
           <Button variant="outline" asChild>
-            <Link href="/admin/orders">Manage Orders</Link>
+            <Link href="/admin/orders">{t.navOrders}</Link>
           </Button>
           <Button asChild>
-            <Link href="/admin/products/new">+ Add Product</Link>
+            <Link href="/admin/products/new">+ {t.navNewProduct}</Link>
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards (PC-SD-002, PC-SD-003) */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
@@ -262,45 +265,45 @@ export default function AdminDashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle>Sales Summary</CardTitle>
             <CardDescription>
-              Selected range performance · {DATE_RANGE_LABELS[range]}
+              {localizedDateRangeLabels[range]}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-xl bg-[#FDF6F8] border border-[#F0E1E6] p-3.5">
-              <p className="text-xs text-[#806B73]">Revenue in range</p>
+              <p className="text-xs text-[#806B73]">{t.revenueCol}</p>
               <p className="text-lg font-bold text-[#33272C] mt-0.5">
                 {formatMMK(metrics.revenue)}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-[#F0E1E6] p-3">
-                <p className="text-[11px] text-[#806B73]">Avg. Order Value</p>
+                <p className="text-[11px] text-[#806B73]">{t.avgOrderValue}</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
                   {formatMMK(metrics.avgOrderValue)}
                 </p>
               </div>
               <div className="rounded-xl border border-[#F0E1E6] p-3">
-                <p className="text-[11px] text-[#806B73]">Active Catalog</p>
+                <p className="text-[11px] text-[#806B73]">{t.activeProducts}</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
-                  {products.filter((p) => p.status === "Active").length} products
+                  {products.filter((p) => p.status === "Active").length}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-2.5">
-                <p className="text-[11px] text-emerald-700">Paid</p>
+                <p className="text-[11px] text-emerald-700">{t.payPaid}</p>
                 <p className="text-sm font-semibold text-emerald-800">
                   {metrics.paidPayments}
                 </p>
               </div>
               <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-2.5">
-                <p className="text-[11px] text-amber-700">Pending</p>
+                <p className="text-[11px] text-amber-700">{t.payPending}</p>
                 <p className="text-sm font-semibold text-amber-800">
                   {metrics.pendingPayments}
                 </p>
               </div>
               <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-2.5">
-                <p className="text-[11px] text-rose-700">Failed / Expired</p>
+                <p className="text-[11px] text-rose-700">{t.payFailed}</p>
                 <p className="text-sm font-semibold text-rose-800">
                   {metrics.failedPayments}
                 </p>
@@ -311,7 +314,7 @@ export default function AdminDashboardPage() {
               <Badge variant="default">
                 {metrics.topPayment
                   ? `${metrics.topPayment.value} (${metrics.topPayment.share}%)`
-                  : "No orders yet"}
+                  : "—"}
               </Badge>
             </div>
             <div className="flex items-center justify-between text-xs">
@@ -331,12 +334,12 @@ export default function AdminDashboardPage() {
         <Card className="xl:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Latest customer purchases</CardDescription>
+              <CardTitle>{t.recentOrders}</CardTitle>
+              <CardDescription>{t.recentOrdersDesc}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/admin/orders" className="text-[#D96B91]">
-                View all <ArrowRight className="h-3.5 w-3.5" />
+                {t.viewAllOrders} <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardHeader>
@@ -344,12 +347,12 @@ export default function AdminDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead>Customer</TableHead>
+                  <TableHead>{t.orderCol}</TableHead>
+                  <TableHead>{t.customerCol}</TableHead>
                   <TableHead className="hidden sm:table-cell">Date</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t.totalCol}</TableHead>
+                  <TableHead>{t.paymentCol}</TableHead>
+                  <TableHead>{t.statusCol}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,13 +400,13 @@ export default function AdminDashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
               <CardTitle className="flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-[#D96B91]" /> Best Sellers
+                <Sparkles className="h-4 w-4 text-[#D96B91]" /> {t.topSellingProducts}
               </CardTitle>
-              <CardDescription>Top performing beauty items</CardDescription>
+              <CardDescription>{t.topSellingDesc}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/admin/products" className="text-[#D96B91]">
-                Catalog
+                {t.navProducts}
               </Link>
             </Button>
           </CardHeader>
@@ -414,9 +417,11 @@ export default function AdminDashboardPage() {
                 href={`/admin/products/${product.id}`}
                 className="flex items-center gap-3 rounded-xl border border-[#F0E1E6]/80 p-2.5 hover:bg-[#FCEEF2]/40 transition-colors"
               >
-                <img
+                <Image
                   src={product.images[0]}
                   alt={product.name}
+                  width={44}
+                  height={44}
                   className="h-11 w-11 rounded-lg object-cover border border-[#F0E1E6] shrink-0"
                 />
                 <div className="min-w-0 flex-1">
@@ -424,7 +429,7 @@ export default function AdminDashboardPage() {
                     {product.name}
                   </p>
                   <p className="text-[11px] text-[#806B73]">
-                    {getCategoryName(product.categoryId)} · {product.soldCount} sold
+                    {getCategoryName(product.categoryId)} · {product.soldCount} {t.unitsSoldCol}
                   </p>
                 </div>
                 <span className="text-xs font-semibold text-[#D96B91] whitespace-nowrap">
@@ -442,8 +447,7 @@ export default function AdminDashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
               <CardTitle className="flex items-center gap-1.5">
-                <AlertTriangle className="h-4 w-4 text-amber-500" /> Low-Stock
-                Alerts
+                <AlertTriangle className="h-4 w-4 text-amber-500" /> {t.lowStockAlert}
               </CardTitle>
               <CardDescription>
                 Products at or below reorder threshold
@@ -451,7 +455,7 @@ export default function AdminDashboardPage() {
             </div>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/admin/inventory" className="text-[#D96B91]">
-                Manage Stock <ArrowRight className="h-3.5 w-3.5" />
+                {t.viewAllInventory} <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardHeader>
@@ -467,10 +471,12 @@ export default function AdminDashboardPage() {
                   className="flex items-center justify-between gap-3 rounded-xl border border-[#F0E1E6] px-3.5 py-2.5"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <img
+                    <Image
                       src={item.images[0]}
                       alt={item.name}
-                      className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0"
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0 object-cover"
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-[#33272C] truncate">
@@ -482,7 +488,7 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
                   <Badge variant={item.stock === 0 ? "destructive" : "warning"}>
-                    {item.stock === 0 ? "Out of stock" : `${item.stock} left`}
+                    {item.stock === 0 ? t.outOfStock : `${item.stock} left`}
                   </Badge>
                 </div>
               ))

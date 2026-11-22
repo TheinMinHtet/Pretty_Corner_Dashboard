@@ -50,14 +50,15 @@ export async function PATCH(
     }
 
     const repo = getStoreRepository();
-    const updated = await repo.updateOrder(id, parsed.data);
-    if (!updated) {
+    const mutation = await repo.updateOrder(id, parsed.data);
+    if (!mutation) {
       return jsonWithCors({ error: "Order not found" }, { status: 404 });
     }
 
     return jsonWithCors({
-      order: updated,
-      storefrontOrder: toStorefrontOrder(updated),
+      order: mutation.updatedOrder,
+      storefrontOrder: toStorefrontOrder(mutation.updatedOrder),
+      mutation,
     });
   } catch (error) {
     console.error("PATCH /api/orders/[id] error:", error);

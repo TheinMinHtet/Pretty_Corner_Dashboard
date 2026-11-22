@@ -24,11 +24,9 @@ import {
 } from "@/types/admin";
 import { INITIAL_SETTINGS } from "@/data/mock-data";
 import { generateId } from "@/lib/utils";
-import {
-  transitionOrderStatus,
-  settleOrderPayment,
-} from "@/modules/orders/order-lifecycle";
+import { executeOrderUpdate } from "@/modules/orders/order-lifecycle";
 import { applyStockAdjustment } from "@/modules/catalog/catalog-sync";
+import { deriveCustomersFromOrders } from "@/lib/dev-store/mappers";
 
 const AUTH_STORAGE_KEY = "pretty_corner_auth_v1";
 
@@ -139,40 +137,6 @@ function mergeSettings(saved?: Partial<StoreSettings>): StoreSettings {
   };
 }
 
-function buildStockAlert(
-  product: Product,
-  previousStock: number,
-  newStock: number,
-  variant?: { label: string; skuSuffix?: string }
-): NotificationDraft | null {
-  if (previousStock === newStock) return null;
-
-  const threshold = product.lowStockThreshold;
-  const label = variant ? `${product.name} · ${variant.label}` : product.name;
-  const sku = variant?.skuSuffix
-    ? `${product.sku}-${variant.skuSuffix}`
-    : product.sku;
-
-  if (newStock === 0 && previousStock > 0) {
-    return {
-      type: "stock",
-      title: `Out of stock — ${label}`,
-      message: `${label} (${sku}) is out of stock.`,
-      href: "/admin/inventory",
-    };
-  }
-
-  if (newStock > 0 && newStock <= threshold && previousStock > threshold) {
-    return {
-      type: "stock",
-      title: `Low stock — ${label}`,
-      message: `${label} has only ${newStock} units remaining (threshold ${threshold}).`,
-      href: "/admin/inventory",
-    };
-  }
-
-  return null;
-}
 
 function appendNotification(
   notifications: NotificationItem[],
@@ -205,11 +169,17 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/admin/bootstrap", { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as Partial<PersistedState>;
+      const orders = data.orders ?? [];
+      const derived = deriveCustomersFromOrders(orders);
+      const customers =
+        data.customers && data.customers.length > 0
+          ? data.customers
+          : derived;
       setState({
         products: data.products ?? [],
         categories: data.categories ?? [],
-        orders: data.orders ?? [],
-        customers: data.customers ?? [],
+        orders,
+        customers,
         stockHistory: data.stockHistory ?? [],
         promotions: data.promotions ?? [],
         notifications: data.notifications ?? [],
@@ -224,8 +194,38 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshFromApi();
-  }, [refreshFromApi]);
+    let active = true;
+    fetch("/api/admin/bootstrap", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: Partial<PersistedState> | null) => {
+        if (!active || !data) return;
+        const orders = data.orders ?? [];
+        const derived = deriveCustomersFromOrders(orders);
+        const customers =
+          data.customers && data.customers.length > 0
+            ? data.customers
+            : derived;
+        setState({
+          products: data.products ?? [],
+          categories: data.categories ?? [],
+          orders,
+          customers,
+          stockHistory: data.stockHistory ?? [],
+          promotions: data.promotions ?? [],
+          notifications: data.notifications ?? [],
+          activity: data.activity ?? [],
+          settings: mergeSettings(data.settings),
+        });
+      })
+      .catch((error) => console.error("Failed to load admin store:", error))
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const persistMutation = useCallback(
     async (url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => {
@@ -267,20 +267,14 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-
-  useEffect(() => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
     try {
-      const auth = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      if (auth === "false") {
-        setIsAuthenticated(false);
-      } else {
-        setIsAuthenticated(true);
-      }
+      return window.localStorage.getItem(AUTH_STORAGE_KEY) !== "false";
     } catch {
-      setIsAuthenticated(true);
+      return true;
     }
-  }, []);
+  });
 
   const login = useCallback((email: string, pass: string): boolean => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -314,78 +308,34 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     (orderId: string, status: OrderStatus, note?: string) => {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
-        if (!target) return prev;
-        const prevStatus = target.orderStatus;
-        if (prevStatus === status) return prev;
+        if (!target || target.orderStatus === status) return prev;
 
-        const {
-          updatedOrder,
-          updatedProducts: transitionProducts,
-          newAdjustments,
-          timelineNote,
-        } = transitionOrderStatus(
+        const mutation = executeOrderUpdate(
           target,
-          status,
+          { orderStatus: status, note },
           prev.products,
-          prev.settings.adminProfile.name,
-          note
-        );
-
-        let updatedProducts = transitionProducts;
-        if ((prevStatus === "Delivered") !== (status === "Delivered")) {
-          const delta = status === "Delivered" ? 1 : -1;
-          updatedProducts = updatedProducts.map((p) => {
-            const quantity = target.items
-              .filter((item) => item.productId === p.id)
-              .reduce((sum, item) => sum + item.quantity, 0);
-            if (quantity === 0) return p;
-            return {
-              ...p,
-              soldCount: Math.max(0, p.soldCount + delta * quantity),
-            };
-          });
-        }
-
-        const orders = prev.orders.map((o) =>
-          o.id === orderId ? updatedOrder : o
-        );
-
-        let notifications = prev.notifications;
-        if (prev.settings.notifications.lowStockAlert) {
-          for (const product of updatedProducts) {
-            const before = prev.products.find((p) => p.id === product.id);
-            if (!before) continue;
-            notifications = appendNotification(
-              notifications,
-              buildStockAlert(product, before.stock, product.stock)
-            );
+          {
+            actorName: prev.settings.adminProfile.name,
+            lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
           }
-        }
+        );
 
-        notifications = appendNotification(notifications, {
-          type: "order",
-          title: `Order ${target.reference} ${status}`,
-          message:
-            timelineNote ||
-            `${target.customerName}'s order is now ${status}${
-              status === "Cancelled" ? " and stock has been restored" : ""
-            }.`,
-          href: `/admin/orders/${orderId}`,
-        });
+        let nextNotifications = prev.notifications;
+        for (const notif of mutation.newNotifications) {
+          nextNotifications = appendNotification(nextNotifications, notif);
+        }
 
         return {
           ...prev,
-          orders,
-          products: updatedProducts,
-          stockHistory: [...newAdjustments, ...prev.stockHistory],
-          notifications,
-          activity: pushActivity(
-            prev.activity,
-            `Order ${status}`,
-            `${target.reference} updated to ${status}`,
-            "order",
-            prev.settings.adminProfile.name
+          orders: prev.orders.map((o) =>
+            o.id === orderId ? mutation.updatedOrder : o
           ),
+          products: mutation.updatedProducts,
+          stockHistory: [...mutation.newAdjustments, ...prev.stockHistory],
+          notifications: nextNotifications,
+          activity: mutation.newActivity
+            ? [mutation.newActivity, ...prev.activity.slice(0, 29)]
+            : prev.activity,
         };
       });
 
@@ -394,29 +344,33 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         note,
       });
     },
-    [persistMutation, pushActivity]
+    [persistMutation]
   );
 
   const updatePaymentStatus = useCallback(
     (orderId: string, status: PaymentStatus) => {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
-        if (!target) return prev;
-        const updatedOrder = settleOrderPayment(
+        if (!target || target.paymentStatus === status) return prev;
+
+        const mutation = executeOrderUpdate(
           target,
-          { status },
-          prev.settings.adminProfile.name
+          { paymentStatus: status },
+          prev.products,
+          {
+            actorName: prev.settings.adminProfile.name,
+            lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
+          }
         );
+
         return {
           ...prev,
-          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
-          activity: pushActivity(
-            prev.activity,
-            "Payment Updated",
-            `${target.reference} payment status changed to ${status}`,
-            "order",
-            prev.settings.adminProfile.name
+          orders: prev.orders.map((o) =>
+            o.id === orderId ? mutation.updatedOrder : o
           ),
+          activity: mutation.newActivity
+            ? [mutation.newActivity, ...prev.activity.slice(0, 29)]
+            : prev.activity,
         };
       });
 
@@ -424,7 +378,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         paymentStatus: status,
       });
     },
-    [persistMutation, pushActivity]
+    [persistMutation]
   );
 
   const updatePaymentReference = useCallback(
@@ -432,14 +386,19 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
-        const updatedOrder = settleOrderPayment(
+
+        const mutation = executeOrderUpdate(
           target,
-          { reference },
-          prev.settings.adminProfile.name
+          { transactionReference: reference },
+          prev.products,
+          { actorName: prev.settings.adminProfile.name }
         );
+
         return {
           ...prev,
-          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
+          orders: prev.orders.map((o) =>
+            o.id === orderId ? mutation.updatedOrder : o
+          ),
         };
       });
 
@@ -458,14 +417,22 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.orders.find((o) => o.id === orderId);
         if (!target) return prev;
-        const updatedOrder = settleOrderPayment(
+
+        const mutation = executeOrderUpdate(
           target,
           { refund },
-          prev.settings.adminProfile.name
+          prev.products,
+          { actorName: prev.settings.adminProfile.name }
         );
+
         return {
           ...prev,
-          orders: prev.orders.map((o) => (o.id === orderId ? updatedOrder : o)),
+          orders: prev.orders.map((o) =>
+            o.id === orderId ? mutation.updatedOrder : o
+          ),
+          activity: mutation.newActivity
+            ? [mutation.newActivity, ...prev.activity.slice(0, 29)]
+            : prev.activity,
         };
       });
 

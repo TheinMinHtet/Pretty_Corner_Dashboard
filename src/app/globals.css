@@ -1,26 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FFFCFC;
-  --foreground: #33272C;
+  --background: #FAF7F8;
+  --foreground: #38262E;
   --card: #FFFFFF;
-  --card-foreground: #33272C;
+  --card-foreground: #38262E;
   --popover: #FFFFFF;
-  --popover-foreground: #33272C;
-  --primary: #E99AB5;
-  --primary-dark: #D96B91;
+  --popover-foreground: #38262E;
+  --primary: #B73D67;
+  --primary-hover: #982F53;
+  --primary-dark: #982F53;
+  --primary-subtle: #FCEEF2;
   --primary-foreground: #FFFFFF;
   --secondary: #FCEEF2;
-  --secondary-foreground: #33272C;
-  --muted: #FDF6F8;
-  --muted-foreground: #806B73;
-  --accent: #F8DDE5;
-  --accent-foreground: #33272C;
+  --secondary-foreground: #38262E;
+  --muted: #F7F4F5;
+  --muted-foreground: #7A6870;
+  --accent: #FCEEF2;
+  --accent-foreground: #B73D67;
   --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
-  --border: #F0E1E6;
-  --input: #F0E1E6;
-  --ring: #E99AB5;
+  --border: #EEDFE5;
+  --input: #EEDFE5;
+  --ring: #B73D67;
   --radius: 0.75rem;
 }
 
@@ -45,8 +47,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-sans: var(--font-dm-sans), "Myanmar Text", "Pyidaungsu", Padauk, ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), ui-serif, Georgia, serif;
 }
 
 * {
@@ -72,10 +74,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #E8D5DC;
+  background: #F1D3DF;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #D96B91;
+  background: #B73D67;
 }

@@ -16,11 +16,11 @@ const SheetContent = React.forwardRef<
   }
 >(({ side = "left", className, children, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#33272C]/35 backdrop-blur-[2px]" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#38262E]/35 backdrop-blur-[2px]" />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed z-50 flex h-full flex-col bg-white shadow-2xl border-[#F0E1E6] transition ease-in-out",
+        "fixed z-50 flex h-full flex-col bg-white shadow-2xl border-[#EEDFE5] transition ease-in-out",
         side === "left"
           ? "inset-y-0 left-0 w-72 border-r"
           : "inset-y-0 right-0 w-full max-w-md border-l",
@@ -28,8 +28,12 @@ const SheetContent = React.forwardRef<
       )}
       {...props}
     >
+      <DialogPrimitive.Title className="sr-only">Side Drawer</DialogPrimitive.Title>
+      <DialogPrimitive.Description className="sr-only">
+        Navigation options and order drawer details
+      </DialogPrimitive.Description>
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1.5 text-[#806B73] hover:bg-[#FCEEF2] hover:text-[#33272C] cursor-pointer">
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1.5 text-[#7A6870] hover:bg-[#FCEEF2] hover:text-[#38262E] cursor-pointer">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -38,4 +42,28 @@ const SheetContent = React.forwardRef<
 ));
 SheetContent.displayName = "SheetContent";
 
-export { Sheet, SheetTrigger, SheetClose, SheetContent };
+const SheetTitle = React.forwardRef<
+  React.ComponentRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn("text-base font-semibold text-[#38262E]", className)}
+    {...props}
+  />
+));
+SheetTitle.displayName = "SheetTitle";
+
+const SheetDescription = React.forwardRef<
+  React.ComponentRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-xs text-[#7A6870]", className)}
+    {...props}
+  />
+));
+SheetDescription.displayName = "SheetDescription";
+
+export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetTitle, SheetDescription };

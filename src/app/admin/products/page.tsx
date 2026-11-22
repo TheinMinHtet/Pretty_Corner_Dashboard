@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Plus,
   Search,
@@ -279,9 +280,11 @@ export default function ProductsPage() {
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <img
+                        <Image
                           src={product.images[0]}
                           alt={product.name}
+                          width={44}
+                          height={44}
                           className="h-11 w-11 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
                         />
                         <div className="min-w-0">
