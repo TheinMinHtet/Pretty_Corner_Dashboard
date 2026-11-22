@@ -97,8 +97,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setGlobalSearch,
     resetDemoData,
     isAuthenticated,
+    session,
     logout,
   } = useAdminStore();
+
+  const activeUser = useMemo(() => {
+    return {
+      name: session?.user.name || settings.adminProfile.name,
+      email: session?.user.email || settings.adminProfile.email,
+      role: session?.user.role || settings.adminProfile.role,
+    };
+  }, [session?.user, settings.adminProfile]);
 
   React.useEffect(() => {
     if (!isAuthenticated && pathname !== "/admin/login") {
@@ -557,7 +566,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2.5 rounded-full border border-[#F0E1E6] bg-white py-1 pl-1 pr-3 hover:bg-[#FCEEF2]/50 transition-colors cursor-pointer">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FCEEF2] text-xs font-semibold text-[#B73D67]">
-                    {settings.adminProfile.name
+                    {activeUser.name
                       .split(" ")
                       .map((w) => w[0])
                       .slice(0, 2)
@@ -565,10 +574,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   </div>
                   <div className="hidden sm:block text-left">
                     <p className="text-xs font-semibold text-[#33272C] leading-tight">
-                      {settings.adminProfile.name}
+                      {activeUser.name}
                     </p>
-                    <p className="text-[10px] text-[#806B73] leading-tight">
-                      {settings.adminProfile.role}
+                    <p className="text-[10px] text-[#806B73] leading-tight capitalize">
+                      {activeUser.role}
                     </p>
                   </div>
                 </button>
@@ -576,10 +585,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <p className="text-xs font-semibold text-[#33272C]">
-                    {settings.adminProfile.name}
+                    {activeUser.name}
                   </p>
                   <p className="text-[11px] font-normal text-[#806B73]">
-                    {settings.adminProfile.email}
+                    {activeUser.email}
                   </p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -599,12 +608,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => {
-                    logout();
+                  onClick={async () => {
+                    await logout();
                     toast.info(t.signOutToast);
                     router.push("/admin/login");
                   }}
-                  className="text-rose-600 focus:text-rose-600"
+                  className="text-rose-600 focus:text-rose-600 cursor-pointer"
                 >
                   <LogOut className="h-4 w-4" />
                   {t.signOut}

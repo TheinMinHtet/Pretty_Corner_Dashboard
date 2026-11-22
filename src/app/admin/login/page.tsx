@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
@@ -17,9 +17,19 @@ export default function AdminLoginPage() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("admin@prettycorner.com");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("expired") === "1") {
+        toast.error(t.sessionExpiredToast);
+      }
+    }
+  }, [t.sessionExpiredToast]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
       toast.error(t.loginEmptyToast);
@@ -27,7 +37,7 @@ export default function AdminLoginPage() {
     }
 
     setLoading(true);
-    const success = login(email, password);
+    const success = await login(email, password, rememberMe);
     setLoading(false);
 
     if (success) {
@@ -116,13 +126,39 @@ export default function AdminLoginPage() {
             </div>
           </div>
 
+          {/* Remember Me Option */}
+          <div className="flex items-center gap-2 pt-0.5">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 rounded-md border-[#F0E1E6] text-[#D96B91] focus:ring-[#E99AB5] accent-[#D96B91] cursor-pointer"
+            />
+            <Label
+              htmlFor="rememberMe"
+              className="text-xs text-[#806B73] hover:text-[#33272C] cursor-pointer select-none font-normal"
+            >
+              {t.rememberMe}
+            </Label>
+          </div>
+
           <Button
             type="submit"
             disabled={loading}
-            className="w-full h-11 rounded-2xl bg-[#D96B91] hover:bg-[#c2567c] text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+            className="w-full h-11 rounded-2xl bg-[#D96B91] hover:bg-[#c2567c] text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-75"
           >
-            <span>{loading ? t.authenticating : t.enterAdminPortal}</span>
-            <ArrowRight className="h-4 w-4" />
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{t.authenticating}</span>
+              </>
+            ) : (
+              <>
+                <span>{t.enterAdminPortal}</span>
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
           </Button>
 
           {/* 1-Click Demo Shortcut */}
