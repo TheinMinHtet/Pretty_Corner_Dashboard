@@ -165,6 +165,7 @@ export const CreatePromotionSchema = z.object({
   endDate: z.string().min(1),
   active: z.boolean().default(true),
   bannerColor: z.string().default("#FCEEF2"),
+  bannerImage: z.string().optional(),
   featuredProductIds: z.array(z.string()).default([]),
 });
 

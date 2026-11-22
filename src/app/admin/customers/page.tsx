@@ -29,51 +29,42 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
 import { formatDate, formatMMK } from "@/lib/utils";
+import {
+  getCustomerDossiers,
+  getCustomerDossierByPhoneOrId,
+} from "@/modules/customers/customer-dossier";
 
 export default function CustomersPage() {
-  const { customers, orders } = useAdminStore();
+  const { customers: storeCustomers, orders } = useAdminStore();
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const enrichedCustomers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return customers
-      .map((c) => {
-        const custOrders = orders
-          .filter((o) => o.customerId === c.id)
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        const validOrders = custOrders.filter(
-          (o) => o.orderStatus !== "Cancelled"
-        );
-        const totalSpent = validOrders.reduce((s, o) => s + o.total, 0);
-        const lastOrder = custOrders[0]?.createdAt ?? null;
-        return {
-          ...c,
-          custOrders,
-          totalOrders: custOrders.length,
-          totalSpent,
-          lastOrder,
-        };
+    return getCustomerDossiers(orders, storeCustomers || [], { query: search }).map(
+      (d) => ({
+        ...d,
+        custOrders: d.orders,
+        totalOrders: d.orderCount,
+        lastOrder: d.lastOrderDate,
       })
-      .filter((c) => {
-        if (!q) return true;
-        return (
-          c.name.toLowerCase().includes(q) ||
-          c.phone.toLowerCase().includes(q) ||
-          (c.email?.toLowerCase().includes(q) ?? false)
-        );
-      });
-  }, [customers, orders, search]);
+    );
+  }, [orders, storeCustomers, search]);
 
   const activeDetails = useMemo(() => {
     if (!selectedCustomer) return null;
-    return (
-      enrichedCustomers.find((c) => c.id === selectedCustomer.id) ?? null
+    const dossier = getCustomerDossierByPhoneOrId(
+      orders,
+      selectedCustomer.id || selectedCustomer.phone,
+      storeCustomers || []
     );
-  }, [selectedCustomer, enrichedCustomers]);
+    if (!dossier) return null;
+    return {
+      ...dossier,
+      custOrders: dossier.orders,
+      totalOrders: dossier.orderCount,
+      lastOrder: dossier.lastOrderDate,
+    };
+  }, [selectedCustomer, orders, storeCustomers]);
 
   return (
     <div className="space-y-5">

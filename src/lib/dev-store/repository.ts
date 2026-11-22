@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   ActivityLogItem,
   Category,
+  Customer,
   NotificationItem,
   Order,
   OrderStatus,
@@ -19,11 +20,11 @@ import {
   reconcileProductStock,
 } from "@/modules/catalog/catalog-sync";
 import {
-  settleOrderPayment,
-  transitionOrderStatus,
+  executeOrderUpdate,
+  OrderMutationResult,
 } from "@/modules/orders/order-lifecycle";
 import { createSeedData, DevStoreData } from "./seed";
-import { slugify } from "./mappers";
+import { slugify, deriveCustomersFromOrders } from "./mappers";
 
 export interface StorefrontOrderCreateInput {
   customerName: string;
@@ -92,10 +93,15 @@ export interface StoreRepository {
   ): Promise<Category | null>;
   deleteCategory(id: string): Promise<boolean>;
 
+  listCustomers(): Promise<Customer[]>;
+
   listOrders(): Promise<Order[]>;
   getOrder(idOrRef: string): Promise<Order | null>;
   createStorefrontOrder(input: StorefrontOrderCreateInput): Promise<Order>;
-  updateOrder(id: string, input: OrderUpdateInput): Promise<Order | null>;
+  updateOrder(
+    id: string,
+    input: OrderUpdateInput
+  ): Promise<OrderMutationResult | null>;
 
   adjustStock(input: {
     productId: string;
@@ -104,6 +110,8 @@ export interface StoreRepository {
     quantity: number;
     reason: string;
   }): Promise<{ product: Product; adjustment: StockAdjustment } | null>;
+
+  listStockAdjustments(): Promise<StockAdjustment[]>;
 
   createPromotion(
     input: Omit<Promotion, "id" | "usageCount">
@@ -218,7 +226,12 @@ export class JsonFileStoreRepository implements StoreRepository {
   }
 
   async getAllData(): Promise<DevStoreData> {
-    return this.ensureInitialized();
+    const data = await this.ensureInitialized();
+    const derived = deriveCustomersFromOrders(data.orders ?? []);
+    return {
+      ...data,
+      customers: derived.length > 0 ? derived : data.customers,
+    };
   }
 
   async resetToSeed(): Promise<DevStoreData> {
@@ -427,6 +440,13 @@ export class JsonFileStoreRepository implements StoreRepository {
     });
   }
 
+  async listCustomers(): Promise<Customer[]> {
+    const data = await this.ensureInitialized();
+    const derived = deriveCustomersFromOrders(data.orders ?? []);
+    if (derived.length > 0) return derived;
+    return data.customers ?? [];
+  }
+
   async listOrders(): Promise<Order[]> {
     const data = await this.ensureInitialized();
     return data.orders;
@@ -514,7 +534,7 @@ export class JsonFileStoreRepository implements StoreRepository {
       };
 
       // Deduct stock from purchased products and matching variants
-      let updatedProducts = [...data.products];
+      const updatedProducts = [...data.products];
       const newAdjustments: StockAdjustment[] = [];
       let notifications = appendNotification(data.notifications, {
         type: "order",
@@ -599,127 +619,39 @@ export class JsonFileStoreRepository implements StoreRepository {
   async updateOrder(
     id: string,
     input: OrderUpdateInput
-  ): Promise<Order | null> {
+  ): Promise<OrderMutationResult | null> {
     return this.withWriteLock((data) => {
       const target = data.orders.find((o) => o.id === id || o.reference === id);
       if (!target) return { next: data, result: null };
 
       const actor = data.settings.adminProfile.name;
-      let updatedOrder = target;
-      let updatedProducts = data.products;
-      let newAdjustments: StockAdjustment[] = [];
-      let notifications = data.notifications;
-      let activity = data.activity;
+      const mutation = executeOrderUpdate(target, input, data.products, {
+        actorName: actor,
+        lowStockAlertEnabled: data.settings.notifications.lowStockAlert,
+      });
 
-      if (input.orderStatus && input.orderStatus !== target.orderStatus) {
-        const prevStatus = target.orderStatus;
-        const transition = transitionOrderStatus(
-          updatedOrder,
-          input.orderStatus,
-          updatedProducts,
-          actor,
-          input.note
-        );
-        updatedOrder = transition.updatedOrder;
-        updatedProducts = transition.updatedProducts;
-        newAdjustments = transition.newAdjustments;
-
-        if ((prevStatus === "Delivered") !== (input.orderStatus === "Delivered")) {
-          const delta = input.orderStatus === "Delivered" ? 1 : -1;
-          updatedProducts = updatedProducts.map((p) => {
-            const qty = updatedOrder.items
-              .filter((i) => i.productId === p.id)
-              .reduce((sum, i) => sum + i.quantity, 0);
-            if (qty === 0) return p;
-            return { ...p, soldCount: Math.max(0, p.soldCount + delta * qty) };
-          });
-        }
-
-        notifications = appendNotification(notifications, {
-          type: "order",
-          title: `Order ${updatedOrder.reference} ${input.orderStatus}`,
-          message:
-            transition.timelineNote ||
-            `${updatedOrder.customerName}'s order is now ${input.orderStatus}.`,
-          href: `/admin/orders/${updatedOrder.id}`,
-        });
-
-        activity = appendActivity(
-          activity,
-          `Order ${input.orderStatus}`,
-          `${updatedOrder.reference} updated to ${input.orderStatus}`,
-          "order",
-          actor
-        );
+      let nextNotifications = data.notifications;
+      for (const notif of mutation.newNotifications) {
+        nextNotifications = appendNotification(nextNotifications, notif);
       }
 
-      if (input.paymentStatus && input.paymentStatus !== updatedOrder.paymentStatus) {
-        updatedOrder = settleOrderPayment(
-          updatedOrder,
-          { status: input.paymentStatus },
-          actor
-        );
-        activity = appendActivity(
-          activity,
-          "Payment Status Updated",
-          `${updatedOrder.reference} payment marked as ${input.paymentStatus}`,
-          "order",
-          actor
-        );
-      }
-
-      if (input.transactionReference !== undefined) {
-        updatedOrder = {
-          ...updatedOrder,
-          transactionReference: input.transactionReference,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-
-      if (input.refund) {
-        const now = new Date().toISOString();
-        updatedOrder = {
-          ...updatedOrder,
-          paymentStatus: input.refund.isFullRefund
-            ? "Refunded"
-            : updatedOrder.paymentStatus,
-          refundDetails: {
-            ...input.refund,
-            refundedAt: now,
-            processedBy: actor,
-          },
-          timeline: [
-            ...updatedOrder.timeline,
-            {
-              status: updatedOrder.orderStatus,
-              timestamp: now,
-              note: `Refund processed (${input.refund.amount.toLocaleString()} MMK): ${input.refund.reason}`,
-              actor,
-            },
-          ],
-          updatedAt: now,
-        };
-        activity = appendActivity(
-          activity,
-          "Order Refunded",
-          `Refunded ${input.refund.amount.toLocaleString()} MMK for ${updatedOrder.reference}`,
-          "order",
-          actor
-        );
+      let nextActivity = data.activity;
+      if (mutation.newActivity) {
+        nextActivity = [mutation.newActivity, ...data.activity.slice(0, 29)];
       }
 
       const next: DevStoreData = {
         ...data,
         orders: data.orders.map((o) =>
-          o.id === updatedOrder.id ? updatedOrder : o
+          o.id === mutation.updatedOrder.id ? mutation.updatedOrder : o
         ),
-        products: updatedProducts,
-        stockHistory: [...newAdjustments, ...data.stockHistory],
-        notifications,
-        activity,
+        products: mutation.updatedProducts,
+        stockHistory: [...mutation.newAdjustments, ...data.stockHistory],
+        notifications: nextNotifications,
+        activity: nextActivity,
       };
 
-      return { next, result: updatedOrder };
+      return { next, result: mutation };
     });
   }
 
@@ -760,6 +692,11 @@ export class JsonFileStoreRepository implements StoreRepository {
 
       return { next, result: { product: updatedProduct, adjustment } };
     });
+  }
+
+  async listStockAdjustments(): Promise<StockAdjustment[]> {
+    const data = await this.ensureInitialized();
+    return data.stockHistory;
   }
 
   async createPromotion(
@@ -896,5 +833,5 @@ export function getStoreRepository(): StoreRepository {
       ? new SupabaseStoreRepository()
       : new JsonFileStoreRepository();
   }
-  return globalForStore.__prettyCornerRepo;
+  return globalForStore.__prettyCornerRepo!;
 }

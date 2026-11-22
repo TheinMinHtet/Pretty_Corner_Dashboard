@@ -12,7 +12,7 @@ export default function AdminLayout({
   return (
     <AdminProvider>
       <TooltipProvider>
-        <Suspense fallback={<div className="min-h-screen bg-[#FFFCFC]" />}>
+        <Suspense fallback={<div suppressHydrationWarning className="min-h-screen bg-[#FFFCFC]" />}>
           <AdminShell>{children}</AdminShell>
         </Suspense>
         <Toaster

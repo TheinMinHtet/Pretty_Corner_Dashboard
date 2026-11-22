@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,6 +19,7 @@ import {
   Store,
   Truck,
   Navigation,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -32,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +62,7 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
   "Processing",
   "Shipped",
   "Delivered",
+  "Cancelled",
 ];
 
 const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
@@ -66,6 +70,7 @@ const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
   "Paid",
   "Failed",
   "Expired",
+  "Refunded",
 ];
 
 export default function OrderDetailsPage() {
@@ -75,6 +80,7 @@ export default function OrderDetailsPage() {
     updateOrderStatus,
     updatePaymentStatus,
     updatePaymentReference,
+    processOrderRefund,
   } = useAdminStore();
   const order = orders.find((o) => o.id === params.id);
 
@@ -87,6 +93,18 @@ export default function OrderDetailsPage() {
   const [isEditingTrx, setIsEditingTrx] = useState(false);
   const [trxInput, setTrxInput] = useState(order?.transactionReference ?? "");
   const [copiedTrx, setCopiedTrx] = useState(false);
+
+  // Refund Modal state
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState(
+    order ? String(order.total) : "0"
+  );
+  const [isFullRefund, setIsFullRefund] = useState(true);
+  const [refundReason, setRefundReason] = useState(
+    "Customer requested cancellation"
+  );
+  const [refundTrxRef, setRefundTrxRef] = useState("");
+  const [refundNotes, setRefundNotes] = useState("");
 
   if (!order) {
     return (
@@ -105,9 +123,37 @@ export default function OrderDetailsPage() {
   }
 
   const handleUpdateStatus = () => {
+    if (selectedStatus === "Cancelled" && order.orderStatus !== "Cancelled") {
+      const confirmed = window.confirm(
+        "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
+      );
+      if (!confirmed) return;
+    }
     updateOrderStatus(order.id, selectedStatus, statusNote.trim() || undefined);
     setStatusNote("");
     toast.success(`Order ${order.reference} updated to ${selectedStatus}`);
+  };
+
+  const handleProcessRefund = () => {
+    const amt = Number(refundAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid refund amount");
+      return;
+    }
+    if (!refundReason.trim()) {
+      toast.error("Please provide a refund reason");
+      return;
+    }
+    processOrderRefund(order.id, {
+      amount: amt,
+      isFullRefund,
+      reason: refundReason.trim(),
+      transactionReference:
+        refundTrxRef.trim() || order.transactionReference || "REFUND-VOUCHER",
+      notes: refundNotes.trim() || undefined,
+    });
+    setIsRefundModalOpen(false);
+    toast.success(`Refund of ${formatMMK(amt)} processed successfully`);
   };
 
   return (
@@ -154,9 +200,11 @@ export default function OrderDetailsPage() {
                     className="flex items-center justify-between gap-4 py-3 first:pt-0"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <img
+                      <Image
                         src={item.productImage}
                         alt={item.productName}
+                        width={56}
+                        height={56}
                         className="h-14 w-14 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
                       />
                       <div className="min-w-0">
@@ -500,6 +548,10 @@ export default function OrderDetailsPage() {
                 <Select
                   value={order.paymentStatus}
                   onValueChange={(v) => {
+                    if (v === "Refunded") {
+                      setIsRefundModalOpen(true);
+                      return;
+                    }
                     updatePaymentStatus(order.id, v as PaymentStatus);
                     toast.success(`Payment status set to ${v}`);
                   }}
@@ -516,10 +568,167 @@ export default function OrderDetailsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Refund Audit Section (PC-OM-009) */}
+              {order.refundDetails ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-2 mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-rose-800 flex items-center gap-1.5">
+                      <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
+                      Refund Processed ({order.refundDetails.isFullRefund ? "Full" : "Partial"})
+                    </span>
+                    <span className="font-semibold text-rose-900 text-xs">
+                      {formatMMK(order.refundDetails.amount)}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-[11px] text-[#33272C]">
+                    <p><span className="text-[#806B73]">Reason:</span> {order.refundDetails.reason}</p>
+                    <p><span className="text-[#806B73]">Voucher Trx:</span> <span className="font-mono">{order.refundDetails.transactionReference}</span></p>
+                    <p><span className="text-[#806B73]">Processed by:</span> {order.refundDetails.processedBy} · {formatDateTime(order.refundDetails.refundedAt)}</p>
+                    {order.refundDetails.notes && (
+                      <p><span className="text-[#806B73]">Notes:</span> {order.refundDetails.notes}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRefundAmount(String(order.total));
+                      setIsRefundModalOpen(true);
+                    }}
+                    className="w-full text-xs h-9 rounded-xl border-dashed border-[#F0E1E6] text-[#806B73] hover:text-[#D96B91] hover:bg-[#FCEEF2]"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-[#D96B91]" />
+                    Process Customer Refund
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Process Refund Dialog Modal */}
+      <Dialog open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
+        <DialogContent className="sm:max-w-[480px] rounded-[24px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#33272C]">
+              <RotateCcw className="h-4 w-4 text-[#D96B91]" />
+              Process Refund — {order.reference}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#806B73]">
+              Record refund details, bank/wallet transaction reference, and update financial reporting.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="p-3 rounded-2xl bg-[#FDF6F8] border border-[#F0E1E6] flex items-center justify-between">
+              <div>
+                <p className="text-[#806B73]">Original Order Total</p>
+                <p className="text-sm font-semibold text-[#33272C]">{formatMMK(order.total)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[#806B73]">Payment Provider</p>
+                <p className="text-sm font-semibold text-[#33272C]">{order.paymentMethod}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="refund-amt">Refund Amount (MMK) *</Label>
+                <Input
+                  id="refund-amt"
+                  type="number"
+                  min={1}
+                  max={order.total}
+                  value={refundAmount}
+                  onChange={(e) => {
+                    setRefundAmount(e.target.value);
+                    setIsFullRefund(Number(e.target.value) >= order.total);
+                  }}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="refund-type">Refund Scope</Label>
+                <Select
+                  value={isFullRefund ? "full" : "partial"}
+                  onValueChange={(val) => {
+                    const full = val === "full";
+                    setIsFullRefund(full);
+                    if (full) setRefundAmount(String(order.total));
+                  }}
+                >
+                  <SelectTrigger id="refund-type" className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Refund ({formatMMK(order.total)})</SelectItem>
+                    <SelectItem value="partial">Partial Refund</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="refund-reason">Refund Reason *</Label>
+              <Input
+                id="refund-reason"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="e.g. Out of stock shade, customer cancellation"
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="refund-trx">Bank / Wallet Refund Reference</Label>
+              <Input
+                id="refund-trx"
+                value={refundTrxRef}
+                onChange={(e) => setRefundTrxRef(e.target.value)}
+                placeholder="e.g. KBZ-RFND-987654321"
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="refund-notes">Internal Audit Notes</Label>
+              <Textarea
+                id="refund-notes"
+                rows={2}
+                value={refundNotes}
+                onChange={(e) => setRefundNotes(e.target.value)}
+                placeholder="Optional notes for boutique accounting records..."
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRefundModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleProcessRefund}
+              className="bg-[#D96B91] hover:bg-[#c2567c] text-white"
+            >
+              Authorize Refund
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

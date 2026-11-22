@@ -1,4 +1,12 @@
-import { Category, Order, OrderStatus, PaymentStatus, Product } from "@/types/admin";
+import {
+  Category,
+  Customer,
+  NotificationItem,
+  Order,
+  OrderStatus,
+  PaymentStatus,
+  Product,
+} from "@/types/admin";
 
 export interface StorefrontProductSize {
   name: string;
@@ -199,4 +207,78 @@ export function toStorefrontOrder(order: Order): StorefrontOrder {
     fulfillmentStatus: mapOrderStatusToStorefront(order.orderStatus),
     createdAt: order.createdAt,
   };
+}
+
+import {
+  normalizePhoneNumber,
+  getCustomerDossiers,
+} from "@/modules/customers/customer-dossier";
+
+export { normalizePhoneNumber };
+
+/**
+ * Extracts and unifies distinct customer profiles from order records.
+ * Delegated to the deep CustomerDossier module.
+ */
+export function deriveCustomersFromOrders(orders: Order[]): Customer[] {
+  if (!orders || orders.length === 0) return [];
+  return getCustomerDossiers(orders);
+}
+
+/**
+ * Builds live admin notifications directly from actual store orders and product inventories,
+ * replacing hardcoded mock alerts with real operational events.
+ */
+export function deriveNotificationsFromOrdersAndProducts(
+  orders: Order[],
+  products: Product[]
+): NotificationItem[] {
+  const notifications: NotificationItem[] = [];
+
+  // 1. Order notifications from recent real orders
+  const sortedOrders = [...orders].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  for (const ord of sortedOrders.slice(0, 10)) {
+    const isPaid = ord.paymentStatus === "Paid";
+    notifications.push({
+      id: `notif-order-${ord.id}`,
+      title: isPaid
+        ? `Paid Order · ${ord.reference}`
+        : `New Order · ${ord.reference}`,
+      message: `${ord.customerName} placed an order for ${ord.total.toLocaleString()} MMK (${ord.paymentMethod} · ${ord.orderStatus}).`,
+      type: "order",
+      read: false,
+      createdAt: ord.createdAt,
+      href: `/admin/orders/${ord.id}`,
+    });
+  }
+
+  // 2. Stock alerts from real products
+  for (const prod of products) {
+    if (prod.status === "Active" && prod.stock <= prod.lowStockThreshold) {
+      const isOut = prod.stock === 0;
+      notifications.push({
+        id: `notif-stock-${prod.id}`,
+        title: isOut
+          ? `Out of Stock: ${prod.name}`
+          : `Low Stock Alert: ${prod.name}`,
+        message: isOut
+          ? `${prod.name} (${prod.sku || "N/A"}) is completely sold out.`
+          : `${prod.name} has only ${prod.stock} units remaining (threshold: ${prod.lowStockThreshold}).`,
+        type: "stock",
+        read: false,
+        createdAt: prod.updatedAt || prod.createdAt || new Date().toISOString(),
+        href: "/admin/inventory",
+      });
+    }
+  }
+
+  // Sort by createdAt descending
+  return notifications.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }

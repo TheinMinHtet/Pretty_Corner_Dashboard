@@ -1,5 +1,6 @@
 import {
   Category,
+  Customer,
   Order,
   OrderStatus,
   PaymentStatus,
@@ -16,8 +17,14 @@ import {
   StorefrontOrderCreateInput,
   StoreRepository,
 } from "./repository";
+import { executeOrderUpdate, OrderMutationResult } from "@/modules/orders/order-lifecycle";
 import { DevStoreData } from "./seed";
-import { slugify } from "./mappers";
+import {
+  slugify,
+  deriveCustomersFromOrders,
+  normalizePhoneNumber,
+  deriveNotificationsFromOrdersAndProducts,
+} from "./mappers";
 
 interface SbCategoryRow {
   id: string;
@@ -44,6 +51,7 @@ interface SbProductRow {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  sold_count?: number | null;
 }
 
 interface SbOrderItemRow {
@@ -72,6 +80,64 @@ interface SbOrderRow {
   created_at: string;
   updated_at: string;
   order_items?: SbOrderItemRow[];
+}
+
+interface SbPromotionRow {
+  id: string;
+  code: string;
+  title: string;
+  subtitle: string | null;
+  discount_percentage: number;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  usage_count: number | null;
+  featured_product_ids: string[] | null;
+  image_url: string | null;
+  banner_badge: string | null;
+  cta_text: string | null;
+  cta_link: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SbStockAdjustmentRow {
+  id: string;
+  product_id: string | null;
+  product_name: string;
+  sku: string;
+  variant_id: string | null;
+  variant_label: string | null;
+  type: "increase" | "decrease";
+  quantity: number;
+  previous_stock: number;
+  new_stock: number;
+  reason: string;
+  performed_by: string;
+  created_at: string;
+}
+
+function isUuid(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+function mapPromotionRow(row: SbPromotionRow): Promotion {
+  return {
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle ?? "",
+    code: row.code,
+    discountPercentage: Number(row.discount_percentage) || 0,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    active: row.is_active ?? true,
+    bannerColor: "#FCEEF2",
+    bannerImage: row.image_url ?? undefined,
+    featuredProductIds: Array.isArray(row.featured_product_ids)
+      ? row.featured_product_ids
+      : [],
+    usageCount: Number(row.usage_count) || 0,
+  };
 }
 
 function mapCategoryRow(row: SbCategoryRow): Category {
@@ -107,7 +173,7 @@ function mapProductRow(row: SbProductRow): Product {
     lowStockThreshold: 10,
     status: row.is_active ? "Active" : "Archived",
     variants: [],
-    soldCount: 0,
+    soldCount: Number(row.sold_count) || 0,
     badge: row.badge ?? undefined,
     benefits: Array.isArray(row.benefits) ? row.benefits : [],
     usage: row.usage ?? "",
@@ -184,6 +250,47 @@ function mapPaymentMethodFromSb(method: string): Order["paymentMethod"] {
   return "KBZPay";
 }
 
+function extractTownshipFromAddress(addr: string): string {
+  if (!addr) return "Yangon";
+  const townships = [
+    "Dagon Myothit",
+    "South Dagon",
+    "North Dagon",
+    "East Dagon",
+    "Dagon Seikkan",
+    "Bahan",
+    "Sanchaung",
+    "Kamayut",
+    "Hlaing",
+    "Mayangone",
+    "Yankin",
+    "Kyauktada",
+    "Pabedan",
+    "Botataung",
+    "Tamwe",
+    "Thingangyun",
+    "South Okkalapa",
+    "North Okkalapa",
+    "Insein",
+    "Thaketa",
+    "Dawbon",
+    "Ahlone",
+    "Lanmadaw",
+    "Latha",
+    "Pazundaung",
+    "Mingalar Taung Nyunt",
+    "Mingaladon",
+    "Shwepyitha",
+    "Hlaingtharya",
+  ];
+  for (const t of townships) {
+    if (new RegExp(t, "i").test(addr)) {
+      return t;
+    }
+  }
+  return "Yangon";
+}
+
 function mapOrderRow(row: SbOrderRow): Order {
   const items = (row.order_items ?? []).map((it) => ({
     id: it.id,
@@ -201,15 +308,16 @@ function mapOrderRow(row: SbOrderRow): Order {
   );
   const total = Number(row.total_amount) || subtotal;
   const orderStatus = mapOrderStatusFromSb(row.fulfillment_status);
+  const normPhone = normalizePhoneNumber(row.phone);
 
   return {
     id: row.id,
     reference: row.id,
-    customerId: `cust-${row.phone.replace(/\s+/g, "")}`,
+    customerId: normPhone ? `cust-${normPhone}` : `cust-${row.id}`,
     customerName: row.customer_name,
     customerPhone: row.phone,
     deliveryAddress: row.delivery_address,
-    township: "Yangon",
+    township: extractTownshipFromAddress(row.delivery_address),
     city: "Yangon",
     nearbyLandmark: row.landmark_note ?? undefined,
     deliveryMethod: "courier",
@@ -237,25 +345,74 @@ function mapOrderRow(row: SbOrderRow): Order {
 /**
  * Supabase-backed repository for shared catalog (categories, products) and orders.
  * Admin-only local UI collections (settings, promotions, notifications, activity,
- * stockHistory, customers) fall back to the local JSON store.
+ * stockHistory) fall back to the local JSON store, while customers are dynamically
+ * unified and derived directly from live orders.
  */
 export class SupabaseStoreRepository implements StoreRepository {
   private localFallback = new JsonFileStoreRepository();
 
   async getAllData(): Promise<DevStoreData> {
-    const [local, categories, products, orders] = await Promise.all([
+    const [local, categories, products, orders, promotions, stockHistory] = await Promise.all([
       this.localFallback.getAllData(),
       this.listCategories(),
       this.listProducts(),
       this.listOrders(),
+      this.listPromotions(),
+      this.listStockAdjustments(),
     ]);
+
+    const derivedCustomers = deriveCustomersFromOrders(orders);
+    const customers =
+      derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
+    const notifications = deriveNotificationsFromOrdersAndProducts(orders, products);
 
     return {
       ...local,
       categories,
       products,
       orders,
+      promotions,
+      customers,
+      stockHistory: stockHistory.length > 0 ? stockHistory : (local.stockHistory ?? []),
+      notifications,
     };
+  }
+
+  async listStockAdjustments(): Promise<StockAdjustment[]> {
+    const sb = getSupabaseClient();
+    const { data, error } = await sb
+      .from("inventory_adjustments")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase listStockAdjustments error:", error);
+      return (await this.localFallback.getAllData()).stockHistory ?? [];
+    }
+
+    return ((data ?? []) as SbStockAdjustmentRow[]).map((row) => ({
+      id: row.id,
+      productId: row.product_id || row.id,
+      productName: row.product_name,
+      sku: row.sku,
+      variantId: row.variant_id ?? undefined,
+      variantLabel: row.variant_label ?? undefined,
+      type: row.type === "decrease" ? "decrease" : "increase",
+      quantity: Number(row.quantity),
+      previousStock: Number(row.previous_stock),
+      newStock: Number(row.new_stock),
+      reason: row.reason,
+      performedBy: row.performed_by || "Admin",
+      createdAt: row.created_at,
+    }));
+  }
+
+  async listCustomers(): Promise<Customer[]> {
+    const orders = await this.listOrders();
+    const derived = deriveCustomersFromOrders(orders);
+    if (derived.length > 0) return derived;
+    const local = await this.localFallback.getAllData();
+    return local.customers ?? [];
   }
 
   async resetToSeed(): Promise<DevStoreData> {
@@ -587,25 +744,67 @@ export class SupabaseStoreRepository implements StoreRepository {
   async updateOrder(
     id: string,
     input: OrderUpdateInput
-  ): Promise<Order | null> {
+  ): Promise<OrderMutationResult | null> {
     const sb = getSupabaseClient();
     const existing = await this.getOrder(id);
     if (!existing) return null;
 
+    const allProducts = await this.listProducts();
+    const mutation = executeOrderUpdate(existing, input, allProducts, {
+      actorName: "Staff",
+      lowStockAlertEnabled: true,
+    });
+
     const patch: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
-    if (input.orderStatus) {
-      patch.fulfillment_status = mapOrderStatusToSb(input.orderStatus);
+    if (mutation.updatedOrder.orderStatus) {
+      patch.fulfillment_status = mapOrderStatusToSb(mutation.updatedOrder.orderStatus);
     }
-    if (input.paymentStatus) {
-      patch.payment_status = mapPaymentStatusToSb(input.paymentStatus);
+    if (mutation.updatedOrder.paymentStatus) {
+      patch.payment_status = mapPaymentStatusToSb(mutation.updatedOrder.paymentStatus);
+    }
+    if (mutation.updatedOrder.transactionReference) {
+      patch.payment_slip_url = mutation.updatedOrder.transactionReference;
     }
 
     const { error } = await sb.from("orders").update(patch).eq("id", existing.id);
-    if (error) return null;
+    if (error) {
+      console.error("Supabase updateOrder error:", error);
+      return null;
+    }
 
-    return this.getOrder(existing.id);
+    // Persist affected product stock mutations
+    for (const prod of mutation.updatedProducts) {
+      const prev = allProducts.find((p) => p.id === prod.id);
+      if (prev && (prev.stock !== prod.stock || prev.soldCount !== prod.soldCount)) {
+        await sb
+          .from("products")
+          .update({
+            stock_quantity: prod.stock,
+            sold_count: prod.soldCount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", prod.id);
+      }
+    }
+
+    // Persist stock adjustment logs
+    for (const adj of mutation.newAdjustments) {
+      await sb.from("inventory_adjustments").insert({
+        product_id: isUuid(adj.productId) ? adj.productId : null,
+        product_name: adj.productName,
+        sku: adj.sku,
+        type: adj.type,
+        quantity: adj.quantity,
+        previous_stock: adj.previousStock,
+        new_stock: adj.newStock,
+        reason: adj.reason,
+        performed_by: adj.performedBy,
+      });
+    }
+
+    return mutation;
   }
 
   async adjustStock(input: {
@@ -615,6 +814,7 @@ export class SupabaseStoreRepository implements StoreRepository {
     quantity: number;
     reason: string;
   }): Promise<{ product: Product; adjustment: StockAdjustment } | null> {
+    const sb = getSupabaseClient();
     const existing = await this.getProduct(input.productId);
     if (!existing) return null;
 
@@ -626,11 +826,52 @@ export class SupabaseStoreRepository implements StoreRepository {
     const updated = await this.updateProduct(existing.id, { stock: newStock });
     if (!updated) return null;
 
-    const adjustment: StockAdjustment = {
+    const sku = existing.sku || "PC-SKU";
+    let insertedAdjustment: StockAdjustment | null = null;
+    try {
+      const isProductUuid = isUuid(existing.id);
+      const { data: adjData } = await sb
+        .from("inventory_adjustments")
+        .insert({
+          product_id: isProductUuid ? existing.id : null,
+          product_name: existing.name,
+          sku,
+          variant_id: input.variantId || null,
+          type: input.type,
+          quantity: input.quantity,
+          previous_stock: existing.stock,
+          new_stock: newStock,
+          reason: input.reason,
+          performed_by: "Admin",
+        })
+        .select("*")
+        .single();
+
+      if (adjData) {
+        insertedAdjustment = {
+          id: adjData.id,
+          productId: adjData.product_id || updated.id,
+          productName: adjData.product_name,
+          sku: adjData.sku,
+          variantId: adjData.variant_id ?? undefined,
+          type: adjData.type,
+          quantity: Number(adjData.quantity),
+          previousStock: Number(adjData.previous_stock),
+          newStock: Number(adjData.new_stock),
+          reason: adjData.reason,
+          performedBy: adjData.performed_by,
+          createdAt: adjData.created_at,
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to insert into inventory_adjustments:", e);
+    }
+
+    const adjustment: StockAdjustment = insertedAdjustment ?? {
       id: generateId("stk"),
       productId: updated.id,
       productName: updated.name,
-      sku: updated.sku,
+      sku,
       type: input.type,
       quantity: input.quantity,
       previousStock: existing.stock,
@@ -643,21 +884,113 @@ export class SupabaseStoreRepository implements StoreRepository {
     return { product: updated, adjustment };
   }
 
+  async listPromotions(): Promise<Promotion[]> {
+    const sb = getSupabaseClient();
+    const { data, error } = await sb
+      .from("promotions")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase listPromotions error:", error);
+      return (await this.localFallback.getAllData()).promotions;
+    }
+
+    return ((data ?? []) as SbPromotionRow[]).map(mapPromotionRow);
+  }
+
   async createPromotion(
     input: Omit<Promotion, "id" | "usageCount">
   ): Promise<Promotion> {
-    return this.localFallback.createPromotion(input);
+    const sb = getSupabaseClient();
+    const payload = {
+      title: input.title,
+      subtitle: input.subtitle || null,
+      code: input.code.toUpperCase(),
+      discount_percentage: input.discountPercentage,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      is_active: input.active ?? true,
+      usage_count: 0,
+      image_url: input.bannerImage || null,
+      featured_product_ids: input.featuredProductIds || [],
+    };
+
+    const { data, error } = await sb
+      .from("promotions")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.error("Supabase createPromotion error:", error);
+      throw new Error(
+        `Supabase createPromotion failed: ${error?.message || "No data returned"}`
+      );
+    }
+
+    return mapPromotionRow(data as SbPromotionRow);
   }
 
   async updatePromotion(
     id: string,
     updates: Partial<Promotion>
   ): Promise<Promotion | null> {
-    return this.localFallback.updatePromotion(id, updates);
+    const sb = getSupabaseClient();
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (updates.title !== undefined) patch.title = updates.title;
+    if (updates.subtitle !== undefined) patch.subtitle = updates.subtitle || null;
+    if (updates.code !== undefined) patch.code = updates.code.toUpperCase();
+    if (updates.discountPercentage !== undefined) {
+      patch.discount_percentage = updates.discountPercentage;
+    }
+    if (updates.startDate !== undefined) patch.start_date = updates.startDate;
+    if (updates.endDate !== undefined) patch.end_date = updates.endDate;
+    if (updates.active !== undefined) patch.is_active = updates.active;
+    if (updates.bannerImage !== undefined) {
+      patch.image_url = updates.bannerImage || null;
+    }
+    if (updates.featuredProductIds !== undefined) {
+      patch.featured_product_ids = updates.featuredProductIds;
+    }
+    if (updates.usageCount !== undefined) patch.usage_count = updates.usageCount;
+
+    let query = sb.from("promotions").update(patch);
+    if (isUuid(id)) {
+      query = query.eq("id", id);
+    } else {
+      query = query.eq("code", id.toUpperCase());
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
+
+    if (error || !data) {
+      console.error("Supabase updatePromotion error:", error);
+      return null;
+    }
+
+    return mapPromotionRow(data as SbPromotionRow);
   }
 
   async deletePromotion(id: string): Promise<boolean> {
-    return this.localFallback.deletePromotion(id);
+    const sb = getSupabaseClient();
+    let query = sb.from("promotions").delete();
+    if (isUuid(id)) {
+      query = query.eq("id", id);
+    } else {
+      query = query.eq("code", id.toUpperCase());
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.error("Supabase deletePromotion error:", error);
+      return false;
+    }
+
+    return true;
   }
 
   async updateSettings(updates: Partial<StoreSettings>): Promise<StoreSettings> {

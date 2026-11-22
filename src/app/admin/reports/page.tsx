@@ -56,6 +56,7 @@ import {
   sumRevenue,
   computePaymentMethodStats,
   computePaymentStatusStats,
+  deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
@@ -182,11 +183,8 @@ export default function SalesReportsPage() {
   }, [rangeOrders]);
 
   const bestSellers = useMemo(
-    () =>
-      [...products]
-        .sort((a, b) => b.soldCount - a.soldCount)
-        .slice(0, 6),
-    [products]
+    () => deriveTopSellingProducts(orders, products),
+    [orders, products]
   );
 
   return (

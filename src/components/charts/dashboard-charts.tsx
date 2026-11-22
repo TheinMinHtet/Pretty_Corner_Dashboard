@@ -28,7 +28,7 @@ import {
   buildOrderSeries,
   DateRange,
   DATE_RANGE_LABELS,
-} from "@/lib/analytics";
+} from "@/modules/analytics/metrics";
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   Pending: "#F59E0B",
@@ -103,10 +103,10 @@ export function RevenueChartCard({
             <Area
               type="monotone"
               dataKey="revenue"
-              stroke="#D96B91"
+              stroke="#B73D67"
               strokeWidth={2.5}
               fill="url(#pinkRevenueGrad)"
-              activeDot={{ r: 5, fill: "#D96B91", stroke: "#fff", strokeWidth: 2 }}
+              activeDot={{ r: 5, fill: "#B73D67", stroke: "#fff", strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>

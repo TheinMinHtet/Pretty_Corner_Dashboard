@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import { Plus, Pencil, Trash2, Upload, FolderTree } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -130,9 +131,11 @@ export default function CategoriesPage() {
             <Card key={cat.id} className="overflow-hidden">
               <CardContent className="p-5 flex flex-col justify-between h-full gap-4">
                 <div className="flex items-start gap-4">
-                  <img
+                  <Image
                     src={cat.image}
                     alt={cat.name}
+                    width={64}
+                    height={64}
                     className="h-16 w-16 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
                   />
                   <div className="min-w-0 flex-1">
@@ -204,9 +207,11 @@ export default function CategoriesPage() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="flex items-center gap-4">
-              <img
+              <Image
                 src={image}
                 alt="Category preview"
+                width={64}
+                height={64}
                 className="h-16 w-16 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
               />
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#F0E1E6] bg-[#FDF6F8] px-3 py-2 text-xs font-medium text-[#33272C] hover:bg-[#FCEEF2]">

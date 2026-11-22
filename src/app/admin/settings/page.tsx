@@ -28,10 +28,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AlertTriangle } from "lucide-react";
 
 export default function SettingsPage() {
   const { settings, updateSettings, resetDemoData } = useAdminStore();
   const [draft, setDraft] = useState<StoreSettings>(settings);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   // Keep the editable draft in sync with persisted settings (including hydration).
   React.useEffect(() => {
@@ -47,6 +57,7 @@ export default function SettingsPage() {
   const handleReset = () => {
     resetDemoData();
     setDraft(INITIAL_SETTINGS);
+    setIsResetConfirmOpen(false);
     toast.success("Demo data reset to defaults");
   };
 
@@ -54,17 +65,18 @@ export default function SettingsPage() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
+          <h2 className="font-serif text-2xl font-semibold text-[#38262E]">
             Store Settings
           </h2>
-          <p className="text-sm text-[#806B73]">
+          <p className="text-sm text-[#7A6870]">
             Configure Pretty Corner store details, delivery fees, payments, and alerts.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={handleReset}
+            onClick={() => setIsResetConfirmOpen(true)}
+            className="border-[#EEDFE5] text-[#38262E] hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
           >
             <RotateCcw className="h-4 w-4" /> Reset Demo Data
           </Button>
@@ -73,6 +85,39 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Confirmation Dialog for Reset Demo Data (P1 Guardrail) */}
+      <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
+        <DialogContent className="sm:max-w-[420px] rounded-[24px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-rose-800">
+              <AlertTriangle className="h-4 w-4 text-rose-600" />
+              Reset Demo Data to Factory Defaults?
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#7A6870] pt-1">
+              This action will reset all boutique configurations, custom delivery rates, orders, products, and inventory adjustments back to the original demo seed data. Any unsaved custom records will be permanently erased.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsResetConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={handleReset}
+            >
+              Yes, Reset Everything
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="store" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
