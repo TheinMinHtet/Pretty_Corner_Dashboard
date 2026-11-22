@@ -43,6 +43,9 @@ export interface AdminTranslationSchema {
   loginWelcomeToast: string;
   loginErrorToast: string;
   loginEmptyToast: string;
+  rememberMe: string;
+  sessionExpiredToast: string;
+  signedInAs: string;
 
   // Status Badges
   statusPending: string;
@@ -151,6 +154,9 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     loginWelcomeToast: "Welcome back to Pretty Corner Admin",
     loginErrorToast: "Invalid credentials. Demo login: admin@prettycorner.com / admin123",
     loginEmptyToast: "Please enter both email and password",
+    rememberMe: "Remember this device for 7 days",
+    sessionExpiredToast: "Your session has expired due to inactivity. Please sign in again.",
+    signedInAs: "Signed in as",
 
     statusPending: "Pending",
     statusConfirmed: "Confirmed",
@@ -253,6 +259,9 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     loginWelcomeToast: "Pretty Corner စီမံခန့်ခွဲရေး စနစ်မှ ကြိုဆိုပါသည်",
     loginErrorToast: "အီးမေးလ် သို့မဟုတ် လျှို့ဝှက်နံပါတ် မှားယွင်းနေပါသည်။ သရုပ်ပြ: admin@prettycorner.com / admin123",
     loginEmptyToast: "ကျေးဇူးပြု၍ အီးမေးလ်နှင့် လျှို့ဝှက်နံပါတ် ထည့်သွင်းပါ",
+    rememberMe: "ဤစက်တွင် ၇ ရက် မှတ်ထားပေးပါ",
+    sessionExpiredToast: "အချိန်ကြာမြင့်စွာ အသုံးမပြုသဖြင့် လုံခြုံရေးအရ ပြန်လည်ဝင်ရောက်ပေးပါ",
+    signedInAs: "အသုံးပြုသူ",
 
     statusPending: "ဆိုင်းငံ့ထားဆဲ",
     statusConfirmed: "အတည်ပြုပြီး",

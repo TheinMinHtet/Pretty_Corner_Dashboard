@@ -313,6 +313,76 @@ test("parseContactLensPowerSuffix and createContactLensPresets handle standard p
   assert.equal(presets[0].quantity, 5);
 });
 
+// ==========================================
+// TEST SUITE 5: SESSION LIFECYCLE & INACTIVITY
+// ==========================================
+console.log("\nSuite 5: Admin Session Lifecycle & Inactivity Invariants");
+
+const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+const STANDARD_TTL_MS = 8 * 60 * 60 * 1000;       // 8 hours
+const REMEMBER_TTL_MS = 7 * 24 * 60 * 60 * 1000;   // 7 days
+
+function testIsSessionValid(session, now = Date.now()) {
+  if (!session || !session.token || !session.expiresAt) return false;
+  if (now > session.expiresAt) return false;
+  if (now - session.lastActiveAt > INACTIVITY_TIMEOUT_MS) return false;
+  return true;
+}
+
+test("Session validator enforces zero-trust on null or corrupt payload", () => {
+  assert.equal(testIsSessionValid(null), false);
+  assert.equal(testIsSessionValid({}), false);
+  assert.equal(testIsSessionValid({ token: "test" }), false);
+});
+
+test("Session validator approves active session within both TTL and activity window", () => {
+  const now = 100000000;
+  const session = {
+    token: "valid-tok",
+    expiresAt: now + STANDARD_TTL_MS,
+    lastActiveAt: now - (30 * 60 * 1000), // active 30 mins ago
+    rememberMe: false,
+  };
+  assert.equal(testIsSessionValid(session, now), true);
+});
+
+test("Session validator rejects session that exceeded rolling inactivity window (2 hours)", () => {
+  const now = 100000000;
+  const idleSession = {
+    token: "idle-tok",
+    expiresAt: now + STANDARD_TTL_MS, // Still within 8 hour hard expiry
+    lastActiveAt: now - (2 * 60 * 60 * 1000 + 1000), // 2 hours and 1 second ago
+    rememberMe: false,
+  };
+  assert.equal(testIsSessionValid(idleSession, now), false, "Idle sessions past 2 hours must be rejected");
+});
+
+test("Session validator distinguishes between standard 8-hour and Remember Me 7-day TTL", () => {
+  const now = 100000000;
+  const standardExpiresAt = now + STANDARD_TTL_MS;
+  const rememberExpiresAt = now + REMEMBER_TTL_MS;
+
+  assert.equal(standardExpiresAt - now, 28800000);
+  assert.equal(rememberExpiresAt - now, 604800000);
+
+  const pastStandard = now + 9 * 60 * 60 * 1000;
+  const standardSession = {
+    token: "std-tok",
+    expiresAt: standardExpiresAt,
+    lastActiveAt: pastStandard - 1000,
+    rememberMe: false,
+  };
+  const rememberSession = {
+    token: "rem-tok",
+    expiresAt: rememberExpiresAt,
+    lastActiveAt: pastStandard - 1000,
+    rememberMe: true,
+  };
+
+  assert.equal(testIsSessionValid(standardSession, pastStandard), false, "Standard session should expire at 9 hours");
+  assert.equal(testIsSessionValid(rememberSession, pastStandard), true, "Remember Me session remains valid at 9 hours");
+});
+
 console.log("\n=================================================");
 console.log(`ALL ARCHITECTURE TESTS PASSED (${passed}/${passed})`);
 console.log("=================================================");

@@ -258,3 +258,18 @@ export interface StoreSettings {
     phone: string;
   };
 }
+
+export interface AdminUserSessionProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface AdminSession {
+  user: AdminUserSessionProfile;
+  token: string;
+  expiresAt: number;
+  lastActiveAt: number;
+  rememberMe: boolean;
+}

@@ -21,14 +21,68 @@ import {
   RefundDetails,
   StockAdjustment,
   StoreSettings,
+  AdminSession,
 } from "@/types/admin";
 import { INITIAL_SETTINGS } from "@/data/mock-data";
 import { generateId } from "@/lib/utils";
 import { executeOrderUpdate } from "@/modules/orders/order-lifecycle";
 import { applyStockAdjustment } from "@/modules/catalog/catalog-sync";
 import { deriveCustomersFromOrders } from "@/lib/dev-store/mappers";
+import { toast } from "sonner";
 
-const AUTH_STORAGE_KEY = "pretty_corner_auth_v1";
+const AUTH_STORAGE_KEY = "pretty_corner_auth_session_v1";
+const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function getStoredSession(): AdminSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const sessionRaw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (sessionRaw) {
+      return JSON.parse(sessionRaw) as AdminSession;
+    }
+    const localRaw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (localRaw) {
+      return JSON.parse(localRaw) as AdminSession;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function clearStoredSession() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function saveStoredSession(session: AdminSession) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = JSON.stringify(session);
+    if (session.rememberMe) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, raw);
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, raw);
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function isSessionValid(session: AdminSession | null): boolean {
+  if (!session || !session.token || !session.expiresAt) return false;
+  const now = Date.now();
+  if (now > session.expiresAt) return false;
+  if (now - session.lastActiveAt > INACTIVITY_TIMEOUT_MS) return false;
+  return true;
+}
 
 interface PersistedState {
   products: Product[];
@@ -61,8 +115,9 @@ interface AdminContextValue extends PersistedState {
 
   // Authentication
   isAuthenticated: boolean;
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
+  session: AdminSession | null;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
+  logout: () => Promise<void>;
 
   // Orders
   updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => void;
@@ -267,42 +322,134 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      return window.localStorage.getItem(AUTH_STORAGE_KEY) !== "false";
-    } catch {
-      return true;
+  const [session, setSession] = useState<AdminSession | null>(() => {
+    if (typeof window === "undefined") return null;
+    const current = getStoredSession();
+    if (current && isSessionValid(current)) {
+      const refreshed: AdminSession = { ...current, lastActiveAt: Date.now() };
+      saveStoredSession(refreshed);
+      return refreshed;
     }
+    if (current) {
+      clearStoredSession();
+    }
+    return null;
   });
 
-  const login = useCallback((email: string, pass: string): boolean => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPass = pass.trim();
-    const validEmail = normalizedEmail === "admin@prettycorner.com";
-    const validPass =
-      normalizedPass === "admin123" || normalizedPass === "pretty2026";
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const current = getStoredSession();
+    return Boolean(current && isSessionValid(current));
+  });
 
-    if (validEmail && validPass) {
-      setIsAuthenticated(true);
-      try {
-        window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
-      } catch {
-        // ignore
-      }
-      return true;
-    }
-    return false;
-  }, []);
-
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const current = getStoredSession();
+    clearStoredSession();
     setIsAuthenticated(false);
-    try {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, "false");
-    } catch {
-      // ignore
+    setSession(null);
+
+    if (current?.token) {
+      try {
+        await fetch("/api/admin/logout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: current.token, email: current.user.email }),
+        });
+      } catch (err) {
+        console.warn("Logout notification failed:", err);
+      }
     }
   }, []);
+
+  const login = useCallback(
+    async (email: string, pass: string, rememberMe = false): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password: pass, rememberMe }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok && data.session) {
+          const newSession = data.session as AdminSession;
+          saveStoredSession(newSession);
+          setSession(newSession);
+          setIsAuthenticated(true);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error("Admin login API failed:", error);
+        return false;
+      }
+    },
+    []
+  );
+
+  // 2. Rolling Inactivity Watcher & Cross-Tab Synchronization
+  useEffect(() => {
+    if (!isAuthenticated || !session) return;
+
+    let lastSaved = Date.now();
+
+    const handleUserActivity = () => {
+      const now = Date.now();
+      // Throttle activity touch to once every 2 minutes
+      if (now - lastSaved > 2 * 60 * 1000) {
+        lastSaved = now;
+        setSession((prev) => {
+          if (!prev) return null;
+          const updated: AdminSession = { ...prev, lastActiveAt: now };
+          saveStoredSession(updated);
+          return updated;
+        });
+      }
+    };
+
+    const events = ["mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((ev) =>
+      window.addEventListener(ev, handleUserActivity, { passive: true })
+    );
+
+    // Periodic check for expiration / inactivity timeout
+    const intervalId = setInterval(() => {
+      const active = getStoredSession();
+      if (!isSessionValid(active)) {
+        logout();
+        if (
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/admin") &&
+          window.location.pathname !== "/admin/login"
+        ) {
+          toast.error("Session expired due to inactivity. Please sign in again.");
+        }
+      }
+    }, 30 * 1000); // Check every 30 seconds
+
+    // Cross-tab sync: if another tab cleared the session or logged out
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === AUTH_STORAGE_KEY) {
+        const updated = getStoredSession();
+        if (!updated || !isSessionValid(updated)) {
+          setIsAuthenticated(false);
+          setSession(null);
+        } else {
+          setIsAuthenticated(true);
+          setSession(updated);
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      events.forEach((ev) =>
+        window.removeEventListener(ev, handleUserActivity)
+      );
+      clearInterval(intervalId);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [isAuthenticated, logout, session]);
 
   const updateOrderStatus = useCallback(
     (orderId: string, status: OrderStatus, note?: string) => {
@@ -751,6 +898,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       globalSearch,
       setGlobalSearch,
       isAuthenticated,
+      session,
       login,
       logout,
       updateOrderStatus,
@@ -778,6 +926,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       hydrated,
       globalSearch,
       isAuthenticated,
+      session,
       login,
       logout,
       updateOrderStatus,
