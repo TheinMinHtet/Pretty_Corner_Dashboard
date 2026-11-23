@@ -435,6 +435,36 @@ export class SupabaseStoreRepository implements StoreRepository {
   private localFallback = new JsonFileStoreRepository();
   private inMemoryReadNotificationIds = new Set<string>();
 
+  private async getLiveSocialLinks(
+    fallbackLinks: StoreSettings["socialLinks"]
+  ): Promise<StoreSettings["socialLinks"]> {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return fallbackLinks;
+      const { data, error } = await client
+        .from("social_channels")
+        .select("*")
+        .eq("is_active", true);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const fb = data.find(
+          (c) => c.id === "facebook" || c.platform?.toLowerCase() === "facebook"
+        );
+        const tt = data.find(
+          (c) => c.id === "tiktok" || c.platform?.toLowerCase() === "tiktok"
+        );
+        return {
+          ...fallbackLinks,
+          facebook: fb?.url ?? fallbackLinks.facebook,
+          tiktok: tt?.url ?? fallbackLinks.tiktok,
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to fetch live social links from Supabase:", e);
+    }
+    return fallbackLinks;
+  }
+
   async getAllData(): Promise<DevStoreData> {
     const [local, categories, products, orders, promotions, stockHistory] = await Promise.all([
       this.localFallback.getAllData(),
@@ -444,6 +474,12 @@ export class SupabaseStoreRepository implements StoreRepository {
       this.listPromotions(),
       this.listStockAdjustments(),
     ]);
+
+    const liveSocial = await this.getLiveSocialLinks(local.settings.socialLinks);
+    const settings = {
+      ...local.settings,
+      socialLinks: liveSocial,
+    };
 
     const derivedCustomers = deriveCustomersFromOrders(orders);
     const customers =
@@ -462,6 +498,7 @@ export class SupabaseStoreRepository implements StoreRepository {
 
     return {
       ...local,
+      settings,
       categories,
       products,
       orders,
@@ -555,8 +592,15 @@ export class SupabaseStoreRepository implements StoreRepository {
           categoryId: p.categoryId,
         }));
 
+        const liveSocial = await this.getLiveSocialLinks(local.settings.socialLinks);
+        const settings = {
+          ...local.settings,
+          socialLinks: liveSocial,
+        };
+
         return {
           ...local,
+          settings,
           categories,
           products: [], // Exclude full product catalog at startup!
           orders,
@@ -1817,7 +1861,38 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async updateSettings(updates: Partial<StoreSettings>): Promise<StoreSettings> {
-    return this.localFallback.updateSettings(updates);
+    const updated = await this.localFallback.updateSettings(updates);
+
+    try {
+      const client = getSupabaseClient();
+      if (client && updates.socialLinks) {
+        const now = new Date().toISOString();
+        if (updates.socialLinks.facebook !== undefined) {
+          await client.from("social_channels").upsert({
+            id: "facebook",
+            platform: "Facebook",
+            url: updates.socialLinks.facebook,
+            is_active: true,
+            display_order: 1,
+            updated_at: now,
+          });
+        }
+        if (updates.socialLinks.tiktok !== undefined) {
+          await client.from("social_channels").upsert({
+            id: "tiktok",
+            platform: "TikTok",
+            url: updates.socialLinks.tiktok,
+            is_active: true,
+            display_order: 2,
+            updated_at: now,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to sync social_channels to Supabase:", err);
+    }
+
+    return updated;
   }
 
   async markNotificationRead(id: string): Promise<void> {

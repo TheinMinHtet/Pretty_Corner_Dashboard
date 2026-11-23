@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/context/language-context";
+import { WebVitals } from "@/app/web-vitals";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-full bg-[#FAF7F8] text-[#38262E] font-sans"
       >
+        <WebVitals />
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
