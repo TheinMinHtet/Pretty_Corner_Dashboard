@@ -15,6 +15,7 @@ import {
   Sparkles,
   Package,
   Eye,
+  AlertCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
@@ -54,7 +55,7 @@ import {
 } from "@/modules/analytics/metrics";
 
 export default function AdminDashboardPage() {
-  const { orders, products, categories } = useAdminStore();
+  const { orders, products, categories, inventoryStats } = useAdminStore();
   const { t } = useLanguage();
   const [range, setRange] = useState<DateRange>("30d");
 
@@ -84,7 +85,7 @@ export default function AdminDashboardPage() {
   const bestSellingProducts = useMemo(
     () =>
       deriveTopSellingProducts(rangeOrders, products, {
-        limit: 5,
+        limit: 10,
         sortBy: "units",
       }),
     [rangeOrders, products]
@@ -94,7 +95,7 @@ export default function AdminDashboardPage() {
 
   React.useEffect(() => {
     let active = true;
-    fetch("/api/products?stock=low&limit=5&status=Active")
+    fetch("/api/products?stock=alert&limit=10&status=Active")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active || !data) return;
@@ -147,31 +148,33 @@ export default function AdminDashboardPage() {
       width: metrics.pendingShare,
     },
     {
-      title: t.statusProcessing,
-      value: String(metrics.processing),
-      change: `${metrics.processing}`,
-      positive: true,
-      comparison: `${metrics.processingShare}%`,
-      icon: Package,
-      accentBg: "bg-violet-50",
-      accentText: "text-violet-600",
-      width: metrics.processingShare,
-    },
-    {
       title: t.statusShipped,
-      value: String(metrics.completed),
-      change: `${metrics.completedShare}%`,
+      value: String(metrics.paid),
+      change: `${metrics.paid}`,
       positive: true,
-      comparison: `${metrics.completed}`,
+      comparison: `${metrics.paidShare}% (${t.totalOrders})`,
       icon: CheckCircle2,
       accentBg: "bg-emerald-50",
       accentText: "text-emerald-600",
-      width: metrics.completedShare,
+      width: metrics.paidShare,
+    },
+    {
+      title: t.statusExpired,
+      value: String(metrics.expired),
+      change: `${metrics.expired}`,
+      positive: metrics.expiredShare <= 15,
+      comparison: `${metrics.expiredShare}% (${t.totalOrders})`,
+      icon: AlertCircle,
+      accentBg: "bg-slate-100",
+      accentText: "text-slate-600",
+      width: metrics.expiredShare,
     },
   ];
 
-  const getCategoryName = (catId: string) =>
-    categories.find((c) => c.id === catId)?.name ?? "Uncategorized";
+  const getCategoryName = (catId: string) => {
+    const found = categories.find((c) => c.id === catId || c.slug === catId);
+    return found?.name ?? "Uncategorized";
+  };
 
   return (
     <div className="space-y-6">
@@ -301,7 +304,7 @@ export default function AdminDashboardPage() {
               <div className="rounded-xl border border-[#F0E1E6] p-3">
                 <p className="text-[11px] text-[#806B73]">{t.activeProducts}</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
-                  {products.filter((p) => p.status === "Active").length}
+                  {inventoryStats ? inventoryStats.inStock + inventoryStats.lowStock : 0}
                 </p>
               </div>
             </div>

@@ -16,6 +16,8 @@ import {
   CheckCircle,
   Package,
   RefreshCw,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -55,6 +57,7 @@ import {
   UnifiedOrderStatusBadge,
   UnifiedStatusSelector,
   UNIFIED_STATUS_CONFIG,
+  UnifiedStatusKey,
   resolveUnifiedOrderStatus,
 } from "@/components/ui/status-badge";
 import { formatDate, formatMMK } from "@/lib/utils";
@@ -218,12 +221,12 @@ export default function OrdersPage() {
     );
   };
 
-  const handleBatchStatus = (status: OrderStatus) => {
+  const handleBatchUnifiedStatus = (status: UnifiedStatusKey) => {
     if (selectedOrderIds.length === 0) return;
     selectedOrderIds.forEach((id) => {
-      updateOrderStatus(id, status, `Batch fulfillment transition to ${status}`);
+      updateUnifiedStatus(id, status, `Batch status transition to ${status}`);
     });
-    toast.success(`Batch updated ${selectedOrderIds.length} orders to ${status}`);
+    toast.success(`Batch updated ${selectedOrderIds.length} orders to ${UNIFIED_STATUS_CONFIG[status].label}`);
     setSelectedOrderIds([]);
   };
 
@@ -550,20 +553,29 @@ export default function OrdersPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => handleBatchStatus("Confirmed")}
-            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg"
+            onClick={() => handleBatchUnifiedStatus("paid")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
           >
             <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-400" />
-            Set Confirmed
+            Set Paid
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => handleBatchStatus("Processing")}
-            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg"
+            onClick={() => handleBatchUnifiedStatus("pending")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
           >
-            <Package className="h-3.5 w-3.5 mr-1 text-sky-400" />
-            Set Processing
+            <Clock className="h-3.5 w-3.5 mr-1 text-amber-400" />
+            Set Pending
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleBatchUnifiedStatus("expired")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
+          >
+            <AlertCircle className="h-3.5 w-3.5 mr-1 text-slate-300" />
+            Set Expired
           </Button>
           <Button
             size="sm"

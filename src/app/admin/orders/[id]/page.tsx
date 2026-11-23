@@ -46,15 +46,6 @@ import {
 } from "@/components/ui/status-badge";
 import { formatDateTime, formatMMK } from "@/lib/utils";
 
-const ALL_ORDER_STATUSES: OrderStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Expired",
-  "Cancelled",
-];
-
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
   const {

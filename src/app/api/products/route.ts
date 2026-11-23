@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     if (pageParam !== null || limitParam !== null || audience !== "storefront") {
       const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
       const limit = limitParam ? Math.min(10, Math.max(1, parseInt(limitParam, 10) || 10)) : 10;
-      const stock = (searchParams.get("stock") as "all" | "in" | "low" | "out") || undefined;
+      const stock = (searchParams.get("stock") as "all" | "in" | "low" | "out" | "alert") || undefined;
       const sortKey = (searchParams.get("sortKey") as "name" | "price" | "stock" | "createdAt" | null) || undefined;
       const sortDir = (searchParams.get("sortDir") as "asc" | "desc" | null) || undefined;
 

@@ -508,7 +508,7 @@ export class SupabaseStoreRepository implements StoreRepository {
     limit?: number;
     category?: string;
     status?: string;
-    stock?: "all" | "in" | "low" | "out";
+    stock?: "all" | "in" | "low" | "out" | "alert";
     q?: string;
     sortKey?: "name" | "price" | "stock" | "createdAt";
     sortDir?: "asc" | "desc";
@@ -548,6 +548,8 @@ export class SupabaseStoreRepository implements StoreRepository {
         query = query.gt("stock_quantity", 0).lte("stock_quantity", 10);
       } else if (params.stock === "in") {
         query = query.gt("stock_quantity", 10);
+      } else if (params.stock === "alert") {
+        query = query.lte("stock_quantity", 10);
       }
 
       if (params.q?.trim()) {

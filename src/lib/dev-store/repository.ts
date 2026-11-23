@@ -80,7 +80,7 @@ export interface StoreRepository {
     limit?: number;
     category?: string;
     status?: string;
-    stock?: "all" | "in" | "low" | "out";
+    stock?: "all" | "in" | "low" | "out" | "alert";
     q?: string;
     sortKey?: "name" | "price" | "stock" | "createdAt";
     sortDir?: "asc" | "desc";
@@ -327,7 +327,7 @@ export class JsonFileStoreRepository implements StoreRepository {
     limit?: number;
     category?: string;
     status?: string;
-    stock?: "all" | "in" | "low" | "out";
+    stock?: "all" | "in" | "low" | "out" | "alert";
     q?: string;
     sortKey?: "name" | "price" | "stock" | "createdAt";
     sortDir?: "asc" | "desc";
@@ -365,6 +365,8 @@ export class JsonFileStoreRepository implements StoreRepository {
         list = list.filter((p) => p.stock > 0 && p.stock <= p.lowStockThreshold);
       } else if (params.stock === "in") {
         list = list.filter((p) => p.stock > p.lowStockThreshold);
+      } else if (params.stock === "alert") {
+        list = list.filter((p) => p.stock <= p.lowStockThreshold).sort((a, b) => a.stock - b.stock);
       }
     }
     if (params.q?.trim()) {

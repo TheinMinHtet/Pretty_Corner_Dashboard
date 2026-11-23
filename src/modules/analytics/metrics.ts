@@ -7,6 +7,7 @@ import {
   PaymentStatus,
   Product,
 } from "@/types/admin";
+import { resolveUnifiedOrderStatus } from "@/components/ui/status-badge";
 
 export type DateRange = "7d" | "30d" | "6m";
 
@@ -177,13 +178,20 @@ export interface DashboardMetricsResult {
   totalOrders: number;
   ordersChange: number | null;
   pending: number;
-  processing: number;
-  completed: number;
+  paid: number;
+  expired: number;
+  failed: number;
   cancelled: number;
   pendingShare: number;
+  paidShare: number;
+  expiredShare: number;
+  failedShare: number;
+  cancelledShare: number;
+  /** Deprecated backwards-compatibility fields */
+  processing: number;
+  completed: number;
   processingShare: number;
   completedShare: number;
-  cancelledShare: number;
   avgOrderValue: number;
   paidPayments: number;
   pendingPayments: number;
@@ -210,17 +218,24 @@ export function computeDashboardMetrics(
   const previousRevenue = sumRevenue(previous);
   const billable = current.filter((o) => o.orderStatus !== "Cancelled");
 
-  const countBy = (status: OrderStatus) =>
-    current.filter((o) => o.orderStatus === status).length;
+  let pending = 0;
+  let paid = 0;
+  let expired = 0;
+  let failed = 0;
+  let cancelled = 0;
+
+  for (const o of current) {
+    const key = resolveUnifiedOrderStatus(o.orderStatus, o.paymentStatus, o.paymentMethod);
+    if (key === "paid") paid++;
+    else if (key === "pending") pending++;
+    else if (key === "expired") expired++;
+    else if (key === "failed") failed++;
+    else if (key === "cancelled") cancelled++;
+  }
 
   const totalOrders = current.length;
   const share = (count: number) =>
     totalOrders === 0 ? 0 : Math.round((count / totalOrders) * 100);
-
-  const pending = countBy("Pending");
-  const processing = countBy("Processing");
-  const completed = countBy("Shipped");
-  const cancelled = countBy("Cancelled");
 
   return {
     revenue,
@@ -229,19 +244,23 @@ export function computeDashboardMetrics(
     totalOrders,
     ordersChange: percentChange(totalOrders, previous.length),
     pending,
-    processing,
-    completed,
+    paid,
+    expired,
+    failed,
     cancelled,
     pendingShare: share(pending),
-    processingShare: share(processing),
-    completedShare: share(completed),
+    paidShare: share(paid),
+    expiredShare: share(expired),
+    failedShare: share(failed),
     cancelledShare: share(cancelled),
+    processing: 0,
+    processingShare: 0,
+    completed: paid,
+    completedShare: share(paid),
     avgOrderValue: billable.length > 0 ? revenue / billable.length : 0,
-    paidPayments: current.filter((o) => o.paymentStatus === "Paid").length,
-    pendingPayments: current.filter((o) => o.paymentStatus === "Pending").length,
-    failedPayments: current.filter(
-      (o) => o.paymentStatus === "Failed" || o.paymentStatus === "Expired"
-    ).length,
+    paidPayments: paid,
+    pendingPayments: pending,
+    failedPayments: failed + expired,
     topPayment: topShare(
       current
         .map((o) => o.paymentMethod)
@@ -540,10 +559,13 @@ function findProductForItem(
  */
 export function deriveTopSellingProducts(
   orders: Order[],
-  products: Product[],
-  { limit = 6, sortBy = "units" }: TopSellingOptions = {}
+  products: Product[] = [],
+  { limit = 10, sortBy = "units" }: TopSellingOptions = {}
 ): TopSellingProduct[] {
-  const productMetrics = new Map<string, { unitsSold: number; revenue: number }>();
+  const productMetrics = new Map<
+    string,
+    { product: Product; unitsSold: number; revenue: number }
+  >();
 
   for (const order of revenueOrders(orders)) {
     for (const item of order.items || []) {
@@ -551,28 +573,44 @@ export function deriveTopSellingProducts(
       if (quantity <= 0) continue;
 
       const matchedProduct = findProductForItem(item, products);
-      if (!matchedProduct) continue;
+      const productKey = matchedProduct?.id || item.productId || item.productName;
+      if (!productKey) continue;
 
-      const existing = productMetrics.get(matchedProduct.id) || {
-        unitsSold: 0,
-        revenue: 0,
-      };
-      existing.unitsSold += quantity;
-      existing.revenue += quantity * (Number(item.unitPrice) || 0);
-      productMetrics.set(matchedProduct.id, existing);
+      const existing = productMetrics.get(productKey);
+      if (existing) {
+        existing.unitsSold += quantity;
+        existing.revenue += quantity * (Number(item.unitPrice) || 0);
+      } else {
+        const fallbackProduct: Product = matchedProduct ?? {
+          id: item.productId || productKey,
+          slug: item.productId || productKey,
+          name: item.productName || "Product",
+          description: "",
+          categoryId: "",
+          brand: "Pretty Corner",
+          sku: item.sku || productKey,
+          regularPrice: Number(item.unitPrice) || 0,
+          images: item.productImage
+            ? [item.productImage]
+            : ["/assets/dew-drop-serum.png"],
+          stock: 0,
+          lowStockThreshold: 10,
+          status: "Active",
+          soldCount: 0,
+          createdAt: order.createdAt || new Date().toISOString(),
+          updatedAt: order.createdAt || new Date().toISOString(),
+        };
+
+        productMetrics.set(productKey, {
+          product: fallbackProduct,
+          unitsSold: quantity,
+          revenue: quantity * (Number(item.unitPrice) || 0),
+        });
+      }
     }
   }
 
-  const ranked: TopSellingProduct[] = [];
-  for (const [productId, metrics] of productMetrics) {
-    const product = products.find((p) => p.id === productId);
-    if (!product) continue;
-    ranked.push({
-      product,
-      unitsSold: metrics.unitsSold,
-      revenue: metrics.revenue,
-    });
-  }
+  const ranked: TopSellingProduct[] = Array.from(productMetrics.values());
 
   ranked.sort((a, b) =>
     sortBy === "revenue"

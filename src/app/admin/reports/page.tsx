@@ -27,6 +27,10 @@ import {
 import { useAdminStore } from "@/context/admin-store";
 import { Order, OrderStatus } from "@/types/admin";
 import {
+  resolveUnifiedOrderStatus,
+  UnifiedStatusKey,
+} from "@/components/ui/status-badge";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -61,13 +65,12 @@ import {
 } from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  Pending: "#F59E0B",
-  Confirmed: "#38BDF8",
-  Processing: "#A78BFA",
-  Shipped: "#10B981",
-  Expired: "#64748B",
-  Cancelled: "#F43F5E",
+const STATUS_COLORS: Record<UnifiedStatusKey, string> = {
+  paid: "#10B981",
+  pending: "#F59E0B",
+  expired: "#64748B",
+  cancelled: "#F43F5E",
+  failed: "#EF4444",
 };
 
 export default function SalesReportsPage() {
@@ -167,19 +170,25 @@ export default function SalesReportsPage() {
   }, [categories, products, rangeOrders]);
 
   const ordersByStatus = useMemo(() => {
-    const statuses: OrderStatus[] = [
-      "Pending",
-      "Confirmed",
-      "Processing",
-      "Shipped",
-      "Expired",
-      "Cancelled",
+    const statuses: { key: UnifiedStatusKey; label: string }[] = [
+      { key: "paid", label: "Paid" },
+      { key: "pending", label: "Pending" },
+      { key: "expired", label: "Time Expired" },
+      { key: "cancelled", label: "Cancelled" },
+      { key: "failed", label: "Failed" },
     ];
     return statuses
       .map((s) => ({
-        name: s,
-        value: rangeOrders.filter((o) => o.orderStatus === s).length,
-        color: STATUS_COLORS[s],
+        name: s.label,
+        value: rangeOrders.filter(
+          (o) =>
+            resolveUnifiedOrderStatus(
+              o.orderStatus,
+              o.paymentStatus,
+              o.paymentMethod
+            ) === s.key
+        ).length,
+        color: STATUS_COLORS[s.key],
       }))
       .filter((d) => d.value > 0);
   }, [rangeOrders]);
