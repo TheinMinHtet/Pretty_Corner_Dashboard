@@ -55,9 +55,15 @@ export function RevenueChartCard({
     <Card className="col-span-1 lg:col-span-2">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
         <div>
-          <CardTitle>Revenue Overview</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>Revenue Overview</CardTitle>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live
+            </span>
+          </div>
           <CardDescription>
-            Gross boutique sales for the {DATE_RANGE_LABELS[range]} in MMK
+            Gross boutique sales for the {DATE_RANGE_LABELS[range]} (updated live through Today) in MMK
           </CardDescription>
         </div>
       </CardHeader>
@@ -82,7 +88,9 @@ export function RevenueChartCard({
               dataKey="label"
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "#806B73", fontSize: 12 }}
+              minTickGap={24}
+              interval="preserveStartEnd"
+              tick={{ fill: "#806B73", fontSize: 11 }}
             />
             <YAxis
               tickLine={false}
@@ -92,13 +100,34 @@ export function RevenueChartCard({
               width={54}
             />
             <Tooltip
-              contentStyle={{
-                borderRadius: "12px",
-                border: "1px solid #F0E1E6",
-                boxShadow: "0 4px 12px rgba(51,39,44,0.08)",
-                fontSize: "12px",
+              content={({ active, payload }) => {
+                if (!active || !payload || !payload.length) return null;
+                const point = payload[0].payload as (typeof data)[0];
+                return (
+                  <div className="rounded-xl border border-[#F0E1E6] bg-white p-3 shadow-md text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
+                      <span>{point.shortDate || point.label}</span>
+                      {point.isToday && (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Today · Live
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[#806B73]">
+                      Revenue:{" "}
+                      <span className="font-bold text-[#B73D67]">
+                        {formatMMK(point.revenue)}
+                      </span>
+                    </p>
+                    <p className="text-[#806B73]">
+                      Orders:{" "}
+                      <span className="font-bold text-[#38262E]">
+                        {point.orders}
+                      </span>
+                    </p>
+                  </div>
+                );
               }}
-              formatter={(value) => [formatMMK(Number(value ?? 0)), "Revenue"]}
             />
             <Area
               type="monotone"
@@ -130,9 +159,15 @@ export function OrdersTrendCard({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle>Orders Over Time</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle>Orders Over Time</CardTitle>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live
+          </span>
+        </div>
         <CardDescription>
-          Order volume over the {DATE_RANGE_LABELS[range]}
+          Order volume over the {DATE_RANGE_LABELS[range]} (updated live through Today)
         </CardDescription>
       </CardHeader>
       <CardContent className="h-[240px] pt-2">
@@ -147,6 +182,8 @@ export function OrdersTrendCard({
               dataKey="label"
               tickLine={false}
               axisLine={false}
+              minTickGap={16}
+              interval="preserveStartEnd"
               tick={{ fill: "#806B73", fontSize: 11 }}
             />
             <YAxis
@@ -155,19 +192,47 @@ export function OrdersTrendCard({
               tick={{ fill: "#806B73", fontSize: 11 }}
             />
             <Tooltip
-              contentStyle={{
-                borderRadius: "12px",
-                border: "1px solid #F0E1E6",
-                fontSize: "12px",
+              content={({ active, payload }) => {
+                if (!active || !payload || !payload.length) return null;
+                const point = payload[0].payload as (typeof data)[0];
+                return (
+                  <div className="rounded-xl border border-[#F0E1E6] bg-white p-2.5 shadow-md text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
+                      <span>{point.shortDate || point.label}</span>
+                      {point.isToday && (
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Today · Live
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[#806B73]">
+                      Orders:{" "}
+                      <span className="font-bold text-[#38262E]">
+                        {point.orders}
+                      </span>
+                    </p>
+                    <p className="text-[#806B73]">
+                      Revenue:{" "}
+                      <span className="font-bold text-[#B73D67]">
+                        {formatMMK(point.revenue)}
+                      </span>
+                    </p>
+                  </div>
+                );
               }}
-              formatter={(value) => [`${value ?? 0} orders`, "Orders"]}
             />
             <Bar
               dataKey="orders"
-              fill="#E99AB5"
-              radius={[6, 6, 0, 0]}
-              maxBarSize={32}
-            />
+              radius={[4, 4, 0, 0]}
+              maxBarSize={range === "30d" ? 22 : 36}
+            >
+              {data.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.isToday ? "#B73D67" : "#E99AB5"}
+                />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

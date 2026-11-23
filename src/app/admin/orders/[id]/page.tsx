@@ -20,6 +20,8 @@ import {
   Truck,
   Navigation,
   RotateCcw,
+  AlertCircle,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -53,6 +55,7 @@ import {
 import {
   OrderStatusBadge,
   PaymentStatusBadge,
+  UnifiedOrderStatusBadge,
 } from "@/components/ui/status-badge";
 import { formatDateTime, formatMMK, cn } from "@/lib/utils";
 
@@ -122,16 +125,60 @@ export default function OrderDetailsPage() {
     );
   }
 
-  const handleUpdateStatus = () => {
-    if (selectedStatus === "Cancelled" && order.orderStatus !== "Cancelled") {
-      const confirmed = window.confirm(
-        "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
+  const itemsSum = order.items.reduce(
+    (sum, it) => sum + (it.unitPrice || 0) * (it.quantity || 0),
+    0
+  );
+  const displaySubtotal = order.subtotal > 0 ? order.subtotal : itemsSum;
+  const displayDeliveryFee = order.deliveryFee ?? 0;
+  const effectiveDiscount =
+    order.discountAmount && order.discountAmount > 0
+      ? order.discountAmount
+      : Math.max(0, (displaySubtotal + displayDeliveryFee) - order.total);
+
+  const handleMarkDeliveredAndPaid = () => {
+    updateOrderStatus(order.id, "Delivered");
+    updatePaymentStatus(order.id, "Paid");
+    toast.success(`Order ${order.reference} marked as Delivered & Paid! 🎉`);
+  };
+
+  const handleMarkDelivered = () => {
+    updateOrderStatus(order.id, "Delivered");
+    toast.success(`Order ${order.reference} marked as Delivered! 🎉`);
+  };
+
+  const handleCancelOrder = () => {
+    const confirmed = window.confirm(
+      "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
+    );
+    if (!confirmed) return;
+    updateOrderStatus(order.id, "Cancelled", "Cancelled by admin");
+    toast.error(`Order ${order.reference} cancelled and stock restored`);
+  };
+
+  const handleToggleFailedPayment = () => {
+    if (order.paymentStatus !== "Failed") {
+      const defaultReason =
+        order.paymentMethod === "Cash on Delivery"
+          ? "Customer refused parcel upon delivery"
+          : "Payment gateway transaction failed";
+      const reason = window.prompt(
+        "Optional note or reason for payment failure (e.g., Customer rejected parcel / Card declined):",
+        defaultReason
       );
-      if (!confirmed) return;
+      if (reason === null) return;
+      updatePaymentStatus(order.id, "Failed");
+      toast.error(`Order ${order.reference} payment marked as Failed`);
+    } else {
+      const restoredStatus: PaymentStatus =
+        order.orderStatus === "Delivered" || order.paymentMethod !== "Cash on Delivery"
+          ? "Paid"
+          : "Pending";
+      updatePaymentStatus(order.id, restoredStatus);
+      toast.success(
+        `Payment reactivated and restored to ${restoredStatus}`
+      );
     }
-    updateOrderStatus(order.id, selectedStatus, statusNote.trim() || undefined);
-    setStatusNote("");
-    toast.success(`Order ${order.reference} updated to ${selectedStatus}`);
   };
 
   const handleProcessRefund = () => {
@@ -194,63 +241,134 @@ export default function OrderDetailsPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="divide-y divide-[#F0E1E6]">
-                {order.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-4 py-3 first:pt-0"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Image
-                        src={item.productImage}
-                        alt={item.productName}
-                        width={56}
-                        height={56}
-                        className="h-14 w-14 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[#33272C] truncate">
-                          {item.productName}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-[#806B73]">
-                          <span>SKU: {item.sku}</span>
-                          {item.variantLabel && (
-                            <span className="rounded-md bg-[#FCEEF2] px-2 py-0.5 text-[11px] font-medium text-[#D96B91]">
-                              {item.variantLabel}
-                            </span>
-                          )}
+                {order.items.map((item) => {
+                  const hasDiscount = (item.discountAmount ?? 0) > 0;
+                  const itemSubtotal = item.unitPrice * item.quantity;
+                  const itemFinal = Math.max(0, itemSubtotal - (item.discountAmount ?? 0));
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-4 py-3 first:pt-0"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Image
+                          src={item.productImage}
+                          alt={item.productName}
+                          width={56}
+                          height={56}
+                          className="h-14 w-14 rounded-xl border border-[#F0E1E6] object-cover shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#33272C] truncate">
+                            {item.productName}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-[#806B73]">
+                            <span>SKU: {item.sku}</span>
+                            {item.variantLabel && (
+                              <span className="rounded-md bg-[#FCEEF2] px-2 py-0.5 text-[11px] font-medium text-[#D96B91]">
+                                {item.variantLabel}
+                              </span>
+                            )}
+                            {hasDiscount ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                ✨ Promo Applied {order.promoCode ? `(${order.promoCode})` : ""} (-{formatMMK(item.discountAmount!)})
+                              </span>
+                            ) : order.promoCode ? (
+                              <span className="inline-flex items-center rounded-md bg-stone-50 border border-stone-200 px-2 py-0.5 text-[11px] font-normal text-stone-500">
+                                Regular Item
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
+                      <div className="text-right shrink-0">
+                        {hasDiscount ? (
+                          <>
+                            <p className="text-sm font-semibold text-emerald-600">
+                              {formatMMK(itemFinal)}
+                            </p>
+                            <p className="text-xs text-[#806B73] line-through">
+                              {formatMMK(itemSubtotal)}
+                            </p>
+                            <p className="text-[11px] text-[#806B73]">
+                              {item.quantity} × {formatMMK(item.unitPrice)}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-[#33272C]">
+                              {formatMMK(itemSubtotal)}
+                            </p>
+                            <p className="text-xs text-[#806B73]">
+                              {item.quantity} × {formatMMK(item.unitPrice)}
+                            </p>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold text-[#33272C]">
-                        {formatMMK(item.unitPrice * item.quantity)}
-                      </p>
-                      <p className="text-xs text-[#806B73]">
-                        {item.quantity} × {formatMMK(item.unitPrice)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Totals Breakdown */}
               <div className="rounded-xl bg-[#FDF6F8] border border-[#F0E1E6] p-4 space-y-2 text-sm">
+                {order.promoCode && effectiveDiscount > 0 && (
+                  <div className="space-y-1.5 pb-2 mb-2 border-b border-[#F0E1E6]/70 text-xs">
+                    <div className="flex justify-between text-[#806B73]">
+                      <span>Promotional Items Subtotal</span>
+                      <span>
+                        {formatMMK(
+                          order.items
+                            .filter((it) => (it.discountAmount ?? 0) > 0)
+                            .reduce((s, it) => s + it.unitPrice * it.quantity, 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <span>Promotion Discount</span>
+                        <span className="rounded-md bg-emerald-100/80 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold">
+                          {order.promoCode}
+                        </span>
+                      </span>
+                      <span>-{formatMMK(effectiveDiscount)}</span>
+                    </div>
+                    <div className="flex justify-between text-[#806B73]">
+                      <span>Regular Items Subtotal</span>
+                      <span>
+                        {formatMMK(
+                          order.items
+                            .filter((it) => (it.discountAmount ?? 0) === 0)
+                            .reduce((s, it) => s + it.unitPrice * it.quantity, 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between text-[#806B73]">
                   <span>Subtotal</span>
-                  <span>{formatMMK(order.subtotal)}</span>
+                  <span>{formatMMK(displaySubtotal)}</span>
                 </div>
                 <div className="flex justify-between text-[#806B73]">
                   <span>Delivery Fee</span>
                   <span>
-                    {order.deliveryFee === 0
+                    {displayDeliveryFee === 0
                       ? "Free"
-                      : formatMMK(order.deliveryFee)}
+                      : formatMMK(displayDeliveryFee)}
                   </span>
                 </div>
-                {order.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Discount</span>
-                    <span>-{formatMMK(order.discountAmount)}</span>
+                {effectiveDiscount > 0 && (
+                  <div className="flex justify-between items-center text-emerald-600 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <span>Discount Deduction</span>
+                      {order.promoCode && (
+                        <span className="rounded-md bg-emerald-100/80 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 text-[11px] font-semibold">
+                          {order.promoCode}
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-semibold">-{formatMMK(effectiveDiscount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-[#F0E1E6] pt-2 text-base font-bold text-[#33272C]">
@@ -300,44 +418,273 @@ export default function OrderDetailsPage() {
 
         {/* Right Column: Actions + Customer + Delivery + Payment */}
         <div className="space-y-5">
-          {/* Admin Status Control */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Update Order Status</CardTitle>
-              <CardDescription>
-                Advance fulfillment stage or record a status note
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Order Status</Label>
-                <Select
-                  value={selectedStatus}
-                  onValueChange={(v) => setSelectedStatus(v as OrderStatus)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ALL_ORDER_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Note (optional)</Label>
-                <Input
-                  value={statusNote}
-                  onChange={(e) => setStatusNote(e.target.value)}
-                  placeholder="e.g., Handed to Royal Express rider"
+          {/* Unified Order & Payment Status Card */}
+          <Card className="rounded-[32px] border-[#F0E1E6] overflow-hidden">
+            <CardHeader className="pb-3 border-b border-[#F0E1E6]/60">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-bold text-[#33272C] flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-[#D96B91]" />
+                  Order & Payment Status
+                </CardTitle>
+                <UnifiedOrderStatusBadge
+                  orderStatus={order.orderStatus}
+                  paymentStatus={order.paymentStatus}
+                  paymentMethod={order.paymentMethod}
                 />
               </div>
-              <Button onClick={handleUpdateStatus} className="w-full">
-                Save Status Update
-              </Button>
+              <CardDescription>
+                Unified 1-click status & payment collection
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4">
+              {/* Dynamic Status Banner */}
+              {order.paymentStatus === "Failed" ? (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50 p-3.5 space-y-1">
+                  <p className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-rose-600" />
+                    Payment / Delivery Failed
+                  </p>
+                  <p className="text-[11px] text-rose-800">
+                    Delivery refused by customer or transaction declined.
+                  </p>
+                </div>
+              ) : order.orderStatus === "Cancelled" ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3.5 space-y-1">
+                  <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 text-rose-600" />
+                    Order Cancelled
+                  </p>
+                  <p className="text-[11px] text-rose-700">
+                    All items have been restored to inventory.
+                  </p>
+                </div>
+              ) : order.orderStatus === "Delivered" ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      Delivered & Paid
+                    </p>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
+                      Completed
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    {order.paymentMethod === "Cash on Delivery"
+                      ? "Cash collected upon delivery"
+                      : "Delivered to customer · Paid upfront"}
+                  </p>
+                </div>
+              ) : order.paymentMethod === "Cash on Delivery" ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      Pending Delivery (COD)
+                    </p>
+                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full">
+                      {formatMMK(order.total)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800">
+                    Collect cash when handoff to customer completes.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      Paid upfront ({order.paymentMethod})
+                    </p>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
+                      In Transit
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700">
+                    Payment confirmed. Hand parcel to customer upon delivery.
+                  </p>
+                </div>
+              )}
+
+              {/* THE ONE BUTTON */}
+              {order.orderStatus !== "Delivered" && order.orderStatus !== "Cancelled" && (
+                order.paymentMethod === "Cash on Delivery" ? (
+                  <Button
+                    onClick={handleMarkDeliveredAndPaid}
+                    className="w-full h-12 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span>Mark Delivered & Paid</span>
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleMarkDelivered}
+                    className="w-full h-12 text-sm font-bold bg-[#D96B91] hover:bg-[#c2567c] text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span>Mark as Delivered</span>
+                  </Button>
+                )
+              )}
+
+              {/* 1-Click Failed Toggle */}
+              {order.paymentStatus !== "Failed" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleFailedPayment}
+                  className="w-full h-9 text-xs rounded-xl border-rose-200 text-rose-700 bg-rose-50/40 hover:bg-rose-100/70 hover:text-rose-800 flex items-center justify-center gap-1.5 cursor-pointer font-medium"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                  Mark as Failed / Refused
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleFailedPayment}
+                  className="w-full h-9 text-xs rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer font-semibold shadow-xs"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  Re-activate Order (Restore to {order.orderStatus === "Delivered" || order.paymentMethod !== "Cash on Delivery" ? "Paid" : "Pending"})
+                </Button>
+              )}
+
+              {/* Gateway Provider & Transaction Reference */}
+              <div className="rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#33272C] flex items-center gap-1.5">
+                    <ReceiptText className="h-3.5 w-3.5 text-[#D96B91]" />
+                    Payment Reference
+                  </span>
+                  {!isEditingTrx && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTrxInput(order.transactionReference || "");
+                        setIsEditingTrx(true);
+                      }}
+                      className="text-[11px] font-medium text-[#D96B91] hover:underline cursor-pointer"
+                    >
+                      {order.transactionReference ? "Edit" : "+ Record Trx"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#806B73]">Method:</span>
+                  <span className="font-semibold text-[#33272C]">{order.paymentMethod}</span>
+                </div>
+
+                {isEditingTrx ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input
+                      value={trxInput}
+                      onChange={(e) => setTrxInput(e.target.value)}
+                      placeholder="e.g. KBZ-TRX-12345678"
+                      className="h-8 text-xs rounded-xl border-[#F0E1E6]"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs rounded-xl bg-[#D96B91] hover:bg-[#c2567c] text-white"
+                      onClick={() => {
+                        updatePaymentReference(order.id, trxInput.trim());
+                        setIsEditingTrx(false);
+                        toast.success("Payment transaction reference saved");
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs rounded-xl"
+                      onClick={() => setIsEditingTrx(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-[#33272C]">
+                      {order.transactionReference || (
+                        <span className="text-[#806B73] italic">
+                          No provider transaction reference recorded
+                        </span>
+                      )}
+                    </span>
+                    {order.transactionReference && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(order.transactionReference!);
+                          setCopiedTrx(true);
+                          toast.success("Copied transaction reference to clipboard");
+                          setTimeout(() => setCopiedTrx(false), 2000);
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] text-[#806B73] hover:text-[#D96B91] cursor-pointer"
+                        title="Copy reference"
+                      >
+                        {copiedTrx ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Refund Audit Section / Cancel Order */}
+              {order.refundDetails ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-rose-800 flex items-center gap-1.5">
+                      <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
+                      Refund Processed ({order.refundDetails.isFullRefund ? "Full" : "Partial"})
+                    </span>
+                    <span className="font-semibold text-rose-900 text-xs">
+                      {formatMMK(order.refundDetails.amount)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#806B73]">
+                    Reason: {order.refundDetails.reason} · Trx: {order.refundDetails.transactionReference}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 pt-1">
+                  {order.paymentStatus === "Paid" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRefundAmount(String(order.total));
+                        setIsRefundModalOpen(true);
+                      }}
+                      className="flex-1 text-xs h-8 rounded-xl border-[#F0E1E6] text-[#806B73] hover:text-[#D96B91] hover:bg-[#FCEEF2]"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1 text-[#D96B91]" />
+                      Process Refund
+                    </Button>
+                  )}
+                  {order.orderStatus !== "Cancelled" && order.orderStatus !== "Delivered" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCancelOrder}
+                      className="text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50"
+                    >
+                      Cancel Order
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -441,170 +788,6 @@ export default function OrderDetailsPage() {
                       {order.deliveryInstructions}
                     </p>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Payment Information & Gateway Settlement (Section 5) */}
-          <Card className="rounded-[32px] border-[#F0E1E6]">
-            <CardHeader className="pb-3 border-b border-[#F0E1E6]/60">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CreditCard className="h-4 w-4 text-[#D96B91]" />
-                Payment & Gateway Settlement
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs pt-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[#806B73]">Payment Provider / Method</span>
-                <span className="font-semibold text-[#33272C] text-sm">
-                  {order.paymentMethod}
-                </span>
-              </div>
-
-              {/* Gateway Transaction Reference (Gap 7) */}
-              <div className="rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#33272C] flex items-center gap-1.5">
-                    <ReceiptText className="h-3.5 w-3.5 text-[#D96B91]" />
-                    Gateway Transaction Reference
-                  </span>
-                  {!isEditingTrx && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTrxInput(order.transactionReference || "");
-                        setIsEditingTrx(true);
-                      }}
-                      className="text-[11px] font-medium text-[#D96B91] hover:underline cursor-pointer"
-                    >
-                      {order.transactionReference ? "Edit" : "+ Record Reference"}
-                    </button>
-                  )}
-                </div>
-
-                {isEditingTrx ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <Input
-                      value={trxInput}
-                      onChange={(e) => setTrxInput(e.target.value)}
-                      placeholder="e.g. KBZ-TRX-12345678"
-                      className="h-8 text-xs rounded-xl border-[#F0E1E6]"
-                    />
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs rounded-xl bg-[#D96B91] hover:bg-[#c2567c] text-white"
-                      onClick={() => {
-                        updatePaymentReference(order.id, trxInput.trim());
-                        setIsEditingTrx(false);
-                        toast.success("Payment transaction reference saved");
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs rounded-xl"
-                      onClick={() => setIsEditingTrx(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-[#33272C]">
-                      {order.transactionReference || (
-                        <span className="text-[#806B73] italic">
-                          No provider transaction reference recorded
-                        </span>
-                      )}
-                    </span>
-                    {order.transactionReference && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(order.transactionReference!);
-                          setCopiedTrx(true);
-                          toast.success("Copied transaction reference to clipboard");
-                          setTimeout(() => setCopiedTrx(false), 2000);
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] text-[#806B73] hover:text-[#D96B91] cursor-pointer"
-                        title="Copy reference"
-                      >
-                        {copiedTrx ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Payment Status</Label>
-                <Select
-                  value={order.paymentStatus}
-                  onValueChange={(v) => {
-                    if (v === "Refunded") {
-                      setIsRefundModalOpen(true);
-                      return;
-                    }
-                    updatePaymentStatus(order.id, v as PaymentStatus);
-                    toast.success(`Payment status set to ${v}`);
-                  }}
-                >
-                  <SelectTrigger className="h-10 rounded-xl border-[#F0E1E6]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ALL_PAYMENT_STATUSES.map((ps) => (
-                      <SelectItem key={ps} value={ps}>
-                        {ps}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Refund Audit Section (PC-OM-009) */}
-              {order.refundDetails ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-2 mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-rose-800 flex items-center gap-1.5">
-                      <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
-                      Refund Processed ({order.refundDetails.isFullRefund ? "Full" : "Partial"})
-                    </span>
-                    <span className="font-semibold text-rose-900 text-xs">
-                      {formatMMK(order.refundDetails.amount)}
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-[11px] text-[#33272C]">
-                    <p><span className="text-[#806B73]">Reason:</span> {order.refundDetails.reason}</p>
-                    <p><span className="text-[#806B73]">Voucher Trx:</span> <span className="font-mono">{order.refundDetails.transactionReference}</span></p>
-                    <p><span className="text-[#806B73]">Processed by:</span> {order.refundDetails.processedBy} · {formatDateTime(order.refundDetails.refundedAt)}</p>
-                    {order.refundDetails.notes && (
-                      <p><span className="text-[#806B73]">Notes:</span> {order.refundDetails.notes}</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setRefundAmount(String(order.total));
-                      setIsRefundModalOpen(true);
-                    }}
-                    className="w-full text-xs h-9 rounded-xl border-dashed border-[#F0E1E6] text-[#806B73] hover:text-[#D96B91] hover:bg-[#FCEEF2]"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-[#D96B91]" />
-                    Process Customer Refund
-                  </Button>
                 </div>
               )}
             </CardContent>

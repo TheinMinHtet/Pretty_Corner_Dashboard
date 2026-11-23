@@ -51,50 +51,65 @@ export function filterOrdersByRange(
 
 export interface OrderSeriesPoint {
   label: string;
+  shortDate?: string;
+  isToday?: boolean;
   revenue: number;
   orders: number;
 }
 
 /**
  * Builds revenue/order buckets straight from real orders:
- * daily for 7d, six-day blocks for 30d, calendar months for 6m.
+ * - 7d: 7 daily points ending on Today
+ * - 30d: 30 daily points ending on Today (enables smooth live curves without 6-day lagging blocks)
+ * - 6m: 6 calendar months ending on the current month
  */
 export function buildOrderSeries(
   orders: Order[],
   range: DateRange,
   now: Date = new Date()
 ): OrderSeriesPoint[] {
-  const buckets: { label: string; from: number; to: number }[] = [];
+  const buckets: {
+    label: string;
+    shortDate: string;
+    isToday: boolean;
+    from: number;
+    to: number;
+  }[] = [];
 
   if (range === "6m") {
     for (let i = 5; i >= 0; i -= 1) {
       const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      const isCurrentMonth = i === 0;
+      const monthLabel = start.toLocaleDateString("en-US", { month: "short" });
       buckets.push({
-        label: start.toLocaleDateString("en-US", { month: "short" }),
+        label: isCurrentMonth ? `${monthLabel} (Live)` : monthLabel,
+        shortDate: monthLabel,
+        isToday: isCurrentMonth,
         from: start.getTime(),
         to: end.getTime(),
       });
     }
   } else {
     const today = startOfDay(now).getTime();
-    const bucketCount = range === "7d" ? 7 : 5;
-    const bucketDays = range === "7d" ? 1 : 6;
+    // 7 days for 7d; 30 daily points for 30d (providing true live daily resolution)
+    const days = range === "7d" ? 7 : 30;
 
-    for (let i = bucketCount - 1; i >= 0; i -= 1) {
-      const endOffset = i * bucketDays;
-      const startOffset = endOffset + bucketDays - 1;
-      const start = today - startOffset * DAY_MS;
+    for (let i = days - 1; i >= 0; i -= 1) {
+      const dayStart = today - i * DAY_MS;
+      const dayEnd = dayStart + DAY_MS;
+      const isToday = i === 0;
+      const formattedDate = new Date(dayStart).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+
       buckets.push({
-        label:
-          range === "7d"
-            ? new Date(start).toLocaleDateString("en-US", { weekday: "short" })
-            : new Date(start).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              }),
-        from: start,
-        to: today - endOffset * DAY_MS + DAY_MS,
+        label: isToday ? "Today" : formattedDate,
+        shortDate: formattedDate,
+        isToday,
+        from: dayStart,
+        to: dayEnd,
       });
     }
   }
@@ -108,7 +123,13 @@ export function buildOrderSeries(
       .filter((order) => order.orderStatus !== "Cancelled")
       .reduce((sum, order) => sum + order.total, 0);
 
-    return { label: bucket.label, revenue, orders: inBucket.length };
+    return {
+      label: bucket.label,
+      shortDate: bucket.shortDate,
+      isToday: bucket.isToday,
+      revenue,
+      orders: inBucket.length,
+    };
   });
 }
 
@@ -295,17 +316,107 @@ export interface CategoryRevenueItem {
   name: string;
   revenue: number;
   color: string;
+  orderCount?: number;
 }
 
 export function computeCategorySales(
   categories: Category[],
   products: Product[],
-  palette: string[] = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"]
+  palette: string[] = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"],
+  orders?: Order[]
 ): CategoryRevenueItem[] {
+  // If orders are provided, compute authoritative category sales from actual order line items
+  if (orders && orders.length > 0) {
+    const totals = new Map<string, { revenue: number; orderCount: number }>();
+    let uncategorizedRevenue = 0;
+    let uncategorizedCount = 0;
+
+    for (const order of orders) {
+      if (order.orderStatus === "Cancelled") continue;
+
+      for (const item of order.items || []) {
+        const quantity = Number(item.quantity) || 1;
+        const unitPrice = Number(item.unitPrice) || 0;
+        const lineRev = quantity * unitPrice;
+
+        const matchedProduct = products.find((p) => {
+          if (item.productId && (p.id === item.productId || p.slug === item.productId)) {
+            return true;
+          }
+          if (
+            item.productName &&
+            p.name &&
+            p.name.trim().toLowerCase() === item.productName.trim().toLowerCase()
+          ) {
+            return true;
+          }
+          if (
+            item.productName &&
+            p.name &&
+            (p.name.toLowerCase().includes(item.productName.trim().toLowerCase()) ||
+              item.productName.toLowerCase().includes(p.name.trim().toLowerCase()))
+          ) {
+            return true;
+          }
+          return false;
+        });
+
+        if (matchedProduct) {
+          const targetCat = categories.find(
+            (c) =>
+              c.id === matchedProduct.categoryId ||
+              c.slug === matchedProduct.categoryId ||
+              c.name.trim().toLowerCase() === matchedProduct.categoryId.trim().toLowerCase()
+          );
+          const catKey = targetCat ? targetCat.id : matchedProduct.categoryId;
+          const current = totals.get(catKey) ?? { revenue: 0, orderCount: 0 };
+          totals.set(catKey, {
+            revenue: current.revenue + lineRev,
+            orderCount: current.orderCount + quantity,
+          });
+        } else {
+          uncategorizedRevenue += lineRev;
+          uncategorizedCount += quantity;
+        }
+      }
+    }
+
+    const result: CategoryRevenueItem[] = categories.map((cat, idx) => {
+      const stats =
+        totals.get(cat.id) ??
+        totals.get(cat.slug) ??
+        totals.get(cat.name) ?? { revenue: 0, orderCount: 0 };
+
+      return {
+        name: cat.name,
+        revenue: stats.revenue,
+        orderCount: stats.orderCount,
+        color: palette[idx % palette.length],
+      };
+    });
+
+    if (uncategorizedRevenue > 0) {
+      result.push({
+        name: "Other / Custom",
+        revenue: uncategorizedRevenue,
+        orderCount: uncategorizedCount,
+        color: palette[result.length % palette.length],
+      });
+    }
+
+    return result;
+  }
+
+  // Fallback when orders are not provided: derive from products soldCount
   return categories.map((cat, idx) => {
-    const catProducts = products.filter((p) => p.categoryId === cat.id);
+    const catProducts = products.filter(
+      (p) =>
+        p.categoryId === cat.id ||
+        p.categoryId === cat.slug ||
+        p.categoryId === cat.name
+    );
     const revenue = catProducts.reduce(
-      (sum, p) => sum + p.soldCount * (p.salePrice ?? p.regularPrice),
+      (sum, p) => sum + (p.soldCount || 0) * (p.salePrice ?? p.regularPrice),
       0
     );
     return {

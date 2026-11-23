@@ -13,13 +13,18 @@ import {
   Upload,
   X,
   Eye,
-  ZoomIn,
   Copy,
   Check,
+  Link2,
+  Layers,
+  Package,
+  Store,
+  FolderTree,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { Promotion } from "@/types/admin";
+import { Promotion, PromotionTargetType, RedemptionMethod } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +46,39 @@ const PRESET_BANNERS = [
   { label: "Beauty Banner", url: "/assets/hero.png" },
 ];
 
+const CATEGORY_OPTIONS = [
+  { value: "skincare", label: "Skincare" },
+  { value: "makeup", label: "Makeup & Cosmetics" },
+  { value: "electrical", label: "Electrical & Styling" },
+  { value: "lifestyle", label: "Lifestyle" },
+  { value: "lenses", label: "Contact Lenses" },
+  { value: "more", label: "More Finds" },
+];
+
+function deriveDestination(p: {
+  targetType?: string;
+  targetSlug?: string | null;
+  slug?: string | null;
+  code?: string;
+  featuredProductIds?: string[];
+}): string {
+  const codeParam = p.code ? `promo=${encodeURIComponent(p.code)}` : "";
+  const querySuffix = codeParam ? `?${codeParam}` : "";
+  switch (p.targetType) {
+    case "SINGLE_PRODUCT":
+      return p.targetSlug
+        ? `/shop?product=${encodeURIComponent(p.targetSlug)}${codeParam ? `&${codeParam}` : ""}`
+        : `/shop${querySuffix}`;
+    case "CATEGORY":
+      return p.targetSlug
+        ? `/shop?category=${encodeURIComponent(p.targetSlug)}${codeParam ? `&${codeParam}` : ""}`
+        : `/shop${querySuffix}`;
+    case "ENTIRE_STORE":
+    default:
+      return `/shop${querySuffix}`;
+  }
+}
+
 export default function PromotionsPage() {
   const {
     promotions,
@@ -57,10 +95,18 @@ export default function PromotionsPage() {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [code, setCode] = useState("");
+  const [slug, setSlug] = useState("");
   const [discountPercentage, setDiscountPercentage] = useState("15");
   const [startDate, setStartDate] = useState("2026-11-18");
   const [endDate, setEndDate] = useState("2026-12-18");
   const [active, setActive] = useState(true);
+  const [targetType, setTargetType] = useState<PromotionTargetType>("ENTIRE_STORE");
+  const [targetSlug, setTargetSlug] = useState("");
+  const [redemptionMethod, setRedemptionMethod] = useState<RedemptionMethod>("CODE");
+  const [usageLimit, setUsageLimit] = useState("");
+  const [minimumOrderAmount, setMinimumOrderAmount] = useState("");
+  const [isOutOfStock, setIsOutOfStock] = useState(false);
+  const [ctaText, setCtaText] = useState("");
   const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
   const [bannerImage, setBannerImage] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -98,10 +144,18 @@ export default function PromotionsPage() {
     setTitle("");
     setSubtitle("");
     setCode("");
+    setSlug("");
     setDiscountPercentage("15");
     setStartDate("2026-11-18");
     setEndDate("2026-12-18");
     setActive(true);
+    setTargetType("ENTIRE_STORE");
+    setTargetSlug("");
+    setRedemptionMethod("CODE");
+    setUsageLimit("");
+    setMinimumOrderAmount("");
+    setIsOutOfStock(false);
+    setCtaText("");
     setFeaturedProductIds([]);
     setBannerImage("/assets/hero-banner.jpg");
     setDialogOpen(true);
@@ -110,23 +164,29 @@ export default function PromotionsPage() {
   const openEdit = (p: Promotion) => {
     setEditing(p);
     setTitle(p.title);
-    setSubtitle(p.subtitle);
+    setSubtitle(p.subtitle || "");
     setCode(p.code);
+    setSlug(p.slug || "");
     setDiscountPercentage(String(p.discountPercentage));
     setStartDate(p.startDate);
     setEndDate(p.endDate);
     setActive(p.active);
-    setFeaturedProductIds(p.featuredProductIds);
+    setTargetType(p.targetType || "ENTIRE_STORE");
+    setTargetSlug(p.targetSlug || "");
+    setRedemptionMethod(p.redemptionMethod || "CODE");
+    setUsageLimit(
+      p.usageLimit !== undefined && p.usageLimit !== null ? String(p.usageLimit) : ""
+    );
+    setMinimumOrderAmount(
+      p.minimumOrderAmount !== undefined && p.minimumOrderAmount !== null
+        ? String(p.minimumOrderAmount)
+        : ""
+    );
+    setIsOutOfStock(Boolean(p.isOutOfStock));
+    setCtaText(p.ctaText || "");
+    setFeaturedProductIds(p.featuredProductIds || []);
     setBannerImage(p.bannerImage || "");
     setDialogOpen(true);
-  };
-
-  const toggleFeaturedProduct = (prodId: string) => {
-    setFeaturedProductIds((prev) =>
-      prev.includes(prodId)
-        ? prev.filter((id) => id !== prodId)
-        : [...prev, prodId]
-    );
   };
 
   const copyPromoCode = (promoCode: string) => {
@@ -138,6 +198,18 @@ export default function PromotionsPage() {
     }, 2000);
   };
 
+  const copyRouteUrl = (route: string) => {
+    navigator.clipboard.writeText(route);
+    toast.success(`Copied destination link "${route}"`);
+  };
+
+  const handleSelectTier = (newTier: PromotionTargetType) => {
+    setTargetType(newTier);
+    if (newTier === "ENTIRE_STORE") {
+      setTargetSlug("");
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const pct = Number(discountPercentage);
@@ -146,22 +218,52 @@ export default function PromotionsPage() {
       return;
     }
 
+    if (targetType === "SINGLE_PRODUCT" && !targetSlug.trim()) {
+      toast.error("Please pick a designated product for Single Product promotion");
+      return;
+    }
+
+    if (targetType === "CATEGORY" && !targetSlug.trim()) {
+      toast.error("Please select a target category");
+      return;
+    }
+
+    const autoSlug =
+      slug.trim() ||
+      title
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+
     const payload = {
       title: title.trim(),
       subtitle: subtitle.trim(),
       code: code.trim().toUpperCase(),
+      slug: autoSlug || null,
       discountPercentage: pct,
       startDate,
       endDate,
       active,
+      targetType,
+      targetSlug:
+        targetType === "SINGLE_PRODUCT" || targetType === "CATEGORY"
+          ? targetSlug.trim() || null
+          : null,
+      redemptionMethod,
+      usageLimit: usageLimit.trim() ? Number(usageLimit) : null,
+      minimumOrderAmount: minimumOrderAmount.trim() ? Number(minimumOrderAmount) : 0,
+      isOutOfStock,
+      ctaText: ctaText.trim() || null,
+      ctaLink: null,
       bannerColor: "#FCEEF2",
-      bannerImage: bannerImage.trim() || undefined,
-      featuredProductIds,
+      bannerImage: bannerImage.trim() || null,
+      featuredProductIds: [],
     };
 
     if (editing) {
       updatePromotion(editing.id, payload);
-      toast.success(`Updated promotion "${payload.title}"`);
+      toast.success(`Updated promotion "${payload.title}" to ${targetType.replace('_', ' ')}`);
     } else {
       addPromotion(payload);
       toast.success(`Created promotion "${payload.title}"`);
@@ -169,21 +271,28 @@ export default function PromotionsPage() {
     setDialogOpen(false);
   };
 
+  const currentPreviewDestination = deriveDestination({
+    targetType,
+    targetSlug,
+    slug: slug.trim() || (code.trim() ? code.trim().toLowerCase() : undefined),
+    code: code.trim().toUpperCase(),
+  });
+
   return (
     <div suppressHydrationWarning className="space-y-6">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 suppressHydrationWarning className="font-serif text-3xl font-bold tracking-tight text-[#33272C]">
+          <h2 suppressHydrationWarning className="font-serif text-3xl font-black tracking-tight text-[#33272C]">
             Promotions & Campaigns
           </h2>
           <p className="text-sm text-[#806B73] mt-1">
-            Curate high-impact seasonal boutique banners, discount codes, and hero product drops.
+            Curate high-impact seasonal boutique banners, discount codes, 4-tier target routing, and hero product drops.
           </p>
         </div>
         <Button
           onClick={openCreate}
-          className="rounded-full bg-[#B73D67] hover:bg-[#982F53] text-white px-5 shadow-sm transition-all duration-200"
+          className="rounded-full bg-[#B73D67] hover:bg-[#982F53] text-white px-5 shadow-sm transition-all duration-200 cursor-pointer"
         >
           <Plus className="h-4 w-4 mr-1.5" /> New Promotion
         </Button>
@@ -193,8 +302,9 @@ export default function PromotionsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {promotions.map((promo) => {
           const featuredItems = products.filter((p) =>
-            promo.featuredProductIds.includes(p.id)
+            (promo.featuredProductIds || []).includes(p.id)
           );
+          const destination = deriveDestination(promo);
 
           return (
             <Card
@@ -223,17 +333,28 @@ export default function PromotionsPage() {
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
 
-                    {/* Floating Badges (Floating on top, non-obscuring) */}
+                    {/* Floating Badges */}
                     <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between gap-2 pointer-events-none">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-black/65 backdrop-blur-md px-3 py-1 text-xs font-bold text-white shadow-sm border border-white/20">
-                        <Tag className="h-3 w-3 text-[#E99AB5]" />
-                        {promo.discountPercentage}% OFF
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-black/65 backdrop-blur-md px-3 py-1 text-xs font-bold text-white shadow-sm border border-white/20">
+                          <Tag className="h-3 w-3 text-[#E99AB5]" />
+                          {promo.discountPercentage}% OFF
+                        </span>
+                        {promo.isOutOfStock && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-600/90 backdrop-blur-md px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                            <AlertTriangle className="h-3 w-3" /> Depleted
+                          </span>
+                        )}
+                      </div>
                       <Badge
-                        variant={promo.active ? "success" : "secondary"}
+                        variant={promo.active && !promo.isOutOfStock ? "success" : "secondary"}
                         className="shadow-sm backdrop-blur-md"
                       >
-                        {promo.active ? "Campaign Live" : "Inactive"}
+                        {promo.isOutOfStock
+                          ? "Out of Stock"
+                          : promo.active
+                          ? "Campaign Live"
+                          : "Inactive"}
                       </Badge>
                     </div>
 
@@ -250,11 +371,22 @@ export default function PromotionsPage() {
                     style={{ backgroundColor: promo.bannerColor || "#FCEEF2" }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#B73D67] border border-[#F0E1E6] shadow-2xs">
-                        <Tag className="h-3 w-3" /> {promo.discountPercentage}% OFF
-                      </span>
-                      <Badge variant={promo.active ? "success" : "secondary"}>
-                        {promo.active ? "Campaign Live" : "Inactive"}
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-[#B73D67] border border-[#F0E1E6] shadow-2xs">
+                          <Tag className="h-3 w-3" /> {promo.discountPercentage}% OFF
+                        </span>
+                        {promo.isOutOfStock && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-bold text-rose-700 border border-rose-200">
+                            Depleted
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant={promo.active && !promo.isOutOfStock ? "success" : "secondary"}>
+                        {promo.isOutOfStock
+                          ? "Out of Stock"
+                          : promo.active
+                          ? "Campaign Live"
+                          : "Inactive"}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
@@ -306,6 +438,51 @@ export default function PromotionsPage() {
                     )}
                   </div>
 
+                  {/* 4-Tier Target Routing Badge & Destination Preview */}
+                  <div className="bg-[#FAF7F8] rounded-2xl p-3 border border-[#F0E1E6] space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="inline-flex items-center gap-1.5 font-bold text-[#33272C]">
+                        {promo.targetType === "SINGLE_PRODUCT" && (
+                          <>
+                            <Package className="h-3.5 w-3.5 text-[#B73D67]" />
+                            <span>Single Product: <span className="font-mono text-[#B73D67]">{promo.targetSlug || "Designated Item"}</span></span>
+                          </>
+                        )}
+                        {promo.targetType === "CATEGORY" && (
+                          <>
+                            <FolderTree className="h-3.5 w-3.5 text-[#B73D67]" />
+                            <span>Category: <span className="capitalize text-[#B73D67]">{promo.targetSlug || "All"}</span></span>
+                          </>
+                        )}
+                        {(!promo.targetType || promo.targetType === "ENTIRE_STORE") && (
+                          <>
+                            <Store className="h-3.5 w-3.5 text-[#B73D67]" />
+                            <span>Storewide Catalog</span>
+                          </>
+                        )}
+                      </span>
+
+                      <span className="text-[11px] font-medium text-[#806B73]">
+                        {promo.redemptionMethod === "AUTOMATIC" ? "Auto-Applied" : "Voucher Code"}
+                      </span>
+                    </div>
+
+                    {/* Derived Destination Route Chip */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F0E1E6]/70">
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#806B73] truncate">
+                        <Link2 className="h-3 w-3 text-[#B73D67] shrink-0" />
+                        <span className="font-mono text-[#38262E] truncate">{destination}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyRouteUrl(destination)}
+                        className="text-[11px] font-bold text-[#B73D67] hover:underline shrink-0 cursor-pointer"
+                      >
+                        Copy URL
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Metadata Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#806B73] pt-1 border-t border-[#F0E1E6]">
                     <span className="inline-flex items-center gap-1.5">
@@ -313,33 +490,22 @@ export default function PromotionsPage() {
                       {promo.startDate} → {promo.endDate}
                     </span>
                     <span className="font-medium">
-                      Used <strong className="text-[#33272C]">{promo.usageCount}</strong> times
+                      Quota:{" "}
+                      <strong className="text-[#33272C] font-mono">
+                        {promo.usageCount} / {promo.usageLimit !== undefined && promo.usageLimit !== null ? promo.usageLimit : "∞"}
+                      </strong>
                     </span>
                   </div>
 
-                  {/* Featured Products */}
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-[#806B73] mb-2 flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-[#B73D67]" /> Featured Drop Items (
-                      {featuredItems.length})
-                    </p>
-                    {featuredItems.length === 0 ? (
-                      <p className="text-xs text-[#806B73] italic">
-                        Applies storewide across eligible beauty items
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {featuredItems.map((fp) => (
-                          <span
-                            key={fp.id}
-                            className="rounded-full border border-[#F0E1E6] bg-[#FAF7F8] px-3 py-1 text-xs font-medium text-[#33272C]"
-                          >
-                            {fp.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* Minimum Order Threshold */}
+                  {promo.minimumOrderAmount ? (
+                    <div className="text-[11px] text-[#806B73] flex items-center justify-between">
+                      <span>Minimum Spend Requirement:</span>
+                      <strong className="text-[#38262E]">
+                        {promo.minimumOrderAmount.toLocaleString()} MMK
+                      </strong>
+                    </div>
+                  ) : null}
                 </CardContent>
               </div>
 
@@ -349,56 +515,36 @@ export default function PromotionsPage() {
                   <div className="flex items-center gap-2.5">
                     <Switch
                       checked={promo.active}
-                      onCheckedChange={(checked) => {
-                        updatePromotion(promo.id, { active: checked });
-                        toast.success(
-                          `Promotion "${promo.title}" ${checked ? "activated" : "paused"}`
-                        );
-                      }}
+                      onCheckedChange={(checked) =>
+                        updatePromotion(promo.id, { active: checked })
+                      }
                     />
-                    <span className="text-xs font-semibold text-[#806B73]">
-                      {promo.active ? "Campaign Live" : "Paused"}
+                    <span className="text-xs font-semibold text-[#33272C]">
+                      {promo.active ? "Active" : "Disabled"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    {promo.bannerImage && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          setLightboxData({
-                            imageUrl: promo.bannerImage!,
-                            title: promo.title,
-                            code: promo.code,
-                            discount: promo.discountPercentage,
-                          })
-                        }
-                        title="Enlarge image"
-                        className="rounded-full h-8 w-8 text-[#806B73] hover:text-[#33272C]"
-                      >
-                        <ZoomIn className="h-4 w-4" />
-                      </Button>
-                    )}
+
+                  <div className="flex items-center gap-1.5">
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={() => openEdit(promo)}
-                      aria-label="Edit promotion"
-                      className="rounded-full h-8 w-8 text-[#806B73] hover:text-[#33272C]"
+                      className="rounded-full h-8 px-3 text-xs text-[#33272C] hover:bg-[#FAF7F8] hover:text-[#B73D67]"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={() => {
-                        deletePromotion(promo.id);
-                        toast.success(`Deleted promotion "${promo.title}"`);
+                        if (confirm(`Delete promotion "${promo.title}"?`)) {
+                          deletePromotion(promo.id);
+                          toast.success("Promotion deleted");
+                        }
                       }}
-                      aria-label="Delete promotion"
-                      className="rounded-full h-8 w-8 text-rose-600 hover:bg-rose-50"
+                      className="rounded-full h-8 px-3 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                     </Button>
                   </div>
                 </div>
@@ -410,41 +556,36 @@ export default function PromotionsPage() {
 
       {/* Create / Edit Promotion Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto rounded-[32px] p-6">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-[32px] p-6 sm:p-8 bg-white border border-[#F0E1E6] shadow-2xl">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl font-bold text-[#33272C]">
-              {editing ? "Edit Promotion" : "Create New Promotion"}
+              {editing ? "Edit Promotion & Routing" : "Create New Promotion"}
             </DialogTitle>
             <DialogDescription className="text-xs text-[#806B73]">
-              Configure promotion banner visuals, discount percentages, promo codes, and campaign scheduling.
+              Configure promotional campaign targets, destination routing, coupon code, and multi-factor deactivation rules.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSave} className="space-y-5 pt-2">
-            {/* Dedicated Banner Image Section */}
-            <div className="rounded-[24px] border border-[#F0E1E6] bg-[#FAF7F8] p-5 space-y-4">
+          <form onSubmit={handleSave} className="space-y-5 pt-3">
+            {/* Banner Image Customizer */}
+            <div className="space-y-3 rounded-2xl bg-[#FAF7F8] p-4 border border-[#F0E1E6]">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold text-[#38262E] uppercase tracking-wider flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4 text-[#B73D67]" /> Promotion Banner Image
-                </Label>
-                {bannerImage && (
-                  <Badge variant="outline" className="text-[10px] text-[#B73D67] border-[#F1D3DF]">
-                    Image Active
-                  </Badge>
-                )}
+                <span className="text-xs font-bold text-[#38262E] flex items-center gap-1.5">
+                  <ImageIcon className="h-4 w-4 text-[#B73D67]" /> Banner Image Configuration
+                </span>
+                <span className="text-[11px] text-[#806B73]">Hero slide resolution (16:9 / 2:1)</span>
               </div>
 
-              {/* Upload & URL Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {/* Local File Upload Button */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-[#33272C]">Upload Local File</Label>
-                  <label className="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-[#F1D3DF] hover:border-[#B73D67] bg-white hover:bg-[#FCEEF2]/40 rounded-2xl p-4 text-xs font-semibold text-[#B73D67] cursor-pointer transition-colors text-center group">
-                    <Upload className="h-5 w-5 text-[#B73D67] transition-transform group-hover:-translate-y-0.5" />
-                    <span>Choose Banner Image</span>
-                    <span className="text-[10px] text-[#806B73] font-normal">
-                      PNG, JPG, WebP up to 5MB
-                    </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Upload Local File */}
+                <div>
+                  <Label className="text-xs font-medium text-[#33272C] block mb-1.5">
+                    Upload from Device
+                  </Label>
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#F0E1E6] rounded-xl p-3 bg-white hover:bg-[#FCEEF2]/50 hover:border-[#D96B91] cursor-pointer transition-colors group">
+                    <Upload className="h-5 w-5 text-[#806B73] group-hover:text-[#B73D67] mb-1 transition-colors" />
+                    <span className="text-xs font-semibold text-[#33272C]">Browse image</span>
+                    <span className="text-[10px] text-[#806B73]">PNG, JPG, WebP</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -525,6 +666,104 @@ export default function PromotionsPage() {
               )}
             </div>
 
+            {/* Target Tier Selection (4-Tier Routing Engine) */}
+            <div className="space-y-3 rounded-2xl bg-[#FAF7F8] p-4 border border-[#F0E1E6]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#38262E] flex items-center gap-1.5">
+                  <Layers className="h-4 w-4 text-[#B73D67]" /> Promotional Target Tier
+                </span>
+                <span className="text-[11px] text-[#806B73]">Governs destination routing and discount scope</span>
+              </div>
+
+              {/* Tier Selection Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  { id: "ENTIRE_STORE", label: "Storewide", desc: "Whole Catalog", icon: Store },
+                  { id: "CATEGORY", label: "Category", desc: "Specific Line", icon: FolderTree },
+                  { id: "SINGLE_PRODUCT", label: "Hero Item", desc: "Single Product", icon: Package },
+                ].map((tier) => {
+                  const isSelected = targetType === tier.id;
+                  const Icon = tier.icon;
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      onClick={() => handleSelectTier(tier.id as PromotionTargetType)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-[#B73D67] text-white border-[#B73D67] shadow-sm"
+                          : "bg-white text-[#33272C] border-[#F0E1E6] hover:bg-[#FCEEF2]/60"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <Icon className={`h-4 w-4 ${isSelected ? "text-white" : "text-[#B73D67]"}`} />
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <span className="text-xs font-bold leading-tight">{tier.label}</span>
+                      <span className={`text-[10px] ${isSelected ? "text-white/80" : "text-[#806B73]"}`}>
+                        {tier.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Dependent Entity Selectors based on Target Tier */}
+              {targetType === "CATEGORY" && (
+                <div className="space-y-1.5 pt-2">
+                  <Label className="text-xs font-bold text-[#38262E]">Choose Target Category</Label>
+                  <select
+                    value={targetSlug}
+                    onChange={(e) => setTargetSlug(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-[#F0E1E6] bg-white text-xs font-medium text-[#38262E] focus:outline-none focus:border-[#B73D67]"
+                  >
+                    <option value="">Select category...</option>
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label} ({c.value})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {targetType === "SINGLE_PRODUCT" && (
+                <div className="space-y-1.5 pt-2">
+                  <Label className="text-xs font-bold text-[#38262E]">Select Hero Product</Label>
+                  <select
+                    value={targetSlug}
+                    onChange={(e) => setTargetSlug(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-[#F0E1E6] bg-white text-xs font-medium text-[#38262E] focus:outline-none focus:border-[#B73D67]"
+                  >
+                    <option value="">Select a product...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.slug || p.id}>
+                        {p.name} ({p.sku}) — Stock: {p.stock}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Real-time Destination Route Preview Pill */}
+              <div className="mt-2 bg-white p-2.5 rounded-xl border border-[#F0E1E6] flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Link2 className="h-3.5 w-3.5 text-[#B73D67] shrink-0" />
+                  <span className="font-semibold text-[#806B73]">Derived Route:</span>
+                  <span className="font-mono text-[#33272C] truncate font-medium">
+                    {currentPreviewDestination}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyRouteUrl(currentPreviewDestination)}
+                  className="text-[11px] font-bold text-[#B73D67] hover:underline shrink-0 cursor-pointer"
+                >
+                  Copy Link
+                </button>
+              </div>
+            </div>
+
             {/* Campaign Details Form */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1.5 sm:col-span-2">
@@ -588,46 +827,71 @@ export default function PromotionsPage() {
                   className="rounded-xl"
                 />
               </div>
-            </div>
 
-            {/* Featured Products Selection */}
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-[#38262E]">
-                Featured Drop Items (optional)
-              </Label>
-              <div className="max-h-36 overflow-y-auto rounded-2xl border border-[#F0E1E6] p-2.5 space-y-1.5 bg-white">
-                {products.slice(0, 10).map((p) => {
-                  const selected = featuredProductIds.includes(p.id);
-                  return (
-                    <button
-                      type="button"
-                      key={p.id}
-                      onClick={() => toggleFeaturedProduct(p.id)}
-                      className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors cursor-pointer ${
-                        selected
-                          ? "bg-[#FCEEF2] text-[#B73D67] font-bold"
-                          : "hover:bg-[#FAF7F8] text-[#33272C]"
-                      }`}
-                    >
-                      <span className="truncate">{p.name}</span>
-                      <span>{selected ? "Selected" : "+ Add"}</span>
-                    </button>
-                  );
-                })}
+              {/* Usage Quota Limit */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-[#38262E]">Usage Quota Limit (optional)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={usageLimit}
+                  onChange={(e) => setUsageLimit(e.target.value)}
+                  placeholder="e.g. 50 (blank for unlimited)"
+                  className="rounded-xl"
+                />
+              </div>
+
+              {/* Minimum Order Threshold */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-[#38262E]">Min. Order Amount (MMK)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={500}
+                  value={minimumOrderAmount}
+                  onChange={(e) => setMinimumOrderAmount(e.target.value)}
+                  placeholder="e.g. 50000"
+                  className="rounded-xl"
+                />
+              </div>
+
+              {/* Custom CTA Label */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-bold text-[#38262E]">Custom CTA Label (optional)</Label>
+                <Input
+                  value={ctaText}
+                  onChange={(e) => setCtaText(e.target.value)}
+                  placeholder="e.g. Explore Collection"
+                  className="rounded-xl"
+                />
               </div>
             </div>
 
-            {/* Campaign Status Toggle */}
-            <div className="flex items-center justify-between rounded-2xl border border-[#F0E1E6] p-4 bg-[#FAF7F8]">
-              <div>
-                <span className="text-xs font-bold text-[#33272C] block">
-                  Active Campaign
-                </span>
-                <span className="text-[11px] text-[#806B73]">
-                  When active, this banner is visible across the storefront and eligible for customer checkouts.
-                </span>
+            {/* Campaign Out-of-stock & Live Status Toggles */}
+            <div className="space-y-2 rounded-2xl border border-[#F0E1E6] p-4 bg-[#FAF7F8]">
+              <div className="flex items-center justify-between pb-3 border-b border-[#F0E1E6]">
+                <div>
+                  <span className="text-xs font-bold text-[#33272C] block">
+                    Active Campaign
+                  </span>
+                  <span className="text-[11px] text-[#806B73]">
+                    When active, this banner is displayed in storefront hero rotation.
+                  </span>
+                </div>
+                <Switch checked={active} onCheckedChange={setActive} />
               </div>
-              <Switch checked={active} onCheckedChange={setActive} />
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <span className="text-xs font-bold text-[#33272C] block">
+                    Depleted / Out of Stock State
+                  </span>
+                  <span className="text-[11px] text-[#806B73]">
+                    Immediately pulls promotion from hero slider and blocks checkout redemptions.
+                  </span>
+                </div>
+                <Switch checked={isOutOfStock} onCheckedChange={setIsOutOfStock} />
+              </div>
             </div>
 
             <DialogFooter className="gap-2 pt-2">
@@ -635,13 +899,13 @@ export default function PromotionsPage() {
                 type="button"
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
-                className="rounded-full"
+                className="rounded-full cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                className="rounded-full bg-[#B73D67] hover:bg-[#982F53] text-white"
+                className="rounded-full bg-[#B73D67] hover:bg-[#982F53] text-white cursor-pointer"
               >
                 {editing ? "Save Changes" : "Create Promotion"}
               </Button>
@@ -677,7 +941,7 @@ export default function PromotionsPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setLightboxData(null)}
-                  className="rounded-full h-8 w-8 text-neutral-300 hover:text-white hover:bg-white/10"
+                  className="rounded-full h-8 w-8 text-neutral-300 hover:text-white hover:bg-white/10 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </Button>

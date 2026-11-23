@@ -112,6 +112,7 @@ interface AdminContextValue extends PersistedState {
   hydrated: boolean;
   globalSearch: string;
   setGlobalSearch: (q: string) => void;
+  refreshData: () => Promise<void>;
 
   // Authentication
   isAuthenticated: boolean;
@@ -277,10 +278,28 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (active) setHydrated(true);
       });
 
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void refreshFromApi();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    // Periodic sync every 30 seconds for live updates
+    const pollInterval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void refreshFromApi();
+      }
+    }, 30000);
+
     return () => {
       active = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      clearInterval(pollInterval);
     };
-  }, []);
+  }, [refreshFromApi]);
 
   const persistMutation = useCallback(
     async (url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => {
@@ -920,6 +939,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       markNotificationRead,
       markAllNotificationsRead,
       resetDemoData,
+      refreshData: refreshFromApi,
     }),
     [
       state,
@@ -948,6 +968,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       markNotificationRead,
       markAllNotificationsRead,
       resetDemoData,
+      refreshFromApi,
     ]
   );
 

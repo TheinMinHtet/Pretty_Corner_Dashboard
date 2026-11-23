@@ -130,6 +130,9 @@ export const CreateStorefrontOrderSchema = z.object({
   total: z.number().nonnegative(),
   paymentMethod: z.string().min(1),
   paymentStatus: z.enum(["paid", "pending", "failed", "expired"]).optional(),
+  promoCode: z.string().optional(),
+  discount: z.number().nonnegative().optional(),
+  appliedPromotionId: z.string().optional(),
 });
 
 export const UpdateOrderSchema = z.object({
@@ -156,7 +159,16 @@ export const StockAdjustmentRequestSchema = z.object({
   reason: z.string().min(1, "Reason is required"),
 });
 
+export const PromotionTargetTypeSchema = z.enum([
+  "SINGLE_PRODUCT",
+  "CATEGORY",
+  "ENTIRE_STORE",
+]);
+
+export const RedemptionMethodSchema = z.enum(["CODE", "AUTOMATIC"]);
+
 export const CreatePromotionSchema = z.object({
+  slug: z.string().optional(),
   title: z.string().min(1),
   subtitle: z.string().default(""),
   code: z.string().min(1),
@@ -164,12 +176,42 @@ export const CreatePromotionSchema = z.object({
   startDate: z.string().min(1),
   endDate: z.string().min(1),
   active: z.boolean().default(true),
+  targetType: PromotionTargetTypeSchema.default("ENTIRE_STORE"),
+  targetSlug: z.string().optional(),
+  redemptionMethod: RedemptionMethodSchema.default("CODE"),
+  usageLimit: z.number().int().positive().optional().nullable(),
+  minimumOrderAmount: z.number().nonnegative().default(0),
   bannerColor: z.string().default("#FCEEF2"),
   bannerImage: z.string().optional(),
+  bannerBadge: z.string().optional(),
+  ctaText: z.string().optional(),
+  ctaLink: z.string().optional(),
   featuredProductIds: z.array(z.string()).default([]),
+  isOutOfStock: z.boolean().default(false),
 });
 
-export const UpdatePromotionSchema = CreatePromotionSchema.partial();
+export const UpdatePromotionSchema = z.object({
+  slug: z.string().optional().nullable(),
+  title: z.string().min(1).optional(),
+  subtitle: z.string().optional().nullable(),
+  code: z.string().min(1).optional(),
+  discountPercentage: z.number().min(1).max(100).optional(),
+  startDate: z.string().min(1).optional(),
+  endDate: z.string().min(1).optional(),
+  active: z.boolean().optional(),
+  targetType: PromotionTargetTypeSchema.optional(),
+  targetSlug: z.string().optional().nullable(),
+  redemptionMethod: RedemptionMethodSchema.optional(),
+  usageLimit: z.number().int().positive().optional().nullable(),
+  minimumOrderAmount: z.number().nonnegative().optional().nullable(),
+  bannerColor: z.string().optional(),
+  bannerImage: z.string().optional().nullable(),
+  bannerBadge: z.string().optional().nullable(),
+  ctaText: z.string().optional().nullable(),
+  ctaLink: z.string().optional().nullable(),
+  featuredProductIds: z.array(z.string()).optional(),
+  isOutOfStock: z.boolean().optional(),
+});
 
 export function formatZodError(error: z.ZodError): string {
   return error.issues

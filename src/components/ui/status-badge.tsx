@@ -75,3 +75,30 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
 
   return <Badge variant={variantMap[status]}>{labelMap[status] ?? status}</Badge>;
 }
+
+export function UnifiedOrderStatusBadge({
+  orderStatus,
+  paymentStatus,
+  paymentMethod,
+}: {
+  orderStatus: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paymentMethod: string;
+}) {
+  if (paymentStatus === "Failed") {
+    return <Badge variant="destructive">Failed</Badge>;
+  }
+  if (paymentStatus === "Refunded") {
+    return <Badge variant="purple">Refunded</Badge>;
+  }
+  if (orderStatus === "Cancelled") {
+    return <Badge variant="destructive">Cancelled</Badge>;
+  }
+  if (orderStatus === "Delivered") {
+    return <Badge variant="success">Delivered & Paid</Badge>;
+  }
+  if (paymentMethod === "Cash on Delivery") {
+    return <Badge variant="warning">Pending COD</Badge>;
+  }
+  return <Badge variant="success">Paid · In Transit</Badge>;
+}

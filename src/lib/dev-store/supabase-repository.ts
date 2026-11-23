@@ -63,6 +63,7 @@ interface SbOrderItemRow {
   quantity: number;
   item_total: number;
   product_image: string | null;
+  discount_amount?: number | null;
   created_at: string;
 }
 
@@ -73,6 +74,8 @@ interface SbOrderRow {
   delivery_address: string;
   landmark_note: string | null;
   total_amount: number;
+  promo_code?: string | null;
+  discount_amount?: number | null;
   payment_method: string;
   payment_status: string;
   fulfillment_status: string;
@@ -97,6 +100,13 @@ interface SbPromotionRow {
   banner_badge: string | null;
   cta_text: string | null;
   cta_link: string | null;
+  slug?: string | null;
+  target_type?: string | null;
+  target_slug?: string | null;
+  redemption_method?: string | null;
+  usage_limit?: number | null;
+  minimum_order_amount?: number | null;
+  is_out_of_stock?: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +134,7 @@ function isUuid(str: string): boolean {
 function mapPromotionRow(row: SbPromotionRow): Promotion {
   return {
     id: row.id,
+    slug: row.slug ?? undefined,
     title: row.title,
     subtitle: row.subtitle ?? "",
     code: row.code,
@@ -131,12 +142,21 @@ function mapPromotionRow(row: SbPromotionRow): Promotion {
     startDate: row.start_date,
     endDate: row.end_date,
     active: row.is_active ?? true,
+    targetType: (row.target_type as Promotion["targetType"]) || "ENTIRE_STORE",
+    targetSlug: row.target_slug ?? undefined,
+    redemptionMethod: (row.redemption_method as Promotion["redemptionMethod"]) || "CODE",
+    usageLimit: row.usage_limit ? Number(row.usage_limit) : undefined,
+    usageCount: Number(row.usage_count) || 0,
+    minimumOrderAmount: row.minimum_order_amount ? Number(row.minimum_order_amount) : 0,
     bannerColor: "#FCEEF2",
     bannerImage: row.image_url ?? undefined,
+    bannerBadge: row.banner_badge ?? undefined,
+    ctaText: row.cta_text ?? undefined,
+    ctaLink: row.cta_link ?? undefined,
     featuredProductIds: Array.isArray(row.featured_product_ids)
       ? row.featured_product_ids
       : [],
-    usageCount: Number(row.usage_count) || 0,
+    isOutOfStock: row.is_out_of_stock ?? false,
   };
 }
 
@@ -291,16 +311,57 @@ function extractTownshipFromAddress(addr: string): string {
   return "Yangon";
 }
 
-function mapOrderRow(row: SbOrderRow): Order {
-  const items = (row.order_items ?? []).map((it) => ({
-    id: it.id,
-    productId: it.product_id || it.product_name,
-    productName: it.product_name,
-    productImage: it.product_image || "/assets/dew-drop-serum.png",
-    sku: "",
-    quantity: Number(it.quantity) || 1,
-    unitPrice: Number(it.unit_price) || 0,
-  }));
+function mapOrderRow(row: SbOrderRow, allProducts?: Product[]): Order {
+  const items = (row.order_items ?? []).map((it) => {
+    let resolvedProductId = it.product_id;
+    let resolvedProductName = it.product_name;
+    let resolvedImage = it.product_image;
+    let resolvedSku = "";
+
+    if (allProducts && allProducts.length > 0) {
+      const matched = allProducts.find((p) => {
+        if (it.product_id && (p.id === it.product_id || p.slug === it.product_id)) {
+          return true;
+        }
+        if (
+          it.product_name &&
+          p.name &&
+          p.name.trim().toLowerCase() === it.product_name.trim().toLowerCase()
+        ) {
+          return true;
+        }
+        if (
+          it.product_name &&
+          p.name &&
+          (p.name.toLowerCase().includes(it.product_name.trim().toLowerCase()) ||
+            it.product_name.toLowerCase().includes(p.name.trim().toLowerCase()))
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matched) {
+        resolvedProductId = matched.id;
+        resolvedProductName = matched.name;
+        resolvedSku = matched.sku || "";
+        if (!resolvedImage || resolvedImage === "/assets/dew-drop-serum.png") {
+          resolvedImage = matched.images[0] || resolvedImage;
+        }
+      }
+    }
+
+    return {
+      id: it.id,
+      productId: resolvedProductId || it.product_name,
+      productName: resolvedProductName,
+      productImage: resolvedImage || "/assets/dew-drop-serum.png",
+      sku: resolvedSku,
+      quantity: Number(it.quantity) || 1,
+      unitPrice: Number(it.unit_price) || 0,
+      discountAmount: Number(it.discount_amount) || 0,
+    };
+  });
 
   const subtotal = items.reduce(
     (sum, it) => sum + it.unitPrice * it.quantity,
@@ -309,6 +370,10 @@ function mapOrderRow(row: SbOrderRow): Order {
   const total = Number(row.total_amount) || subtotal;
   const orderStatus = mapOrderStatusFromSb(row.fulfillment_status);
   const normPhone = normalizePhoneNumber(row.phone);
+  const discountAmount =
+    row.discount_amount !== undefined && row.discount_amount !== null
+      ? Number(row.discount_amount)
+      : Math.max(0, (subtotal || total) - total);
 
   return {
     id: row.id,
@@ -324,7 +389,8 @@ function mapOrderRow(row: SbOrderRow): Order {
     items,
     subtotal: subtotal || total,
     deliveryFee: Math.max(0, total - (subtotal || total)),
-    discountAmount: 0,
+    discountAmount,
+    promoCode: row.promo_code ?? undefined,
     total,
     paymentMethod: mapPaymentMethodFromSb(row.payment_method),
     paymentStatus: mapPaymentStatusFromSb(row.payment_status),
@@ -651,7 +717,8 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (error) {
       throw new Error(`Supabase listOrders failed: ${error.message}`);
     }
-    return ((data ?? []) as SbOrderRow[]).map(mapOrderRow);
+    const products = await this.listProducts();
+    return ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row, products));
   }
 
   async getOrder(idOrRef: string): Promise<Order | null> {
@@ -663,7 +730,8 @@ export class SupabaseStoreRepository implements StoreRepository {
       .maybeSingle();
 
     if (error || !data) return null;
-    return mapOrderRow(data as SbOrderRow);
+    const products = await this.listProducts();
+    return mapOrderRow(data as SbOrderRow, products);
   }
 
   async createStorefrontOrder(input: StorefrontOrderCreateInput): Promise<Order> {
@@ -674,6 +742,9 @@ export class SupabaseStoreRepository implements StoreRepository {
       .slice(2, 10)
       .replace(/-/g, "")}-${rand}`;
 
+    const defaultPaymentStatus =
+      input.paymentMethod === "Cash on Delivery" ? "pending" : "paid";
+
     const { error: orderErr } = await sb.from("orders").insert({
       id: orderId,
       customer_name: input.customerName,
@@ -681,8 +752,10 @@ export class SupabaseStoreRepository implements StoreRepository {
       delivery_address: input.deliveryAddress,
       landmark_note: input.landmarkNote || null,
       total_amount: input.total,
+      promo_code: input.promoCode || null,
+      discount_amount: input.discountAmount || 0,
       payment_method: input.paymentMethod,
-      payment_status: input.paymentStatus ?? "pending",
+      payment_status: input.paymentStatus ?? defaultPaymentStatus,
       fulfillment_status: "pending_review",
       payment_slip_url: null,
     });
@@ -707,6 +780,7 @@ export class SupabaseStoreRepository implements StoreRepository {
         quantity: item.quantity,
         item_total: item.price * item.quantity,
         product_image: item.image || matched?.images[0] || null,
+        discount_amount: item.discountAmount || 0,
       };
     });
 
@@ -903,7 +977,7 @@ export class SupabaseStoreRepository implements StoreRepository {
     input: Omit<Promotion, "id" | "usageCount">
   ): Promise<Promotion> {
     const sb = getSupabaseClient();
-    const payload = {
+    const payload: Record<string, unknown> = {
       title: input.title,
       subtitle: input.subtitle || null,
       code: input.code.toUpperCase(),
@@ -913,7 +987,17 @@ export class SupabaseStoreRepository implements StoreRepository {
       is_active: input.active ?? true,
       usage_count: 0,
       image_url: input.bannerImage || null,
+      banner_badge: input.bannerBadge || null,
+      cta_text: input.ctaText || null,
+      cta_link: input.ctaLink || null,
       featured_product_ids: input.featuredProductIds || [],
+      slug: input.slug || null,
+      target_type: input.targetType || "ENTIRE_STORE",
+      target_slug: input.targetSlug || null,
+      redemption_method: input.redemptionMethod || "CODE",
+      usage_limit: input.usageLimit ?? null,
+      minimum_order_amount: input.minimumOrderAmount ?? 0,
+      is_out_of_stock: input.isOutOfStock ?? false,
     };
 
     const { data, error } = await sb
@@ -953,9 +1037,25 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (updates.bannerImage !== undefined) {
       patch.image_url = updates.bannerImage || null;
     }
+    if (updates.bannerBadge !== undefined) {
+      patch.banner_badge = updates.bannerBadge || null;
+    }
+    if (updates.ctaText !== undefined) {
+      patch.cta_text = updates.ctaText || null;
+    }
+    if (updates.ctaLink !== undefined) {
+      patch.cta_link = updates.ctaLink || null;
+    }
     if (updates.featuredProductIds !== undefined) {
       patch.featured_product_ids = updates.featuredProductIds;
     }
+    if (updates.slug !== undefined) patch.slug = updates.slug || null;
+    if (updates.targetType !== undefined) patch.target_type = updates.targetType;
+    if (updates.targetSlug !== undefined) patch.target_slug = updates.targetSlug || null;
+    if (updates.redemptionMethod !== undefined) patch.redemption_method = updates.redemptionMethod;
+    if (updates.usageLimit !== undefined) patch.usage_limit = updates.usageLimit ?? null;
+    if (updates.minimumOrderAmount !== undefined) patch.minimum_order_amount = updates.minimumOrderAmount;
+    if (updates.isOutOfStock !== undefined) patch.is_out_of_stock = updates.isOutOfStock;
     if (updates.usageCount !== undefined) patch.usage_count = updates.usageCount;
 
     let query = sb.from("promotions").update(patch);
