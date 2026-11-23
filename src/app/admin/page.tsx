@@ -199,10 +199,10 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C] tracking-tight">
-            Pretty Corner Overview
+            {t.overviewTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            Monitor daily sales, order fulfillment, and beauty inventory at a glance.
+            {t.overviewSubtitle}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -292,7 +292,7 @@ export default function AdminDashboardPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Sales Summary</CardTitle>
+                <CardTitle>{t.salesSummaryTitle}</CardTitle>
                 <CardDescription>
                   {localizedDateRangeLabels[range]}
                 </CardDescription>
@@ -519,7 +519,7 @@ export default function AdminDashboardPage() {
                 <AlertTriangle className="h-4 w-4 text-amber-500" /> {t.lowStockAlert}
               </CardTitle>
               <CardDescription>
-                Products at or below reorder threshold
+                {t.lowStockAlertDesc}
               </CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>

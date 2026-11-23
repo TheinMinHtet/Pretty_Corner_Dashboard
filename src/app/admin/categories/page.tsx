@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, FolderTree, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Category } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ type CategoryWithCount = Category & { productCount?: number };
 
 export default function CategoriesPage() {
   const { addCategory, updateCategory, deleteCategory } = useAdminStore();
+  const { t } = useLanguage();
 
   const [categories, setCategories] = useState<CategoryWithCount[]>([]);
   const [page, setPage] = useState(1);
@@ -133,14 +135,14 @@ export default function CategoriesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-            Categories
+            {t.categoriesPageTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            Organize Pretty Corner beauty collections and product departments.
+            {t.categoriesPageSubtitle}
           </p>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" /> Add Category
+          <Plus className="h-4 w-4" /> {t.addCategoryBtn}
         </Button>
       </div>
 
@@ -257,18 +259,16 @@ export default function CategoriesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editing ? "Edit Category" : "Add New Category"}
+              {editing ? t.editCategoryTitle : t.addNewCategoryTitle}
             </DialogTitle>
             <DialogDescription>
-              {editing
-                ? "Update category details and storefront visibility."
-                : "Create a new product department for catalog organization."}
+              {editing ? t.editCategoryDesc : t.addNewCategoryDesc}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cat-name">Category Name *</Label>
+              <Label htmlFor="cat-name">{t.categoryNameLabel}</Label>
               <Input
                 id="cat-name"
                 value={name}
@@ -279,7 +279,7 @@ export default function CategoriesPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cat-desc">Description</Label>
+              <Label htmlFor="cat-desc">{t.productDescriptionLabel}</Label>
               <Textarea
                 id="cat-desc"
                 value={description}
@@ -291,9 +291,9 @@ export default function CategoriesPage() {
 
             <div className="flex items-center justify-between rounded-lg border border-[#F0E1E6] p-3">
               <div className="space-y-0.5">
-                <Label htmlFor="cat-active">Active on Storefront</Label>
+                <Label htmlFor="cat-active">{t.activeOnStorefrontLabel}</Label>
                 <p className="text-xs text-[#806B73]">
-                  Inactive categories are hidden from the customer navigation menu.
+                  {t.activeOnStorefrontDesc}
                 </p>
               </div>
               <Switch
@@ -309,10 +309,10 @@ export default function CategoriesPage() {
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
               >
-                Cancel
+                {t.cancelBtn}
               </Button>
               <Button type="submit">
-                {editing ? "Save Changes" : "Create Category"}
+                {editing ? t.saveChangesBtn : t.createCategoryBtn}
               </Button>
             </DialogFooter>
           </form>

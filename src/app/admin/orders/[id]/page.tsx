@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { PaymentStatus } from "@/types/admin";
 import {
   Card,
@@ -45,6 +46,7 @@ export default function OrderDetailsPage() {
     updateUnifiedStatus,
     updatePaymentReference,
   } = useAdminStore();
+  const { t } = useLanguage();
   const order = orders.find((o) => o.id === params.id);
 
   // Payment Reference Editing state
@@ -155,7 +157,7 @@ export default function OrderDetailsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-4 w-4 text-[#D96B91]" />
-                Purchased Products ({order.items.length})
+                {t.purchasedProductsTitle} ({order.items.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -298,10 +300,10 @@ export default function OrderDetailsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-[#D96B91]" />
-                Order Status Timeline
+                {t.orderTimelineTitle}
               </CardTitle>
               <CardDescription>
-                Chronological history of order & fulfillment updates
+                {t.orderTimelineDesc}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -338,7 +340,7 @@ export default function OrderDetailsPage() {
             <div className="flex items-center justify-between pb-3 border-b border-[#F0E1E6]/70">
               <div>
                 <h3 className="text-sm font-bold text-[#38262E] tracking-tight">
-                  Order & Payment Status
+                  {t.orderPaymentStatusTitle}
                 </h3>
                 <p className="text-[11px] text-[#7A6870] mt-0.5">
                   Fulfillment & payment reconciliation
@@ -580,7 +582,7 @@ export default function OrderDetailsPage() {
           {/* Customer Information */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Customer Information</CardTitle>
+              <CardTitle>{t.customerInfoTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2.5 text-sm">
               <p className="font-semibold text-[#33272C]">

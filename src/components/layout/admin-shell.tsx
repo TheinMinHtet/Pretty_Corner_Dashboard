@@ -156,10 +156,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     [inventoryStats]
   );
 
-  const unreadNotifications = useMemo(
-    () => notifications.filter((n) => !n.read).length,
+  const visibleNotifications = useMemo(
+    () => notifications.filter((n) => !n.read),
     [notifications]
   );
+
+  const unreadNotifications = visibleNotifications.length;
 
   const breadcrumbs = useMemo(() => {
     const segments = pathname.split("/").filter(Boolean);
@@ -514,12 +516,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-[#F0E1E6]/60">
-                  {notifications.length === 0 ? (
+                  {visibleNotifications.length === 0 ? (
                     <div className="p-4 text-center text-xs text-[#806B73]">
                       {t.noNotifications}
                     </div>
                   ) : (
-                    notifications.map((n) => {
+                    visibleNotifications.map((n) => {
                       const Icon = NOTIFICATION_ICONS[n.type];
                       return (
                         <button

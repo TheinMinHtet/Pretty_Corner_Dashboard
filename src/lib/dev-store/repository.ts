@@ -152,7 +152,7 @@ export interface StoreRepository {
 
   updateSettings(updates: Partial<StoreSettings>): Promise<StoreSettings>;
   markNotificationRead(id: string): Promise<void>;
-  markAllNotificationsRead(): Promise<void>;
+  markAllNotificationsRead(ids?: string[]): Promise<void>;
 }
 
 const STORE_FILE_PATH = path.join(process.cwd(), ".data", "dev-store.json");
@@ -210,6 +210,8 @@ export class JsonFileStoreRepository implements StoreRepository {
       const parsed = JSON.parse(raw) as Partial<DevStoreData>;
       if (parsed && Array.isArray(parsed.products) && Array.isArray(parsed.categories)) {
         const seed = createSeedData();
+        const readNotificationIds = parsed.readNotificationIds ?? seed.readNotificationIds ?? [];
+        const readSet = new Set(readNotificationIds);
         return {
           products: parsed.products,
           categories: parsed.categories,
@@ -217,7 +219,10 @@ export class JsonFileStoreRepository implements StoreRepository {
           customers: parsed.customers ?? seed.customers,
           stockHistory: parsed.stockHistory ?? seed.stockHistory,
           promotions: parsed.promotions ?? seed.promotions,
-          notifications: parsed.notifications ?? seed.notifications,
+          notifications: (parsed.notifications ?? seed.notifications).filter(
+            (n) => !n.read && !readSet.has(n.id)
+          ),
+          readNotificationIds,
           activity: parsed.activity ?? seed.activity,
           settings: parsed.settings ?? seed.settings,
         };
@@ -1047,25 +1052,40 @@ export class JsonFileStoreRepository implements StoreRepository {
   }
 
   async markNotificationRead(id: string): Promise<void> {
-    await this.withWriteLock((data) => ({
-      next: {
-        ...data,
-        notifications: data.notifications.map((n) =>
-          n.id === id ? { ...n, read: true } : n
-        ),
-      },
-      result: undefined,
-    }));
+    await this.withWriteLock((data) => {
+      const readSet = new Set(data.readNotificationIds ?? []);
+      readSet.add(id);
+      return {
+        next: {
+          ...data,
+          notifications: data.notifications.filter((n) => n.id !== id),
+          readNotificationIds: Array.from(readSet),
+        },
+        result: undefined,
+      };
+    });
   }
 
-  async markAllNotificationsRead(): Promise<void> {
-    await this.withWriteLock((data) => ({
-      next: {
-        ...data,
-        notifications: data.notifications.map((n) => ({ ...n, read: true })),
-      },
-      result: undefined,
-    }));
+  async markAllNotificationsRead(ids?: string[]): Promise<void> {
+    await this.withWriteLock((data) => {
+      const readSet = new Set(data.readNotificationIds ?? []);
+      for (const n of data.notifications) {
+        readSet.add(n.id);
+      }
+      if (ids) {
+        for (const id of ids) {
+          readSet.add(id);
+        }
+      }
+      return {
+        next: {
+          ...data,
+          notifications: [],
+          readNotificationIds: Array.from(readSet),
+        },
+        result: undefined,
+      };
+    });
   }
 }
 

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Promotion, PromotionTargetType, RedemptionMethod } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export default function PromotionsPage() {
     updatePromotion,
     deletePromotion,
   } = useAdminStore();
+  const { t } = useLanguage();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Promotion | null>(null);
@@ -283,17 +285,17 @@ export default function PromotionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 suppressHydrationWarning className="font-serif text-3xl font-black tracking-tight text-[#33272C]">
-            Promotions & Campaigns
+            {t.promotionsPageTitle}
           </h2>
           <p className="text-sm text-[#806B73] mt-1">
-            Curate high-impact seasonal boutique banners, discount codes, 4-tier target routing, and hero product drops.
+            {t.promotionsPageSubtitle}
           </p>
         </div>
         <Button
           onClick={openCreate}
           className="rounded-full bg-[#B73D67] hover:bg-[#982F53] text-white px-5 shadow-sm transition-all duration-200 cursor-pointer"
         >
-          <Plus className="h-4 w-4 mr-1.5" /> New Promotion
+          <Plus className="h-4 w-4 mr-1.5" /> {t.newPromotionBtn}
         </Button>
       </div>
 

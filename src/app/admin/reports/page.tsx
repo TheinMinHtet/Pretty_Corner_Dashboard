@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { CatalogIndexItem, Order, Product } from "@/types/admin";
 import { ChartCardSkeleton } from "@/components/charts/dashboard-charts";
 import {
@@ -82,6 +83,7 @@ import {
 
 export default function SalesReportsPage() {
   const { orders, products, categories, catalogIndex } = useAdminStore();
+  const { t } = useLanguage();
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [localCatalogIndex, setLocalCatalogIndex] = useState<CatalogIndexItem[]>([]);
 
@@ -214,10 +216,10 @@ export default function SalesReportsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-            Sales Reports & Analytics
+            {t.reportsPageTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            Evaluate revenue growth, category performance, and order conversion.
+            {t.reportsPageSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -230,9 +232,9 @@ export default function SalesReportsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7d">Last 7 Days</SelectItem>
-              <SelectItem value="30d">Last 30 Days</SelectItem>
-              <SelectItem value="6m">Last 6 Months</SelectItem>
+              <SelectItem value="7d">{t.range7d}</SelectItem>
+              <SelectItem value="30d">{t.range30d}</SelectItem>
+              <SelectItem value="6m">{t.range6m}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -284,8 +286,8 @@ export default function SalesReportsPage() {
       {/* Revenue Trend */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Revenue Trends</CardTitle>
-          <CardDescription>Sales performance over selected period</CardDescription>
+          <CardTitle>{t.revenueTrendsTitle}</CardTitle>
+          <CardDescription>{t.revenueTrendsDesc}</CardDescription>
         </CardHeader>
         <CardContent className="h-[280px] pt-2">
           <ResponsiveContainer width="100%" height="100%">
@@ -345,8 +347,8 @@ export default function SalesReportsPage() {
 
         <OrderStatusDistributionCard
           orders={rangeOrders}
-          title="Orders by Status"
-          description="Current active order distribution"
+          title={t.ordersByStatusTitle}
+          description={t.ordersByStatusDesc}
           className="h-full"
         />
       </div>
@@ -360,10 +362,10 @@ export default function SalesReportsPage() {
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#D96B91]" />
-                  Payment Channels & Settlements
+                  {t.paymentChannelsTitle}
                 </CardTitle>
                 <CardDescription>
-                  Volume and revenue distribution across payment providers
+                  {t.paymentChannelsDesc}
                 </CardDescription>
               </div>
             </div>
@@ -422,10 +424,10 @@ export default function SalesReportsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-bold flex items-center gap-2">
               <Users className="h-4 w-4 text-[#D96B91]" />
-              Customer Retention & Segmentation
+              {t.customerRetentionTitle}
             </CardTitle>
             <CardDescription>
-              First-time buyers vs. repeat beauty enthusiasts
+              {t.customerRetentionDesc}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pt-2">
@@ -503,9 +505,9 @@ export default function SalesReportsPage() {
       {/* Best-Selling Products Table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Best-Selling Products</CardTitle>
+          <CardTitle>{t.bestSellingProductsTitle}</CardTitle>
           <CardDescription>
-            Top revenue-generating items in the selected period
+            {t.bestSellingProductsDesc}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">

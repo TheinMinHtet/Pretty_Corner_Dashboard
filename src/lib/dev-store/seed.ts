@@ -27,6 +27,7 @@ export interface DevStoreData {
   stockHistory: StockAdjustment[];
   promotions: Promotion[];
   notifications: NotificationItem[];
+  readNotificationIds?: string[];
   activity: ActivityLogItem[];
   settings: StoreSettings;
   catalogIndex?: CatalogIndexItem[];
@@ -817,6 +818,7 @@ export function createSeedData(): DevStoreData {
     stockHistory: structuredClone(INITIAL_STOCK_HISTORY),
     promotions: structuredClone(INITIAL_PROMOTIONS),
     notifications: structuredClone(INITIAL_NOTIFICATIONS),
+    readNotificationIds: [],
     activity: structuredClone(INITIAL_ACTIVITY),
     settings: structuredClone(INITIAL_SETTINGS),
   };

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { ArrowLeft, Upload, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Product, ProductStatus } from "@/types/admin";
 import {
   Card,
@@ -43,6 +44,7 @@ import { formatMMK } from "@/lib/utils";
 export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const router = useRouter();
   const { categories, addProduct, updateProduct, settings } = useAdminStore();
+  const { t } = useLanguage();
 
   const [name, setName] = useState(initialProduct?.name ?? "");
   const [description, setDescription] = useState(
@@ -233,10 +235,12 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
           </Button>
           <div>
             <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-              {mode === "create" ? "Add New Product" : `Edit ${initialProduct?.name}`}
+              {mode === "create"
+                ? t.addNewProductTitle
+                : `${t.editProductPrefix} ${initialProduct?.name}`}
             </h2>
             <p className="text-xs text-[#806B73]">
-              Configure pricing, stock levels, and images
+              {t.productFormSubtitle}
             </p>
           </div>
         </div>
@@ -247,12 +251,12 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
         <div className="lg:col-span-2 space-y-5">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>General Information</CardTitle>
-              <CardDescription>Basic product identity and copy</CardDescription>
+              <CardTitle>{t.generalInfoTitle}</CardTitle>
+              <CardDescription>{t.generalInfoDesc}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="prod-name">Product Name *</Label>
+                <Label htmlFor="prod-name">{t.productNameLabel}</Label>
                 <Input
                   id="prod-name"
                   value={name}
@@ -265,7 +269,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="prod-desc">Description</Label>
+                <Label htmlFor="prod-desc">{t.productDescriptionLabel}</Label>
                 <Textarea
                   id="prod-desc"
                   rows={4}
@@ -277,7 +281,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Category</Label>
+                  <Label>{t.productCategoryLabel}</Label>
                   <Select value={categoryId} onValueChange={setCategoryId}>
                     <SelectTrigger>
                       <SelectValue />
@@ -293,7 +297,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="prod-brand">Brand</Label>
+                  <Label htmlFor="prod-brand">{t.productBrandLabel}</Label>
                   <Input
                     id="prod-brand"
                     value={brand}
@@ -308,15 +312,15 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
           {/* Storefront Content: Why We Love It & How to Use */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Storefront Content</CardTitle>
+              <CardTitle>{t.storefrontContentTitle}</CardTitle>
               <CardDescription>
-                Controls the &ldquo;Why we love it&rdquo; and &ldquo;How to use&rdquo; sections on the customer product page
+                {t.storefrontContentDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="prod-badge">Badge (Optional)</Label>
+                  <Label htmlFor="prod-badge">{t.badgeOptionalLabel}</Label>
                   <Input
                     id="prod-badge"
                     value={badge}
@@ -325,7 +329,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="prod-tagline">Tagline (Optional)</Label>
+                  <Label htmlFor="prod-tagline">{t.taglineOptionalLabel}</Label>
                   <Input
                     id="prod-tagline"
                     value={tagline}
@@ -337,7 +341,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="prod-benefits">
-                  Why We Love It — Key Benefits (one bullet per line)
+                  {t.whyWeLoveItLabel}
                 </Label>
                 <Textarea
                   id="prod-benefits"
@@ -349,7 +353,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="prod-usage">How to Use</Label>
+                <Label htmlFor="prod-usage">{t.howToUseLabel}</Label>
                 <Textarea
                   id="prod-usage"
                   rows={3}
@@ -364,9 +368,9 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
           {/* Product Images */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Product Images</CardTitle>
+              <CardTitle>{t.productImagesTitle}</CardTitle>
               <CardDescription>
-                Upload local images for instant preview (stored in browser state)
+                {t.productImagesDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -398,7 +402,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
                 <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#E99AB5]/60 bg-[#FCEEF2]/30 text-[#D96B91] hover:bg-[#FCEEF2]/60 transition-colors">
                   <Upload className="h-5 w-5" />
-                  <span className="mt-1 text-[11px] font-medium">Upload</span>
+                  <span className="mt-1 text-[11px] font-medium">{t.uploadLabel}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -416,10 +420,10 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Status</CardTitle>
+              <CardTitle>{t.statusCol}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5">
-              <Label>Product Visibility</Label>
+              <Label>{t.productVisibilityLabel}</Label>
               <Select
                 value={status}
                 onValueChange={(v) => setStatus(v as ProductStatus)}
@@ -437,12 +441,12 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Pricing (MMK)</CardTitle>
+              <CardTitle>{t.pricingMmkTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="prod-price">Price (MMK) *</Label>
+                  <Label htmlFor="prod-price">{t.priceMmkLabel}</Label>
                   {Number(price) > 0 && !isNaN(Number(price)) && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-[#FAF7F8] border border-[#EEDFE5] px-2 py-0.5 text-xs text-[#38262E] font-medium">
                       <span className="text-[#7A6870]">Preview:</span>
@@ -467,11 +471,11 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Inventory & SKU</CardTitle>
+              <CardTitle>{t.inventorySkuTitle}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="sku">SKU *</Label>
+                <Label htmlFor="sku">{t.skuLabel}</Label>
                 <Input
                   id="sku"
                   value={sku}
@@ -484,7 +488,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="stock">Stock Quantity</Label>
+                <Label htmlFor="stock">{t.stockQuantityLabel}</Label>
                 <Input
                   id="stock"
                   type="number"
@@ -498,7 +502,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="threshold">Low-Stock Threshold</Label>
+                <Label htmlFor="threshold">{t.lowStockThresholdLabel}</Label>
                 <Input
                   id="threshold"
                   type="number"
@@ -513,11 +517,11 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
           {/* Action Buttons below Inventory & SKU */}
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button variant="outline" type="button" onClick={handleCancel} className="cursor-pointer">
-              Cancel
+              {t.cancelBtn}
             </Button>
             <Button type="submit">
               <Save className="h-4 w-4" />
-              {mode === "create" ? "Create Product" : "Save Changes"}
+              {mode === "create" ? t.createProductBtn : t.saveChangesBtn}
             </Button>
           </div>
         </div>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Product, StockAdjustment, InventoryStats } from "@/types/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,7 @@ import { formatDateTime, cn } from "@/lib/utils";
 
 export default function InventoryPage() {
   const { categories, adjustStock } = useAdminStore();
+  const { t } = useLanguage();
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -270,10 +272,10 @@ export default function InventoryPage() {
     <div className="space-y-6">
       <div>
         <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#38262E] tracking-tight">
-          Inventory Management
+          {t.inventoryPageTitle}
         </h2>
         <p className="text-sm text-[#7A6870] mt-1">
-          Monitor stock levels, handle restocks, and audit chronological adjustment logs.
+          {t.inventoryPageSubtitle}
         </p>
       </div>
 
@@ -334,13 +336,13 @@ export default function InventoryPage() {
             value="stock"
             className="rounded-xl px-4 py-2 font-semibold text-xs text-[#7A6870] data-[state=active]:bg-white data-[state=active]:text-[#38262E] data-[state=active]:shadow-xs transition-all cursor-pointer"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> Stock Levels
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> {t.stockLevelsTab}
           </TabsTrigger>
           <TabsTrigger
             value="history"
             className="rounded-xl px-4 py-2 font-semibold text-xs text-[#7A6870] data-[state=active]:bg-white data-[state=active]:text-[#38262E] data-[state=active]:shadow-xs transition-all cursor-pointer"
           >
-            <History className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> Stock History ({historyTotal})
+            <History className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> {t.stockHistoryTab} ({historyTotal})
           </TabsTrigger>
         </TabsList>
 

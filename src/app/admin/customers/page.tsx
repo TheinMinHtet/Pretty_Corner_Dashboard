@@ -14,6 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Customer } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ import {
 
 export default function CustomersPage() {
   const { customers: storeCustomers, orders } = useAdminStore();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
@@ -99,10 +101,10 @@ export default function CustomersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-            Customers
+            {t.customersPageTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            View loyal shoppers, order history, and saved delivery addresses.
+            {t.customersPageSubtitle}
           </p>
         </div>
         <span className="rounded-lg border border-[#F0E1E6] bg-white px-3 py-1.5 text-xs font-medium text-[#33272C] self-start">

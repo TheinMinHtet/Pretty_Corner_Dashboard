@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import {
   Card,
   CardContent,
@@ -81,6 +82,7 @@ export default function OrdersPage() {
     setGlobalSearch,
     refreshData,
   } = useAdminStore();
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -231,10 +233,10 @@ export default function OrdersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-            Order Management
+            {t.ordersPageTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            Track customer orders, verify payments, and update fulfillment stages.
+            {t.ordersPageSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-[#806B73]">
@@ -335,7 +337,7 @@ export default function OrdersPage() {
         <CardHeader className="pb-2.5 px-5 flex flex-row items-center justify-between border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
           <CardTitle className="text-sm font-semibold flex items-center gap-2 text-[#38262E]">
             <Filter className="h-4 w-4 text-[#B73D67]" />
-            Orders List
+            {t.ordersListTitle}
           </CardTitle>
           {selectedOrderIds.length > 0 && (
             <span className="text-xs font-semibold text-[#B73D67] bg-[#FCEEF2] px-2.5 py-1 rounded-full">
