@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   Boxes,
@@ -19,7 +19,6 @@ import {
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { Product, StockAdjustment, InventoryStats } from "@/types/admin";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,67 +77,84 @@ export default function InventoryPage() {
   const [historyTotalPages, setHistoryTotalPages] = useState(1);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Trigger to refetch after mutations
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   // Adjustment Dialog state
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
   const [targetStock, setTargetStock] = useState<number>(0);
   const [targetStockInput, setTargetStockInput] = useState<string>("0");
   const [adjustReason, setAdjustReason] = useState("");
 
-  const fetchStock = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const sp = new URLSearchParams({
-        page: String(page),
-        limit: "10",
-      });
-      if (categoryFilter !== "all") sp.set("category", categoryFilter);
-      if (stockFilter !== "all") sp.set("stock", stockFilter);
-      if (search.trim()) sp.set("q", search.trim());
+  useEffect(() => {
+    let ignore = false;
+    const loadStock = async () => {
+      try {
+        const sp = new URLSearchParams({
+          page: String(page),
+          limit: "10",
+        });
+        if (categoryFilter !== "all") sp.set("category", categoryFilter);
+        if (stockFilter !== "all") sp.set("stock", stockFilter);
+        if (search.trim()) sp.set("q", search.trim());
 
-      const res = await fetch(`/api/inventory?${sp.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data.products || []);
-        setTotal(data.total || 0);
-        setTotalPages(data.totalPages || 1);
-        if (data.stats) setStats(data.stats);
+        const res = await fetch(`/api/inventory?${sp.toString()}`);
+        if (!ignore && res.ok) {
+          const data = await res.json();
+          setProducts(data.products || []);
+          setTotal(data.total || 0);
+          setTotalPages(data.totalPages || 1);
+          if (data.stats) setStats(data.stats);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("Failed to load inventory:", err);
+          toast.error("Failed to load inventory");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
-    } catch (err) {
-      console.error("Failed to load inventory:", err);
-      toast.error("Failed to load inventory");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, categoryFilter, stockFilter, search]);
+    };
 
-  const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const sp = new URLSearchParams({
-        page: String(historyPage),
-        limit: "10",
-      });
-      const res = await fetch(`/api/inventory/history?${sp.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryItems(data.history || []);
-        setHistoryTotal(data.total || 0);
-        setHistoryTotalPages(data.totalPages || 1);
-      }
-    } catch (err) {
-      console.error("Failed to load history:", err);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [historyPage]);
+    void loadStock();
+    return () => {
+      ignore = true;
+    };
+  }, [page, categoryFilter, stockFilter, search, refreshTrigger]);
 
   useEffect(() => {
-    fetchStock();
-  }, [fetchStock]);
+    let ignore = false;
+    const loadHistory = async () => {
+      try {
+        const sp = new URLSearchParams({
+          page: String(historyPage),
+          limit: "10",
+        });
+        const res = await fetch(`/api/inventory/history?${sp.toString()}`);
+        if (!ignore && res.ok) {
+          const data = await res.json();
+          setHistoryItems(data.history || []);
+          setHistoryTotal(data.total || 0);
+          setHistoryTotalPages(data.totalPages || 1);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("Failed to load history:", err);
+        }
+      } finally {
+        if (!ignore) {
+          setHistoryLoading(false);
+        }
+      }
+    };
 
-  useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    void loadHistory();
+    return () => {
+      ignore = true;
+    };
+  }, [historyPage, refreshTrigger]);
 
   const currentStock = useMemo(() => {
     return adjustTarget?.stock ?? 0;
@@ -216,176 +232,208 @@ export default function InventoryPage() {
     );
     setAdjustTarget(null);
 
-    // Refresh current paginated views
-    fetchStock();
-    fetchHistory();
+    // Refresh current paginated views via trigger and state
+    setIsLoading(true);
+    setHistoryLoading(true);
+    setRefreshTrigger((prev) => prev + 1);
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div>
-        <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
+        <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#38262E] tracking-tight">
           Inventory Management
         </h2>
-        <p className="text-sm text-[#806B73]">
-          Monitor stock levels, handle restocks, and audit stock adjustment logs.
+        <p className="text-sm text-[#7A6870] mt-1">
+          Monitor stock levels, handle restocks, and audit chronological adjustment logs.
         </p>
       </div>
 
       {/* 4 Summary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-[#806B73]">Total Products</p>
-              <p className="text-2xl font-bold text-[#33272C] mt-1">
-                {stats.total}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-xl bg-[#FCEEF2] flex items-center justify-center">
-              <Boxes className="h-5 w-5 text-[#D96B91]" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-[#806B73]">In-Stock</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">
-                {stats.inStock}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-[#806B73]">Low-Stock Alerts</p>
-              <p className="text-2xl font-bold text-amber-600 mt-1">
-                {stats.lowStock}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-[#806B73]">Out-of-Stock</p>
-              <p className="text-2xl font-bold text-rose-600 mt-1">
-                {stats.outOfStock}
-              </p>
-            </div>
-            <div className="h-10 w-10 rounded-xl bg-rose-50 flex items-center justify-center">
-              <XCircle className="h-5 w-5 text-rose-600" />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-[#D96B91]/40 hover:shadow-xs">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Total Products</p>
+            <p className="text-3xl font-black text-[#38262E] mt-1 tabular-nums">
+              {stats.total}
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-[#FCEEF2] flex items-center justify-center shrink-0">
+            <Boxes className="h-5 w-5 text-[#B73D67]" />
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-emerald-200 hover:shadow-xs">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">In-Stock</p>
+            <p className="text-3xl font-black text-emerald-600 mt-1 tabular-nums">
+              {stats.inStock}
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-amber-200 hover:shadow-xs">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Low-Stock Alerts</p>
+            <p className="text-3xl font-black text-amber-600 mt-1 tabular-nums">
+              {stats.lowStock}
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-rose-200 hover:shadow-xs">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Out-of-Stock</p>
+            <p className="text-3xl font-black text-rose-600 mt-1 tabular-nums">
+              {stats.outOfStock}
+            </p>
+          </div>
+          <div className="h-11 w-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+            <XCircle className="h-5 w-5 text-rose-600" />
+          </div>
+        </div>
       </div>
 
-      <Tabs defaultValue="stock">
-        <TabsList>
-          <TabsTrigger value="stock">
-            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" /> Stock Levels
+      <Tabs defaultValue="stock" className="space-y-4">
+        <TabsList className="bg-[#FAF7F8] border border-[#EEDFE5] p-1.5 rounded-2xl h-auto">
+          <TabsTrigger
+            value="stock"
+            className="rounded-xl px-4 py-2 font-semibold text-xs text-[#7A6870] data-[state=active]:bg-white data-[state=active]:text-[#38262E] data-[state=active]:shadow-xs transition-all cursor-pointer"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> Stock Levels
           </TabsTrigger>
-          <TabsTrigger value="history">
-            <History className="h-3.5 w-3.5 mr-1.5" /> Stock History (
-            {historyTotal})
+          <TabsTrigger
+            value="history"
+            className="rounded-xl px-4 py-2 font-semibold text-xs text-[#7A6870] data-[state=active]:bg-white data-[state=active]:text-[#38262E] data-[state=active]:shadow-xs transition-all cursor-pointer"
+          >
+            <History className="h-3.5 w-3.5 mr-1.5 text-[#B73D67]" /> Stock History ({historyTotal})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="stock" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#806B73]" />
+        <TabsContent value="stock" className="mt-0">
+          <div className="rounded-[32px] border border-[#EEDFE5] bg-white shadow-xs overflow-hidden">
+            {/* Filter Toolbar */}
+            <div className="p-4 sm:p-5 border-b border-[#F0E1E6] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3.5 bg-[#FAF7F8]/50">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#7A6870]" />
                 <Input
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
+                    setIsLoading(true);
                     setPage(1);
                   }}
                   placeholder="Search product or SKU..."
-                  className="pl-9"
+                  className="pl-10 pr-14 h-10 bg-white rounded-xl border-[#EEDFE5] text-sm text-[#38262E] placeholder:text-[#7A6870]/70 focus:border-[#B73D67] transition-all"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setIsLoading(true);
+                      setPage(1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#7A6870] hover:text-[#38262E] cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
-              <Select
-                value={categoryFilter}
-                onValueChange={(v) => {
-                  setCategoryFilter(v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="sm:w-44">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {sortedCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
 
-              <Select
-                value={stockFilter}
-                onValueChange={(v) => {
-                  setStockFilter(v as "all" | "in" | "low" | "out");
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="sm:w-52">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stock Statuses</SelectItem>
-                  <SelectItem value="in">In Stock</SelectItem>
-                  <SelectItem value="low">Low Stock</SelectItem>
-                  <SelectItem value="out">Out of Stock</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Select
+                  value={categoryFilter}
+                  onValueChange={(v) => {
+                    setCategoryFilter(v);
+                    setIsLoading(true);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[180px] h-10 bg-white rounded-xl border-[#EEDFE5] text-xs font-medium text-[#38262E]">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-[#EEDFE5]">
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {sortedCategories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-          <Card>
-            <CardContent className="p-0">
-              <Table>
+                <Select
+                  value={stockFilter}
+                  onValueChange={(v) => {
+                    setStockFilter(v as "all" | "in" | "low" | "out");
+                    setIsLoading(true);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-[170px] h-10 bg-white rounded-xl border-[#EEDFE5] text-xs font-medium text-[#38262E]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-[#EEDFE5]">
+                    <SelectItem value="all">All Stock Statuses</SelectItem>
+                    <SelectItem value="in">In Stock</SelectItem>
+                    <SelectItem value="low">Low Stock</SelectItem>
+                    <SelectItem value="out">Out of Stock</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="hidden xl:flex items-center px-3.5 py-2 rounded-xl bg-white border border-[#EEDFE5] text-xs text-[#7A6870]">
+                  <span className="font-bold text-[#38262E] mr-1">{total}</span> items found
+                </div>
+              </div>
+            </div>
+
+            {/* Table with Defined Proportions */}
+            <div className="relative w-full overflow-x-auto">
+              <Table className="w-full text-left border-collapse table-fixed min-w-[760px]">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="hidden md:table-cell">SKU</TableHead>
-                    <TableHead className="hidden sm:table-cell">Category</TableHead>
-                    <TableHead>Available Stock</TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      Threshold
+                  <TableRow className="border-b border-[#F0E1E6] bg-[#FAF7F8]/80 hover:bg-[#FAF7F8]/80">
+                    <TableHead className="w-[36%] pl-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Product & SKU
                     </TableHead>
-                    <TableHead>Stock Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-[18%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Category
+                    </TableHead>
+                    <TableHead className="w-[18%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Stock Level
+                    </TableHead>
+                    <TableHead className="w-[14%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Status
+                    </TableHead>
+                    <TableHead className="w-[14%] pr-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading && products.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-[#806B73]">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
-                          <span className="text-xs">Fetching stock levels...</span>
+                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
+                        <div className="flex flex-col items-center justify-center gap-2.5">
+                          <Loader2 className="h-6 w-6 animate-spin text-[#B73D67]" />
+                          <span className="text-xs font-medium">Fetching stock levels...</span>
                         </div>
                       </TableCell>
                     </TableRow>
                   ) : products.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-[#806B73]">
-                        <p className="text-sm font-medium text-[#33272C]">
-                          No inventory records found
-                        </p>
+                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
+                        <div className="flex flex-col items-center justify-center gap-1.5">
+                          <Boxes className="h-8 w-8 text-[#EEDFE5] stroke-[1.5]" />
+                          <p className="text-sm font-semibold text-[#38262E]">No inventory records found</p>
+                          <p className="text-xs text-[#7A6870]">Try adjusting your search query or status filter.</p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -394,50 +442,82 @@ export default function InventoryPage() {
                       const isLow = p.stock > 0 && p.stock <= p.lowStockThreshold;
 
                       return (
-                        <TableRow key={p.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Image
-                                src={p.images[0] || "/placeholder.png"}
-                                alt={p.name}
-                                width={40}
-                                height={40}
-                                className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0 object-cover"
-                              />
-                              <div className="min-w-0">
-                                <span className="font-medium text-[#33272C] truncate max-w-[220px] block">
+                        <TableRow
+                          key={p.id}
+                          className="border-b border-[#F0E1E6]/80 hover:bg-[#FAF7F8]/80 transition-colors"
+                        >
+                          <TableCell className="py-4 pl-6 pr-4 align-middle">
+                            <div className="flex items-center gap-3.5">
+                              <div className="relative h-11 w-11 rounded-xl border border-[#EEDFE5] bg-[#FAF7F8] overflow-hidden shrink-0">
+                                <Image
+                                  src={p.images[0] || "/placeholder.png"}
+                                  alt={p.name}
+                                  fill
+                                  sizes="44px"
+                                  className="object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className="font-semibold text-sm text-[#38262E] leading-snug line-clamp-1"
+                                  title={p.name}
+                                >
                                   {p.name}
-                                </span>
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono text-[11px] text-[#7A6870] tracking-wide">
+                                    {p.sku}
+                                  </span>
+                                  {p.brand && (
+                                    <span className="text-[10px] text-[#7A6870]/70 font-medium">
+                                      · {p.brand}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell font-mono text-xs text-[#806B73]">
-                            {p.sku}
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell text-xs">
-                            <span className="inline-flex items-center rounded-full bg-rose-50 border border-[#F2D4DE] px-2.5 py-0.5 text-xs font-medium text-[#D96B91]">
+                          <TableCell className="py-4 px-4 align-middle">
+                            <span className="inline-flex items-center rounded-full bg-[#FAF7F8] border border-[#EEDFE5] px-3 py-1 text-xs font-medium text-[#7A6870] truncate max-w-full">
                               {getCategoryName(p.categoryId)}
                             </span>
                           </TableCell>
-                          <TableCell className="font-semibold">
-                            {p.stock} units
+                          <TableCell className="py-4 px-4 align-middle">
+                            <div className="flex flex-col">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-base font-black text-[#38262E] tabular-nums">
+                                  {p.stock}
+                                </span>
+                                <span className="text-xs text-[#7A6870] font-medium">units</span>
+                              </div>
+                              <span className="text-[11px] text-[#7A6870] mt-0.5 font-normal">
+                                Threshold: <span className="font-medium text-[#38262E]">{p.lowStockThreshold}</span>
+                              </span>
+                            </div>
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                            {p.lowStockThreshold} units
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="py-4 px-4 align-middle">
                             {isOut ? (
-                              <Badge variant="destructive">Out of Stock</Badge>
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-200/80 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                Out of Stock
+                              </span>
                             ) : isLow ? (
-                              <Badge variant="warning">Low Stock</Badge>
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                Low Stock
+                              </span>
                             ) : (
-                              <Badge variant="success">In Stock</Badge>
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                In Stock
+                              </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="py-4 pl-4 pr-6 text-right align-middle">
                             <Button
                               size="sm"
                               variant="outline"
+                              className="h-8.5 px-3.5 rounded-xl border-[#EEDFE5] text-xs font-medium text-[#38262E] hover:bg-[#FCEEF2] hover:text-[#B73D67] hover:border-[#B73D67] transition-all cursor-pointer"
                               onClick={() =>
                                 openAdjust(p, isOut || isLow ? "increase" : "decrease")
                               }
@@ -451,107 +531,150 @@ export default function InventoryPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
 
-              {/* Stock Levels Pagination (Max 10 per page, server-fetched) */}
+            {/* Pagination */}
+            <div className="border-t border-[#F0E1E6] bg-[#FAF7F8]/40 p-3">
               <PaginationControl
                 page={page}
                 totalPages={totalPages}
                 totalItems={total}
                 limit={10}
                 isLoading={isLoading}
-                onPageChange={setPage}
+                onPageChange={(p) => {
+                  setPage(p);
+                  setIsLoading(true);
+                }}
                 itemLabel="inventory items"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
-        <TabsContent value="history">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
+        <TabsContent value="history" className="mt-0">
+          <div className="rounded-[32px] border border-[#EEDFE5] bg-white shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-[#F0E1E6] flex items-center justify-between bg-[#FAF7F8]/60">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-[#38262E]">Audit Trail</h3>
+                <p className="text-xs text-[#7A6870]">
+                  Chronological log of manual adjustments, restocks, and deductions.
+                </p>
+              </div>
+              <div className="flex items-center px-3.5 py-2 rounded-xl bg-white border border-[#EEDFE5] text-xs text-[#7A6870]">
+                <span className="font-bold text-[#38262E] mr-1">{historyTotal}</span> logs recorded
+              </div>
+            </div>
+
+            <div className="relative w-full overflow-x-auto">
+              <Table className="w-full text-left border-collapse table-fixed min-w-[760px]">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Change</TableHead>
-                    <TableHead>Stock Level</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead className="hidden sm:table-cell">By</TableHead>
-                    <TableHead className="hidden md:table-cell">Date</TableHead>
+                  <TableRow className="border-b border-[#F0E1E6] bg-[#FAF7F8]/80 hover:bg-[#FAF7F8]/80">
+                    <TableHead className="w-[32%] pl-6 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Product & SKU
+                    </TableHead>
+                    <TableHead className="w-[14%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Change
+                    </TableHead>
+                    <TableHead className="w-[18%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Stock Transition
+                    </TableHead>
+                    <TableHead className="w-[18%] px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Reason
+                    </TableHead>
+                    <TableHead className="w-[18%] pr-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[#7A6870]">
+                      Performed By & Date
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {historyLoading && historyItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
-                          <span className="text-xs">Fetching history logs...</span>
+                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
+                        <div className="flex flex-col items-center justify-center gap-2.5">
+                          <Loader2 className="h-6 w-6 animate-spin text-[#B73D67]" />
+                          <span className="text-xs font-medium">Fetching history logs...</span>
                         </div>
                       </TableCell>
                     </TableRow>
                   ) : historyItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
-                        <p className="text-sm font-medium text-[#33272C]">
-                          No stock history logs yet
-                        </p>
+                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
+                        <div className="flex flex-col items-center justify-center gap-1.5">
+                          <History className="h-8 w-8 text-[#EEDFE5] stroke-[1.5]" />
+                          <p className="text-sm font-semibold text-[#38262E]">No stock history logs yet</p>
+                          <p className="text-xs text-[#7A6870]">Adjustment logs will appear here when inventory is updated.</p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
                     historyItems.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell>
-                          <p className="font-medium text-[#33272C]">
+                      <TableRow
+                        key={entry.id}
+                        className="border-b border-[#F0E1E6]/80 hover:bg-[#FAF7F8]/80 transition-colors"
+                      >
+                        <TableCell className="py-4 pl-6 pr-4 align-middle">
+                          <p className="font-semibold text-sm text-[#38262E] leading-snug line-clamp-1">
                             {entry.productName}
                           </p>
-                          <p className="text-[11px] font-mono text-[#806B73]">
+                          <p className="font-mono text-[11px] text-[#7A6870] tracking-wide mt-0.5">
                             {entry.sku}
                           </p>
                         </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              entry.type === "increase" ? "success" : "destructive"
-                            }
+                        <TableCell className="py-4 px-4 align-middle">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold",
+                              entry.type === "increase"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            )}
                           >
                             {entry.type === "increase" ? "+" : "-"}
                             {entry.quantity}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-[#806B73]">
-                          {entry.previousStock} →{" "}
-                          <span className="font-semibold text-[#33272C]">
-                            {entry.newStock}
                           </span>
                         </TableCell>
-                        <TableCell className="text-xs text-[#33272C]">
-                          {entry.reason}
+                        <TableCell className="py-4 px-4 align-middle">
+                          <div className="flex items-center gap-1.5 text-xs text-[#7A6870]">
+                            <span className="font-medium text-[#7A6870] tabular-nums">{entry.previousStock}</span>
+                            <ArrowRight className="h-3 w-3 text-[#7A6870]/70" />
+                            <span className="font-bold text-[#38262E] tabular-nums">{entry.newStock} units</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                          {entry.performedBy}
+                        <TableCell className="py-4 px-4 align-middle">
+                          <span className="text-xs text-[#38262E] font-medium line-clamp-2">
+                            {entry.reason}
+                          </span>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-xs text-[#806B73]">
-                          {formatDateTime(entry.createdAt)}
+                        <TableCell className="py-4 pl-4 pr-6 text-right align-middle">
+                          <p className="text-xs font-semibold text-[#38262E]">
+                            {entry.performedBy}
+                          </p>
+                          <p className="text-[11px] text-[#7A6870] mt-0.5">
+                            {formatDateTime(entry.createdAt)}
+                          </p>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+            </div>
 
-              {/* Stock History Pagination (Max 10 per page, server-fetched) */}
+            <div className="border-t border-[#F0E1E6] bg-[#FAF7F8]/40 p-3">
               <PaginationControl
                 page={historyPage}
                 totalPages={historyTotalPages}
                 totalItems={historyTotal}
                 limit={10}
                 isLoading={historyLoading}
-                onPageChange={setHistoryPage}
+                onPageChange={(p) => {
+                  setHistoryPage(p);
+                  setHistoryLoading(true);
+                }}
                 itemLabel="stock adjustments"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

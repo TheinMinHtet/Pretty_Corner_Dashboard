@@ -4,9 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,11 +19,10 @@ import {
   Users,
   Repeat,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useAdminStore } from "@/context/admin-store";
-import { CatalogIndexItem, Order, OrderStatus, Product } from "@/types/admin";
-import {
-  OrderStatusDistributionCard,
-} from "@/components/charts/dashboard-charts";
+import { CatalogIndexItem, Order, Product } from "@/types/admin";
+import { ChartCardSkeleton } from "@/components/charts/dashboard-charts";
 import {
   Card,
   CardContent,
@@ -34,6 +30,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+const CategorySalesCard = dynamic(
+  () =>
+    import("@/components/charts/category-sales-card").then(
+      (m) => m.CategorySalesCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton className="h-full" height="h-[320px]" />,
+  }
+);
+
+const OrderStatusDistributionCard = dynamic(
+  () =>
+    import("@/components/charts/dashboard-charts").then(
+      (m) => m.OrderStatusDistributionCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton className="h-full" height="h-[320px]" />,
+  }
+);
 import {
   Select,
   SelectContent,
@@ -53,6 +71,7 @@ import { formatCompactMMK, formatMMK } from "@/lib/utils";
 import {
   buildOrderSeries,
   DateRange,
+  DEFAULT_CATEGORY_PALETTE,
   filterOrdersByRange,
   sumRevenue,
   computeCategorySales,
@@ -60,8 +79,6 @@ import {
   computePaymentStatusStats,
   deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
-
-const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
 
 export default function SalesReportsPage() {
   const { orders, products, categories, catalogIndex } = useAdminStore();
@@ -172,7 +189,7 @@ export default function SalesReportsPage() {
     return computeCategorySales(
       categories,
       activeCatalog.length > 0 ? activeCatalog : products,
-      CATEGORY_COLORS,
+      DEFAULT_CATEGORY_PALETTE,
       rangeOrders
     );
   }, [categories, activeCatalog, products, rangeOrders]);
@@ -318,55 +335,19 @@ export default function SalesReportsPage() {
       </Card>
 
       {/* Sales by Category + Orders by Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="rounded-[32px] border-[#F0E1E6]">
-          <CardHeader className="pb-2">
-            <CardTitle>Sales by Category</CardTitle>
-            <CardDescription>Cumulative revenue per beauty category</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[260px] pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesByCategory} layout="vertical" margin={{ left: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F0E1E6" />
-                <XAxis
-                  type="number"
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) =>
-                    formatCompactMMK(Number(v)).replace(" MMK", "")
-                  }
-                  tick={{ fill: "#806B73", fontSize: 11 }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: "#33272C", fontSize: 12 }}
-                  width={115}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: "12px",
-                    border: "1px solid #F0E1E6",
-                    fontSize: "12px",
-                  }}
-                  formatter={(value) => [formatMMK(Number(value ?? 0)), "Revenue"]}
-                />
-                <Bar dataKey="revenue" radius={[0, 6, 6, 0]} barSize={20}>
-                  {salesByCategory.map((entry, index) => (
-                    <Cell key={`cat-bar-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <CategorySalesCard
+          salesData={salesByCategory}
+          totalRevenue={summary.totalRev}
+          dateRange={dateRange}
+          className="h-full"
+        />
 
         <OrderStatusDistributionCard
           orders={rangeOrders}
           title="Orders by Status"
           description="Current active order distribution"
+          className="h-full"
         />
       </div>
 

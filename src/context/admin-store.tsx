@@ -280,7 +280,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let active = true;
     void refreshFromApi(true);
 
     const handleVisibilityChange = () => {
@@ -298,7 +297,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     }, 30000);
 
     return () => {
-      active = false;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(pollInterval);
     };
@@ -315,7 +313,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (!res.ok) {
           console.error(`API ${method} ${url} failed:`, await res.text());
         }
-        await refreshFromApi();
+        await refreshFromApi(true);
       } catch (error) {
         console.error(`API ${method} ${url} error:`, error);
       }

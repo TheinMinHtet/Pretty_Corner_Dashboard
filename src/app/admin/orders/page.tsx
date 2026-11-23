@@ -14,14 +14,12 @@ import {
   CheckSquare,
   Square,
   CheckCircle,
-  Package,
   RefreshCw,
   Clock,
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { OrderStatus } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -54,7 +52,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  UnifiedOrderStatusBadge,
   UnifiedStatusSelector,
   UNIFIED_STATUS_CONFIG,
   UnifiedStatusKey,
@@ -79,7 +76,6 @@ type SortDir = "asc" | "desc";
 export default function OrdersPage() {
   const {
     orders,
-    updateOrderStatus,
     updateUnifiedStatus,
     globalSearch,
     setGlobalSearch,

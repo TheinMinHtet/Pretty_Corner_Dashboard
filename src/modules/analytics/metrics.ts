@@ -4,7 +4,6 @@ import {
   Customer,
   Order,
   OrderItem,
-  OrderStatus,
   PaymentStatus,
   Product,
 } from "@/types/admin";
@@ -345,12 +344,24 @@ export interface CategoryRevenueItem {
   revenue: number;
   color: string;
   orderCount?: number;
+  percentage?: number;
 }
+
+export const DEFAULT_CATEGORY_PALETTE: string[] = [
+  "#B73D67", // Signature Deep Rose
+  "#D96B91", // Vibrant Blossom
+  "#8E4A68", // Velvet Plum
+  "#E27D8C", // Warm Coral Rose
+  "#A47087", // Muted Mauve
+  "#D48B47", // Warm Amber
+  "#4B7F78", // Soft Sage Teal
+  "#7A6870", // Warm Slate
+];
 
 export function computeCategorySales(
   categories: Category[],
   products: (Product | CatalogIndexItem)[],
-  palette: string[] = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"],
+  palette: string[] = DEFAULT_CATEGORY_PALETTE,
   orders?: Order[]
 ): CategoryRevenueItem[] {
   // If orders are provided, compute authoritative category sales from actual order line items
@@ -416,7 +427,7 @@ export function computeCategorySales(
       }
     }
 
-    const result: CategoryRevenueItem[] = categories.map((cat, idx) => {
+    const result: CategoryRevenueItem[] = categories.map((cat) => {
       const stats =
         totals.get(cat.id) ??
         totals.get(cat.slug) ??
@@ -426,7 +437,7 @@ export function computeCategorySales(
         name: cat.name,
         revenue: stats.revenue,
         orderCount: stats.orderCount,
-        color: palette[idx % palette.length],
+        color: palette[0],
       };
     });
 
@@ -441,15 +452,19 @@ export function computeCategorySales(
 
     // Sort by revenue descending so top sales are presented first
     result.sort((a, b) => b.revenue - a.revenue);
-    // Re-assign distinct palette colors after sorting
+
+    const totalCategoryRev = result.reduce((sum, item) => sum + item.revenue, 0);
+
+    // Re-assign distinct palette colors and compute proportional percentage
     return result.map((item, idx) => ({
       ...item,
       color: palette[idx % palette.length],
+      percentage: totalCategoryRev > 0 ? Math.round((item.revenue / totalCategoryRev) * 100) : 0,
     }));
   }
 
   // Fallback when orders are not provided: derive from products soldCount
-  return categories.map((cat, idx) => {
+  const fallbackResult = categories.map((cat, idx) => {
     const catProducts = products.filter(
       (p) =>
         p.categoryId === cat.id ||
@@ -462,12 +477,23 @@ export function computeCategorySales(
         sum + (prod.soldCount || 0) * (prod.salePrice ?? prod.regularPrice ?? 0)
       );
     }, 0);
+    const orderCount = catProducts.reduce((sum, p) => sum + ((p as Partial<Product>).soldCount || 0), 0);
     return {
       name: cat.name,
       revenue,
+      orderCount,
       color: palette[idx % palette.length],
     };
   });
+
+  const totalFallbackRev = fallbackResult.reduce((sum, item) => sum + item.revenue, 0);
+  return fallbackResult
+    .sort((a, b) => b.revenue - a.revenue)
+    .map((item, idx) => ({
+      ...item,
+      color: palette[idx % palette.length],
+      percentage: totalFallbackRev > 0 ? Math.round((item.revenue / totalFallbackRev) * 100) : 0,
+    }));
 }
 
 export interface CustomerRetentionResult {

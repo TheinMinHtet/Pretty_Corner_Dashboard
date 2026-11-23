@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   Phone,
   Mail,
-  CreditCard,
   Clock,
   CheckCircle2,
   Package,
@@ -20,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { OrderStatus, PaymentStatus } from "@/types/admin";
+import { PaymentStatus } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -31,15 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  OrderStatusBadge,
-  PaymentStatusBadge,
   UnifiedOrderStatusBadge,
   UnifiedStatusSelector,
   UNIFIED_STATUS_CONFIG,
@@ -342,137 +332,119 @@ export default function OrderDetailsPage() {
 
         {/* Right Column: Actions + Customer + Delivery + Payment */}
         <div className="space-y-5">
-          {/* Unified Order & Payment Status Card */}
-          <Card className="rounded-[32px] border-[#F0E1E6] overflow-hidden">
-            <CardHeader className="pb-3 border-b border-[#F0E1E6]/60">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-bold text-[#33272C] flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-[#D96B91]" />
+          {/* Order & Payment Status Card (Quieter Refinement) */}
+          <div className="rounded-[32px] border border-[#EEDFE5] bg-white p-5 space-y-4 shadow-xs">
+            {/* Header: Title + Current Status Badge */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#F0E1E6]/70">
+              <div>
+                <h3 className="text-sm font-bold text-[#38262E] tracking-tight">
                   Order & Payment Status
-                </CardTitle>
-                <UnifiedOrderStatusBadge
+                </h3>
+                <p className="text-[11px] text-[#7A6870] mt-0.5">
+                  Fulfillment & payment reconciliation
+                </p>
+              </div>
+              <UnifiedOrderStatusBadge
+                orderStatus={order.orderStatus}
+                paymentStatus={order.paymentStatus}
+                paymentMethod={order.paymentMethod}
+              />
+            </div>
+
+            {/* Status Selector Bar */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#7A6870] block">
+                Update Status
+              </label>
+              <div className="pt-0.5">
+                <UnifiedStatusSelector
                   orderStatus={order.orderStatus}
                   paymentStatus={order.paymentStatus}
                   paymentMethod={order.paymentMethod}
+                  onStatusChange={(newKey) => {
+                    updateUnifiedStatus(order.id, newKey);
+                    const label = UNIFIED_STATUS_CONFIG[newKey].label;
+                    toast.success(`Order ${order.reference} status updated to ${label}`);
+                  }}
                 />
               </div>
-              <CardDescription>
-                Unified 1-click status & payment collection
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              {/* Admin Unified Status Changer */}
-              <div className="space-y-1.5 pb-1">
-                <label className="text-xs font-semibold text-[#806B73] flex items-center justify-between">
-                  <span>Change Order Status</span>
-                  <span className="text-[10px] text-[#B73D67] font-normal">Real-time sync</span>
-                </label>
-                <div className="pt-0.5">
-                  <UnifiedStatusSelector
-                    orderStatus={order.orderStatus}
-                    paymentStatus={order.paymentStatus}
-                    paymentMethod={order.paymentMethod}
-                    onStatusChange={(newKey) => {
-                      updateUnifiedStatus(order.id, newKey);
-                      const label = UNIFIED_STATUS_CONFIG[newKey].label;
-                      toast.success(`Order ${order.reference} status updated to ${label}`);
-                    }}
-                  />
-                </div>
-              </div>
+            </div>
 
-              {/* Dynamic Status Banner */}
+            {/* Quieter Contextual Status Note (Understated, neutral background with subtle dot indicator) */}
+            <div className="rounded-2xl border border-[#EEDFE5] bg-[#FAF7F8] p-3 text-xs flex items-start gap-2.5">
               {order.paymentStatus === "Failed" ? (
-                <div className="rounded-2xl border border-rose-300 bg-rose-50 p-3.5 space-y-1">
-                  <p className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
-                    <AlertCircle className="h-4 w-4 text-rose-600" />
-                    Payment / Delivery Failed
-                  </p>
-                  <p className="text-[11px] text-rose-800">
-                    Delivery refused by customer or transaction declined.
-                  </p>
-                </div>
+                <>
+                  <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Payment / Delivery Failed</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      Delivery was refused by customer or transaction was declined.
+                    </p>
+                  </div>
+                </>
               ) : order.orderStatus === "Cancelled" ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-3.5 space-y-1">
-                  <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
-                    <AlertCircle className="h-4 w-4 text-rose-600" />
-                    Order Cancelled
-                  </p>
-                  <p className="text-[11px] text-rose-700">
-                    All items have been restored to inventory.
-                  </p>
-                </div>
+                <>
+                  <span className="h-2 w-2 rounded-full bg-rose-400 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Order Cancelled</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      All item quantities have been restored to active inventory.
+                    </p>
+                  </div>
+                </>
               ) : order.paymentStatus === "Paid" ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      Paid
+                <>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Payment Verified</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      {order.paymentMethod === "Cash on Delivery"
+                        ? "Cash collected upon transit handoff."
+                        : "Paid upfront · In transit to customer."}
                     </p>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-                      Verified
-                    </span>
                   </div>
-                  <p className="text-[11px] text-emerald-700">
-                    {order.paymentMethod === "Cash on Delivery"
-                      ? "Cash collected upon transit"
-                      : "Paid upfront · In transit to customer"}
-                  </p>
-                </div>
+                </>
               ) : order.orderStatus === "Expired" || order.paymentStatus === "Expired" ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-slate-600" />
-                      Time Expired
+                <>
+                  <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Time Expired</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      Payment session window elapsed without customer completion.
                     </p>
-                    <span className="text-[10px] font-semibold text-slate-700 bg-slate-200/90 px-2 py-0.5 rounded-full">
-                      Expired
-                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-600">
-                    5-minute payment window elapsed without customer completion.
-                  </p>
-                </div>
+                </>
               ) : order.paymentMethod === "Cash on Delivery" ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-amber-600" />
-                      Pending
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Pending Cash Collection</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      Collect {formatMMK(order.total)} in cash upon customer delivery.
                     </p>
-                    <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full">
-                      {formatMMK(order.total)}
-                    </span>
                   </div>
-                  <p className="text-[11px] text-amber-800">
-                    Collect cash when handoff to customer completes.
-                  </p>
-                </div>
+                </>
               ) : (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      Paid upfront ({order.paymentMethod})
+                <>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 mt-1" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#38262E]">Paid upfront ({order.paymentMethod})</p>
+                    <p className="text-[11px] text-[#7A6870] mt-0.5">
+                      Payment confirmed. Ready for parcel dispatch.
                     </p>
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-                      Verified
-                    </span>
                   </div>
-                  <p className="text-[11px] text-emerald-700">
-                    Payment confirmed. Hand parcel to customer upon delivery.
-                  </p>
-                </div>
+                </>
               )}
+            </div>
 
-              {/* Status Action Button */}
+            {/* Actions: Refined, restrained buttons */}
+            <div className="space-y-2 pt-1">
               {order.orderStatus !== "Cancelled" && order.orderStatus !== "Expired" && order.paymentStatus !== "Paid" && (
                 <Button
                   onClick={handleMarkPaidInTransit}
-                  className="w-full h-12 text-sm font-bold bg-[#B73D67] hover:bg-[#a33259] text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                  className="w-full h-10 text-xs font-semibold bg-[#B73D67] hover:bg-[#982F53] text-white rounded-xl shadow-2xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
-                  <Truck className="h-5 w-5" />
+                  <Truck className="h-4 w-4" />
                   <span>Mark as Paid</span>
                 </Button>
               )}
@@ -484,9 +456,9 @@ export default function OrderDetailsPage() {
                   variant="outline"
                   size="sm"
                   onClick={handleToggleFailedPayment}
-                  className="w-full h-9 text-xs rounded-xl border-rose-200 text-rose-700 bg-rose-50/40 hover:bg-rose-100/70 hover:text-rose-800 flex items-center justify-center gap-1.5 cursor-pointer font-medium"
+                  className="w-full h-8.5 text-xs rounded-xl border-[#EEDFE5] text-[#7A6870] hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50/40 flex items-center justify-center gap-1.5 cursor-pointer font-medium transition-colors"
                 >
-                  <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                  <AlertCircle className="h-3.5 w-3.5 text-[#7A6870]" />
                   Mark as Failed / Refused
                 </Button>
               ) : (
@@ -495,114 +467,115 @@ export default function OrderDetailsPage() {
                   variant="outline"
                   size="sm"
                   onClick={handleToggleFailedPayment}
-                  className="w-full h-9 text-xs rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer font-semibold shadow-xs"
+                  className="w-full h-8.5 text-xs rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer font-semibold transition-colors"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                   Re-activate Order (Restore to {order.paymentMethod !== "Cash on Delivery" ? "Paid" : "Pending"})
                 </Button>
               )}
+            </div>
 
-              {/* Gateway Provider & Transaction Reference */}
-              <div className="rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#33272C] flex items-center gap-1.5">
-                    <ReceiptText className="h-3.5 w-3.5 text-[#D96B91]" />
-                    Payment Reference
-                  </span>
-                  {!isEditingTrx && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTrxInput(order.transactionReference || "");
-                        setIsEditingTrx(true);
-                      }}
-                      className="text-[11px] font-medium text-[#D96B91] hover:underline cursor-pointer"
-                    >
-                      {order.transactionReference ? "Edit" : "+ Record Trx"}
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#806B73]">Method:</span>
-                  <span className="font-semibold text-[#33272C]">{order.paymentMethod}</span>
-                </div>
-
-                {isEditingTrx ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <Input
-                      value={trxInput}
-                      onChange={(e) => setTrxInput(e.target.value)}
-                      placeholder="e.g. KBZ-TRX-12345678"
-                      className="h-8 text-xs rounded-xl border-[#F0E1E6]"
-                    />
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs rounded-xl bg-[#D96B91] hover:bg-[#c2567c] text-white"
-                      onClick={() => {
-                        updatePaymentReference(order.id, trxInput.trim());
-                        setIsEditingTrx(false);
-                        toast.success("Payment transaction reference saved");
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs rounded-xl"
-                      onClick={() => setIsEditingTrx(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-[#33272C]">
-                      {order.transactionReference || (
-                        <span className="text-[#806B73] italic">
-                          No provider transaction reference recorded
-                        </span>
-                      )}
-                    </span>
-                    {order.transactionReference && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(order.transactionReference!);
-                          setCopiedTrx(true);
-                          toast.success("Copied transaction reference to clipboard");
-                          setTimeout(() => setCopiedTrx(false), 2000);
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] text-[#806B73] hover:text-[#D96B91] cursor-pointer"
-                        title="Copy reference"
-                      >
-                        {copiedTrx ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    )}
-                  </div>
+            {/* Gateway Provider & Transaction Reference (Flat, clean, un-nested) */}
+            <div className="pt-3 border-t border-[#F0E1E6]/70 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-[#38262E] flex items-center gap-1.5">
+                  <ReceiptText className="h-3.5 w-3.5 text-[#7A6870]" />
+                  Payment Reference
+                </span>
+                {!isEditingTrx && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrxInput(order.transactionReference || "");
+                      setIsEditingTrx(true);
+                    }}
+                    className="text-[11px] font-medium text-[#B73D67] hover:underline cursor-pointer"
+                  >
+                    {order.transactionReference ? "Edit" : "+ Record Trx"}
+                  </button>
                 )}
               </div>
 
-              {order.orderStatus !== "Cancelled" && (
-                <div className="pt-2">
+              <div className="flex items-center justify-between text-[#7A6870]">
+                <span>Method</span>
+                <span className="font-medium text-[#38262E]">{order.paymentMethod}</span>
+              </div>
+
+              {isEditingTrx ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    value={trxInput}
+                    onChange={(e) => setTrxInput(e.target.value)}
+                    placeholder="e.g. KBZ-TRX-12345678"
+                    className="h-8 text-xs rounded-xl border-[#EEDFE5]"
+                  />
                   <Button
-                    type="button"
-                    variant="ghost"
                     size="sm"
-                    onClick={handleCancelOrder}
-                    className="w-full text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                    className="h-8 text-xs rounded-xl bg-[#B73D67] hover:bg-[#982F53] text-white"
+                    onClick={() => {
+                      updatePaymentReference(order.id, trxInput.trim());
+                      setIsEditingTrx(false);
+                      toast.success("Payment transaction reference saved");
+                    }}
                   >
-                    Cancel Order
+                    Save
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs rounded-xl border-[#EEDFE5]"
+                    onClick={() => setIsEditingTrx(false)}
+                  >
+                    Cancel
                   </Button>
                 </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] text-[#38262E]">
+                    {order.transactionReference || (
+                      <span className="text-[#7A6870]/70 italic">
+                        No reference recorded
+                      </span>
+                    )}
+                  </span>
+                  {order.transactionReference && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(order.transactionReference!);
+                        setCopiedTrx(true);
+                        toast.success("Copied transaction reference to clipboard");
+                        setTimeout(() => setCopiedTrx(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] text-[#7A6870] hover:text-[#B73D67] cursor-pointer"
+                      title="Copy reference"
+                    >
+                      {copiedTrx ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Cancel Order (Discrete & Non-Intrusive) */}
+            {order.orderStatus !== "Cancelled" && (
+              <div className="pt-2 border-t border-[#F0E1E6]/50">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelOrder}
+                  className="w-full text-xs h-7 text-[#7A6870]/70 hover:text-rose-600 hover:bg-rose-50/50 cursor-pointer font-normal"
+                >
+                  Cancel Order
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Customer Information */}
           <Card>

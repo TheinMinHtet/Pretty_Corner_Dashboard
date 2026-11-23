@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import {
   Banknote,
   ShoppingBag,
@@ -13,7 +14,6 @@ import {
   ArrowRight,
   AlertTriangle,
   Sparkles,
-  Package,
   Eye,
   AlertCircle,
 } from "lucide-react";
@@ -40,11 +40,7 @@ import {
 import {
   UnifiedOrderStatusBadge,
 } from "@/components/ui/status-badge";
-import {
-  OrderStatusDistributionCard,
-  OrdersTrendCard,
-  RevenueChartCard,
-} from "@/components/charts/dashboard-charts";
+import { ChartCardSkeleton } from "@/components/charts/dashboard-charts";
 import { formatDate, formatMMK } from "@/lib/utils";
 import {
   DATE_RANGES,
@@ -53,6 +49,44 @@ import {
   computeDashboardMetrics,
   deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
+
+const RevenueChartCard = dynamic(
+  () =>
+    import("@/components/charts/dashboard-charts").then(
+      (m) => m.RevenueChartCard
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <ChartCardSkeleton
+        className="col-span-1 lg:col-span-2"
+        height="h-[280px]"
+      />
+    ),
+  }
+);
+
+const OrdersTrendCard = dynamic(
+  () =>
+    import("@/components/charts/dashboard-charts").then(
+      (m) => m.OrdersTrendCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton height="h-[280px]" />,
+  }
+);
+
+const OrderStatusDistributionCard = dynamic(
+  () =>
+    import("@/components/charts/dashboard-charts").then(
+      (m) => m.OrderStatusDistributionCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton height="h-[360px]" />,
+  }
+);
 
 export default function AdminDashboardPage() {
   const { orders, products, categories, inventoryStats } = useAdminStore();
