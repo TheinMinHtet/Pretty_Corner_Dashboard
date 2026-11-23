@@ -309,11 +309,28 @@ function extractTownshipFromAddress(addr: string): string {
   return "Yangon";
 }
 
+function sanitizeImageUrl(url: string | null | undefined): string {
+  if (!url) return "/assets/dew-drop-serum.png";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("data:image/") || trimmed.length > 500) {
+    return "/assets/dew-drop-serum.png";
+  }
+  return trimmed;
+}
+
+function sanitizeProductImage(img: string | undefined): string {
+  if (!img) return "/assets/dew-drop-serum.png";
+  if (img.startsWith("data:image/") && img.length > 100000) {
+    return "/assets/dew-drop-serum.png";
+  }
+  return img;
+}
+
 function mapOrderRow(row: SbOrderRow, allProducts?: Product[]): Order {
   const items = (row.order_items ?? []).map((it) => {
     let resolvedProductId = it.product_id;
     let resolvedProductName = it.product_name;
-    let resolvedImage = it.product_image;
+    let resolvedImage = sanitizeImageUrl(it.product_image);
     let resolvedSku = "";
 
     if (allProducts && allProducts.length > 0) {
@@ -344,7 +361,7 @@ function mapOrderRow(row: SbOrderRow, allProducts?: Product[]): Order {
         resolvedProductName = matched.name;
         resolvedSku = matched.sku || "";
         if (!resolvedImage || resolvedImage === "/assets/dew-drop-serum.png") {
-          resolvedImage = matched.images[0] || resolvedImage;
+          resolvedImage = sanitizeImageUrl(matched.images[0]) || resolvedImage;
         }
       }
     }
@@ -476,31 +493,70 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }> {
-    const [local, categories, orders, promotions, stockHistory, inventoryStats] = await Promise.all([
-      this.localFallback.getAllData(),
-      this.listCategories(),
-      this.listOrders(),
-      this.listPromotions(),
-      this.listStockAdjustments(),
-      this.getInventoryStats(),
-    ]);
+    const local = await this.localFallback.getAllData();
+    try {
+      const fetchWithTimeout = async () => {
+        const [categories, orders, promotions, stockHistory, inventoryStats, products] = await Promise.all([
+          this.listCategories(),
+          this.listOrders(),
+          this.listPromotions(),
+          this.listStockAdjustments(),
+          this.getInventoryStats(),
+          this.listProducts().catch(() => local.products ?? []),
+        ]);
 
-    const derivedCustomers = deriveCustomersFromOrders(orders);
-    const customers =
-      derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
-    const notifications = deriveNotificationsFromOrdersAndProducts(orders, []);
+        const derivedCustomers = deriveCustomersFromOrders(orders);
+        const customers =
+          derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
+        const notifications = deriveNotificationsFromOrdersAndProducts(orders, []);
+        const catalogIndex = products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          slug: p.slug,
+          categoryId: p.categoryId,
+        }));
 
-    return {
-      ...local,
-      categories,
-      products: [], // Exclude full product catalog at startup!
-      orders,
-      promotions,
-      customers,
-      stockHistory: stockHistory.length > 0 ? stockHistory : (local.stockHistory ?? []),
-      notifications,
-      inventoryStats,
-    };
+        return {
+          ...local,
+          categories,
+          products: [], // Exclude full product catalog at startup!
+          orders,
+          promotions,
+          customers,
+          stockHistory: stockHistory.length > 0 ? stockHistory : (local.stockHistory ?? []),
+          notifications,
+          inventoryStats,
+          catalogIndex,
+        };
+      };
+
+      return await Promise.race([
+        fetchWithTimeout(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Supabase bootstrap timeout (6s)")), 6000)
+        ),
+      ]);
+    } catch (err) {
+      console.warn("Supabase bootstrap failed or timed out, falling back to local store:", err);
+      const inventoryStats: InventoryStats = {
+        total: local.products?.length ?? 0,
+        inStock: local.products?.filter((p) => (p.stock ?? 0) > 0).length ?? 0,
+        lowStock: local.products?.filter((p) => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= 10).length ?? 0,
+        outOfStock: local.products?.filter((p) => (p.stock ?? 0) <= 0).length ?? 0,
+      };
+      return {
+        ...local,
+        inventoryStats,
+        catalogIndex: (local.products ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          slug: p.slug,
+          categoryId: p.categoryId,
+        })),
+      };
+    }
   }
 
   async listProductsPaginated(params: {
@@ -915,10 +971,11 @@ export class SupabaseStoreRepository implements StoreRepository {
     const sb = getSupabaseClient();
     const baseSlug = input.slug || slugify(input.name) || generateId("prod");
     const price = input.salePrice ?? input.regularPrice;
-    const images =
+    const images = (
       input.images && input.images.length > 0
         ? input.images
-        : ["/assets/dew-drop-serum.png"];
+        : ["/assets/dew-drop-serum.png"]
+    ).map(sanitizeProductImage);
 
     const { data, error } = await sb
       .from("products")
@@ -970,8 +1027,9 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (updates.benefits !== undefined) patch.benefits = updates.benefits;
     if (updates.usage !== undefined) patch.usage = updates.usage || null;
     if (updates.images !== undefined && updates.images.length > 0) {
-      patch.main_image = updates.images[0];
-      patch.gallery = updates.images;
+      const sanitized = updates.images.map(sanitizeProductImage);
+      patch.main_image = sanitized[0];
+      patch.gallery = sanitized;
     }
     if (updates.status !== undefined) {
       patch.is_active = updates.status === "Active";
@@ -1013,8 +1071,7 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (error) {
       throw new Error(`Supabase listOrders failed: ${error.message}`);
     }
-    const products = await this.listProducts();
-    return ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row, products));
+    return ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row));
   }
 
   async getOrder(idOrRef: string): Promise<Order | null> {
@@ -1026,38 +1083,54 @@ export class SupabaseStoreRepository implements StoreRepository {
       .maybeSingle();
 
     if (error || !data) return null;
-    const products = await this.listProducts();
-    return mapOrderRow(data as SbOrderRow, products);
+    return mapOrderRow(data as SbOrderRow);
   }
 
   async createStorefrontOrder(input: StorefrontOrderCreateInput): Promise<Order> {
     const sb = getSupabaseClient();
-    const rand = Math.floor(100 + Math.random() * 900);
-    const orderId = `PC-${new Date()
-      .toISOString()
-      .slice(2, 10)
-      .replace(/-/g, "")}-${rand}`;
-
     const defaultPaymentStatus =
       input.paymentMethod === "Cash on Delivery" ? "pending" : "paid";
 
-    const { error: orderErr } = await sb.from("orders").insert({
-      id: orderId,
-      customer_name: input.customerName,
-      phone: input.phone,
-      delivery_address: input.deliveryAddress,
-      landmark_note: input.landmarkNote || null,
-      total_amount: input.total,
-      promo_code: input.promoCode || null,
-      discount_amount: input.discountAmount || 0,
-      payment_method: input.paymentMethod,
-      payment_status: input.paymentStatus ?? defaultPaymentStatus,
-      fulfillment_status: "pending_review",
-      payment_slip_url: null,
-    });
+    let orderId = "";
+    let orderCreated = false;
 
-    if (orderErr) {
+    // Retry loop with 6-digit entropy (900,000 combinations/day) to prevent unique key collisions
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+      const rand = Math.floor(100000 + Math.random() * 900000);
+      orderId = `PC-${dateStr}-${rand}`;
+
+      const { error: orderErr } = await sb.from("orders").insert({
+        id: orderId,
+        customer_name: input.customerName,
+        phone: input.phone,
+        delivery_address: input.deliveryAddress,
+        landmark_note: input.landmarkNote || null,
+        total_amount: input.total,
+        promo_code: input.promoCode || null,
+        discount_amount: input.discountAmount || 0,
+        payment_method: input.paymentMethod,
+        payment_status: input.paymentStatus ?? defaultPaymentStatus,
+        fulfillment_status: "pending_review",
+        payment_slip_url: null,
+      });
+
+      if (!orderErr) {
+        orderCreated = true;
+        break;
+      }
+
+      // If Postgres unique constraint violation (code 23505), retry with a new random ID
+      if (orderErr.code === "23505" || orderErr.message?.includes("unique constraint")) {
+        console.warn(`Order ID collision on ${orderId}, retrying attempt ${attempt + 1}...`);
+        continue;
+      }
+
       throw new Error(`Supabase createOrder failed: ${orderErr.message}`);
+    }
+
+    if (!orderCreated) {
+      throw new Error("Failed to generate a unique order ID after 5 attempts.");
     }
 
     const allProducts = await this.listProducts();
@@ -1075,7 +1148,7 @@ export class SupabaseStoreRepository implements StoreRepository {
         unit_price: item.price,
         quantity: item.quantity,
         item_total: item.price * item.quantity,
-        product_image: item.image || matched?.images[0] || null,
+        product_image: sanitizeImageUrl(item.image || matched?.images[0]),
         discount_amount: item.discountAmount || 0,
       };
     });

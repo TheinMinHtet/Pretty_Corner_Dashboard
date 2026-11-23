@@ -44,6 +44,14 @@ export interface Product {
   updatedAt: string;
 }
 
+export interface CatalogIndexItem {
+  id: string;
+  name: string;
+  sku: string;
+  slug?: string;
+  categoryId: string;
+}
+
 export interface Category {
   id: string;
   name: string;

@@ -1,4 +1,5 @@
 import {
+  CatalogIndexItem,
   Category,
   Customer,
   Order,
@@ -348,7 +349,7 @@ export interface CategoryRevenueItem {
 
 export function computeCategorySales(
   categories: Category[],
-  products: Product[],
+  products: (Product | CatalogIndexItem)[],
   palette: string[] = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"],
   orders?: Order[]
 ): CategoryRevenueItem[] {
@@ -368,6 +369,13 @@ export function computeCategorySales(
 
         const matchedProduct = products.find((p) => {
           if (item.productId && (p.id === item.productId || p.slug === item.productId)) {
+            return true;
+          }
+          if (
+            item.sku &&
+            p.sku &&
+            item.sku.trim().toLowerCase() === p.sku.trim().toLowerCase()
+          ) {
             return true;
           }
           if (
@@ -431,7 +439,13 @@ export function computeCategorySales(
       });
     }
 
-    return result;
+    // Sort by revenue descending so top sales are presented first
+    result.sort((a, b) => b.revenue - a.revenue);
+    // Re-assign distinct palette colors after sorting
+    return result.map((item, idx) => ({
+      ...item,
+      color: palette[idx % palette.length],
+    }));
   }
 
   // Fallback when orders are not provided: derive from products soldCount
@@ -442,10 +456,12 @@ export function computeCategorySales(
         p.categoryId === cat.slug ||
         p.categoryId === cat.name
     );
-    const revenue = catProducts.reduce(
-      (sum, p) => sum + (p.soldCount || 0) * (p.salePrice ?? p.regularPrice),
-      0
-    );
+    const revenue = catProducts.reduce((sum, p) => {
+      const prod = p as Partial<Product>;
+      return (
+        sum + (prod.soldCount || 0) * (prod.salePrice ?? prod.regularPrice ?? 0)
+      );
+    }, 0);
     return {
       name: cat.name,
       revenue,

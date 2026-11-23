@@ -12,6 +12,20 @@ export async function GET(request: NextRequest) {
   try {
     const repo = getStoreRepository();
     const { searchParams } = new URL(request.url);
+    const view = searchParams.get("view");
+    if (view === "index") {
+      const products = await repo.listProducts();
+      return jsonWithCors({
+        products: products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          slug: p.slug,
+          categoryId: p.categoryId,
+        })),
+      });
+    }
+
     const audience = searchParams.get("audience");
     const category = searchParams.get("category") ?? undefined;
     const status =

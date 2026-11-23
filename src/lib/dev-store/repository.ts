@@ -273,11 +273,19 @@ export class JsonFileStoreRepository implements StoreRepository {
       ).length,
       inStock: data.products.filter((p) => p.stock > p.lowStockThreshold).length,
     };
+    const catalogIndex = data.products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      slug: p.slug,
+      categoryId: p.categoryId,
+    }));
     return {
       ...data,
       products: [], // Do NOT load all products at the start of the project!
       customers: derived.length > 0 ? derived : data.customers,
       inventoryStats,
+      catalogIndex,
     };
   }
 
@@ -681,8 +689,13 @@ export class JsonFileStoreRepository implements StoreRepository {
   async createStorefrontOrder(input: StorefrontOrderCreateInput): Promise<Order> {
     return this.withWriteLock((data) => {
       const now = new Date().toISOString();
-      const rand = Math.floor(100 + Math.random() * 900);
-      const ref = `PC-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${rand}`;
+      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+      let rand = Math.floor(100000 + Math.random() * 900000);
+      let ref = `PC-${dateStr}-${rand}`;
+      while (data.orders.some((o) => o.id === ref || o.reference === ref)) {
+        rand = Math.floor(100000 + Math.random() * 900000);
+        ref = `PC-${dateStr}-${rand}`;
+      }
 
       const paymentMethodMap: Record<string, Order["paymentMethod"]> = {
         KBZPay: "KBZPay",
@@ -725,11 +738,16 @@ export class JsonFileStoreRepository implements StoreRepository {
         coordinates: input.coordinates,
         items: input.items.map((item, idx) => {
           const prod = data.products.find((p) => p.id === item.productId);
+          const rawImage = item.image || prod?.images[0] || "/assets/dew-drop-serum.png";
+          const safeImage =
+            rawImage.startsWith("data:image/") || rawImage.length > 500
+              ? "/assets/dew-drop-serum.png"
+              : rawImage;
           return {
             id: `oi-${Date.now().toString(36)}-${idx}`,
             productId: item.productId,
             productName: item.name,
-            productImage: item.image || prod?.images[0] || "/assets/dew-drop-serum.png",
+            productImage: safeImage,
             sku: prod?.sku || item.productId.toUpperCase(),
             quantity: item.quantity,
             unitPrice: item.price,

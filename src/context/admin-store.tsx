@@ -6,10 +6,12 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
   ActivityLogItem,
+  CatalogIndexItem,
   Category,
   Customer,
   InventoryStats,
@@ -95,6 +97,7 @@ interface PersistedState {
   activity: ActivityLogItem[];
   settings: StoreSettings;
   inventoryStats: InventoryStats;
+  catalogIndex: CatalogIndexItem[];
 }
 
 const EMPTY_INITIAL_STATE: PersistedState = {
@@ -113,6 +116,7 @@ const EMPTY_INITIAL_STATE: PersistedState = {
     lowStock: 0,
     outOfStock: 0,
   },
+  catalogIndex: [],
 };
 
 interface AdminContextValue extends PersistedState {
@@ -220,48 +224,24 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<PersistedState>(EMPTY_INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
 
-  const refreshFromApi = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/bootstrap", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = (await res.json()) as Partial<PersistedState>;
-      const orders = data.orders ?? [];
-      const derived = deriveCustomersFromOrders(orders);
-      const customers =
-        data.customers && data.customers.length > 0
-          ? data.customers
-          : derived;
-      setState({
-        products: data.products ?? [],
-        categories: data.categories ?? [],
-        orders,
-        customers,
-        stockHistory: data.stockHistory ?? [],
-        promotions: data.promotions ?? [],
-        notifications: data.notifications ?? [],
-        activity: data.activity ?? [],
-        settings: mergeSettings(data.settings),
-        inventoryStats: data.inventoryStats ?? {
-          total: 0,
-          inStock: 0,
-          lowStock: 0,
-          outOfStock: 0,
-        },
-      });
-    } catch (error) {
-      console.error("Failed to load admin store from API:", error);
-    } finally {
-      setHydrated(true);
+  const refreshFromApi = useCallback(async (force = false) => {
+    const now = Date.now();
+    // Throttle background refetches (e.g. visibility change) to at least 15 seconds apart
+    if (!force && now - lastFetchTimeRef.current < 15000) {
+      return;
     }
-  }, []);
+    if (inFlightRef.current) {
+      return inFlightRef.current;
+    }
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/admin/bootstrap", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: Partial<PersistedState> | null) => {
-        if (!active || !data) return;
+    const promise = (async () => {
+      try {
+        const res = await fetch("/api/admin/bootstrap", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as Partial<PersistedState>;
         const orders = data.orders ?? [];
         const derived = deriveCustomersFromOrders(orders);
         const customers =
@@ -284,20 +264,31 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             lowStock: 0,
             outOfStock: 0,
           },
+          catalogIndex: (data as { catalogIndex?: CatalogIndexItem[] }).catalogIndex ?? [],
         });
-      })
-      .catch((error) => console.error("Failed to load admin store:", error))
-      .finally(() => {
-        if (active) setHydrated(true);
-      });
+        lastFetchTimeRef.current = Date.now();
+      } catch (error) {
+        console.error("Failed to load admin store from API:", error);
+      } finally {
+        inFlightRef.current = null;
+        setHydrated(true);
+      }
+    })();
 
-    const handleFocus = () => {
+    inFlightRef.current = promise;
+    return promise;
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void refreshFromApi(true);
+
+    const handleVisibilityChange = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         void refreshFromApi();
       }
     };
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Periodic sync every 30 seconds for live updates
     const pollInterval = setInterval(() => {
@@ -308,8 +299,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false;
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(pollInterval);
     };
   }, [refreshFromApi]);
