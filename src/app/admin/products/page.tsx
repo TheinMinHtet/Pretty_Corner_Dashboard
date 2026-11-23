@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Category, Product, ProductStatus } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export default function ProductsPage() {
     globalSearch,
     setGlobalSearch,
   } = useAdminStore();
+  const { t } = useLanguage();
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -168,15 +170,15 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-            Products
+            {t.productsPageTitle}
           </h2>
           <p className="text-sm text-[#806B73]">
-            Manage your beauty and skincare catalog, pricing, and stock.
+            {t.productsPageSubtitle}
           </p>
         </div>
         <Button asChild>
           <Link href="/admin/products/new">
-            <Plus className="h-4 w-4" /> Add Product
+            <Plus className="h-4 w-4" /> {t.addProductBtn}
           </Link>
         </Button>
       </div>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { Product, StockAdjustment, InventoryStats } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ import { formatDateTime, cn } from "@/lib/utils";
 
 export default function InventoryPage() {
   const { categories, adjustStock } = useAdminStore();
+  const { t } = useLanguage();
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -225,10 +227,10 @@ export default function InventoryPage() {
     <div className="space-y-5">
       <div>
         <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
-          Inventory Management
+          {t.inventoryPageTitle}
         </h2>
         <p className="text-sm text-[#806B73]">
-          Monitor stock levels, handle restocks, and audit stock adjustment logs.
+          {t.inventoryPageSubtitle}
         </p>
       </div>
 
@@ -291,10 +293,10 @@ export default function InventoryPage() {
       <Tabs defaultValue="stock">
         <TabsList>
           <TabsTrigger value="stock">
-            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" /> Stock Levels
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1.5" /> {t.stockLevelsTab}
           </TabsTrigger>
           <TabsTrigger value="history">
-            <History className="h-3.5 w-3.5 mr-1.5" /> Stock History (
+            <History className="h-3.5 w-3.5 mr-1.5" /> {t.stockHistoryTab} (
             {historyTotal})
           </TabsTrigger>
         </TabsList>

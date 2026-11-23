@@ -33,7 +33,44 @@ import { deriveCustomersFromOrders } from "@/lib/dev-store/mappers";
 import { toast } from "sonner";
 
 const AUTH_STORAGE_KEY = "pretty_corner_auth_session_v1";
+const READ_NOTIF_STORAGE_KEY = "pretty_corner_read_notifications_v1";
 const INACTIVITY_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function getClientReadNotificationIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(READ_NOTIF_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((id): id is string => typeof id === "string"))
+      : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function addClientReadNotificationIds(ids: string[]): void {
+  if (typeof window === "undefined" || ids.length === 0) return;
+  try {
+    const current = getClientReadNotificationIds();
+    for (const id of ids) current.add(id);
+    // Cap stored IDs to prevent unbounded localStorage growth
+    const trimmed = Array.from(current).slice(-200);
+    window.localStorage.setItem(READ_NOTIF_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clearClientReadNotificationIds(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(READ_NOTIF_STORAGE_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function getStoredSession(): AdminSession | null {
   if (typeof window === "undefined") return null;
@@ -248,6 +285,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           data.customers && data.customers.length > 0
             ? data.customers
             : derived;
+        const readIds = getClientReadNotificationIds();
         setState({
           products: data.products ?? [],
           categories: data.categories ?? [],
@@ -255,7 +293,9 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           customers,
           stockHistory: data.stockHistory ?? [],
           promotions: data.promotions ?? [],
-          notifications: data.notifications ?? [],
+          notifications: (data.notifications ?? []).filter(
+            (n) => !n.read && !readIds.has(n.id)
+          ),
           activity: data.activity ?? [],
           settings: mergeSettings(data.settings),
           inventoryStats: data.inventoryStats ?? {
@@ -892,13 +932,15 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     [persistMutation]
   );
 
+  const notificationsRef = useRef<NotificationItem[]>([]);
+  notificationsRef.current = state.notifications;
+
   const markNotificationRead = useCallback(
     (id: string) => {
+      addClientReadNotificationIds([id]);
       setState((prev) => ({
         ...prev,
-        notifications: prev.notifications.map((n) =>
-          n.id === id ? { ...n, read: true } : n
-        ),
+        notifications: prev.notifications.filter((n) => n.id !== id),
       }));
       void persistMutation("/api/notifications/read", "POST", { id });
     },
@@ -906,14 +948,17 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   );
 
   const markAllNotificationsRead = useCallback(() => {
+    const ids = notificationsRef.current.map((n) => n.id);
+    addClientReadNotificationIds(ids);
     setState((prev) => ({
       ...prev,
-      notifications: prev.notifications.map((n) => ({ ...n, read: true })),
+      notifications: [],
     }));
-    void persistMutation("/api/notifications/read", "POST", {});
+    void persistMutation("/api/notifications/read", "POST", { ids });
   }, [persistMutation]);
 
   const resetDemoData = useCallback(() => {
+    clearClientReadNotificationIds();
     void persistMutation("/api/admin/reset", "POST");
   }, [persistMutation]);
 

@@ -8,12 +8,18 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { id?: string };
+    const body = (await request.json().catch(() => ({}))) as {
+      id?: string;
+      ids?: string[];
+    };
     const repo = getStoreRepository();
     if (body.id) {
       await repo.markNotificationRead(body.id);
     } else {
-      await repo.markAllNotificationsRead();
+      const ids = Array.isArray(body.ids)
+        ? body.ids.filter((id): id is string => typeof id === "string")
+        : undefined;
+      await repo.markAllNotificationsRead(ids);
     }
     return jsonWithCors({ ok: true });
   } catch (error) {

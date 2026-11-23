@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
+import { useLanguage } from "@/context/language-context";
 import { INITIAL_SETTINGS } from "@/data/mock-data";
 import { StoreSettings } from "@/types/admin";
 import {
@@ -37,6 +38,7 @@ import { AlertTriangle } from "lucide-react";
 
 export default function SettingsPage() {
   const { settings, updateSettings, resetDemoData } = useAdminStore();
+  const { t } = useLanguage();
   const [draft, setDraft] = useState<StoreSettings>(settings);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
@@ -63,10 +65,10 @@ export default function SettingsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-2xl font-semibold text-[#38262E]">
-            Store Settings
+            {t.settingsPageTitle}
           </h2>
           <p className="text-sm text-[#7A6870]">
-            Configure Pretty Corner store details, payment methods, and alerts.
+            {t.settingsPageSubtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -75,10 +77,10 @@ export default function SettingsPage() {
             onClick={() => setIsResetConfirmOpen(true)}
             className="border-[#EEDFE5] text-[#38262E] hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
           >
-            <RotateCcw className="h-4 w-4" /> Reset Demo Data
+            <RotateCcw className="h-4 w-4" /> {t.resetDemoData}
           </Button>
           <Button onClick={handleSave}>
-            <Save className="h-4 w-4" /> Save Settings
+            <Save className="h-4 w-4" /> {t.saveSettingsBtn}
           </Button>
         </div>
       </div>
@@ -119,16 +121,16 @@ export default function SettingsPage() {
       <Tabs defaultValue="store" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="store">
-            <Store className="h-3.5 w-3.5 mr-1.5" /> Store & Contact
+            <Store className="h-3.5 w-3.5 mr-1.5" /> {t.tabStoreContact}
           </TabsTrigger>
           <TabsTrigger value="payments">
-            <CreditCard className="h-3.5 w-3.5 mr-1.5" /> Payments
+            <CreditCard className="h-3.5 w-3.5 mr-1.5" /> {t.tabPayments}
           </TabsTrigger>
           <TabsTrigger value="notifications">
-            <Bell className="h-3.5 w-3.5 mr-1.5" /> Stock & Alerts
+            <Bell className="h-3.5 w-3.5 mr-1.5" /> {t.tabStockAlerts}
           </TabsTrigger>
           <TabsTrigger value="profile">
-            <User className="h-3.5 w-3.5 mr-1.5" /> Admin Profile
+            <User className="h-3.5 w-3.5 mr-1.5" /> {t.tabAdminProfile}
           </TabsTrigger>
         </TabsList>
 
@@ -136,14 +138,14 @@ export default function SettingsPage() {
         <TabsContent value="store">
           <Card>
             <CardHeader>
-              <CardTitle>Store & Contact Information</CardTitle>
+              <CardTitle>{t.storeContactTitle}</CardTitle>
               <CardDescription>
-                Boutique identity and customer support channels
+                {t.storeContactDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Store Name</Label>
+                <Label>{t.storeNameLabel}</Label>
                 <Input
                   value={draft.storeName}
                   onChange={(e) =>
@@ -152,7 +154,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Tagline</Label>
+                <Label>{t.taglineLabel}</Label>
                 <Input
                   value={draft.tagline}
                   onChange={(e) =>
@@ -161,7 +163,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Support Email</Label>
+                <Label>{t.supportEmailLabel}</Label>
                 <Input
                   type="email"
                   value={draft.supportEmail}
@@ -171,7 +173,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Support Phone</Label>
+                <Label>{t.supportPhoneLabel}</Label>
                 <Input
                   value={draft.supportPhone}
                   onChange={(e) =>
@@ -180,7 +182,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Viber Hotline</Label>
+                <Label>{t.viberHotlineLabel}</Label>
                 <Input
                   value={draft.viberPhone}
                   onChange={(e) =>
@@ -189,7 +191,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Boutique Address</Label>
+                <Label>{t.boutiqueAddressLabel}</Label>
                 <Input
                   value={draft.address}
                   onChange={(e) =>
@@ -198,7 +200,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Currency</Label>
+                <Label>{t.currencyLabel}</Label>
                 <Input
                   value={draft.currency}
                   onChange={(e) =>
@@ -212,9 +214,9 @@ export default function SettingsPage() {
 
           <Card className="mt-4">
             <CardHeader>
-              <CardTitle>Social Channels</CardTitle>
+              <CardTitle>{t.socialChannelsTitle}</CardTitle>
               <CardDescription>
-                Public links used on storefront content (PC-CT-006)
+                {t.socialChannelsDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -274,9 +276,9 @@ export default function SettingsPage() {
         <TabsContent value="payments" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Method Settings</CardTitle>
+              <CardTitle>{t.paymentSettingsTitle}</CardTitle>
               <CardDescription>
-                Enable or disable accepted checkout payment channels
+                {t.paymentSettingsDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -319,14 +321,14 @@ export default function SettingsPage() {
         <TabsContent value="notifications" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Low-Stock Threshold</CardTitle>
+              <CardTitle>{t.lowStockThresholdTitle}</CardTitle>
               <CardDescription>
-                Default reorder alert threshold for new products
+                {t.lowStockThresholdDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="max-w-xs">
               <div className="space-y-1.5">
-                <Label>Default Threshold (Units)</Label>
+                <Label>{t.defaultThresholdLabel}</Label>
                 <Input
                   type="number"
                   min={1}
@@ -344,9 +346,9 @@ export default function SettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
+              <CardTitle>{t.notificationPrefsTitle}</CardTitle>
               <CardDescription>
-                Choose which admin alerts appear in your dashboard
+                {t.notificationPrefsDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -407,14 +409,14 @@ export default function SettingsPage() {
         <TabsContent value="profile">
           <Card>
             <CardHeader>
-              <CardTitle>Administrator Profile</CardTitle>
+              <CardTitle>{t.adminProfileTitle}</CardTitle>
               <CardDescription>
-                Manage your administrator display details
+                {t.adminProfileDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Full Name</Label>
+                <Label>{t.fullNameLabel}</Label>
                 <Input
                   value={draft.adminProfile.name}
                   onChange={(e) =>
@@ -429,7 +431,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Role</Label>
+                <Label>{t.roleLabel}</Label>
                 <Input
                   value={draft.adminProfile.role}
                   onChange={(e) =>
@@ -444,7 +446,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Email Address</Label>
+                <Label>{t.emailAddressLabel}</Label>
                 <Input
                   type="email"
                   value={draft.adminProfile.email}
@@ -460,7 +462,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Phone Number</Label>
+                <Label>{t.phoneNumberLabel}</Label>
                 <Input
                   value={draft.adminProfile.phone}
                   onChange={(e) =>

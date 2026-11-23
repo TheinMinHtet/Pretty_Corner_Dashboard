@@ -34,6 +34,7 @@ import {
   resolveUnifiedOrderStatus,
   UNIFIED_STATUS_CONFIG,
 } from "@/components/ui/status-badge";
+import { useLanguage } from "@/context/language-context";
 
 export const STATUS_COLORS: Record<OrderStatus, string> = {
   Pending: "#F59E0B",
@@ -64,6 +65,7 @@ export function RevenueChartCard({
   orders: Order[];
   range: DateRange;
 }) {
+  const { t } = useLanguage();
   const data = useMemo(
     () => buildOrderSeries(orders, range),
     [orders, range]
@@ -74,10 +76,10 @@ export function RevenueChartCard({
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
         <div>
           <div className="flex items-center gap-2">
-            <CardTitle>Revenue Overview</CardTitle>
+            <CardTitle>{t.revenueOverviewTitle}</CardTitle>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live
+              {t.liveBadge}
             </span>
           </div>
           <CardDescription>
@@ -169,6 +171,7 @@ export function OrdersTrendCard({
   orders: Order[];
   range: DateRange;
 }) {
+  const { t } = useLanguage();
   const data = useMemo(
     () => buildOrderSeries(orders, range),
     [orders, range]
@@ -178,10 +181,10 @@ export function OrdersTrendCard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <CardTitle>Orders Over Time</CardTitle>
+          <CardTitle>{t.ordersOverTimeTitle}</CardTitle>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live
+            {t.liveBadge}
           </span>
         </div>
         <CardDescription>
@@ -260,7 +263,7 @@ export function OrdersTrendCard({
 
 export function OrderStatusDistributionCard({
   orders,
-  title = "Order Status Distribution",
+  title,
   description,
   className,
 }: {
@@ -269,6 +272,8 @@ export function OrderStatusDistributionCard({
   description?: string;
   className?: string;
 }) {
+  const { t } = useLanguage();
+  const resolvedTitle = title ?? t.orderStatusDistTitle;
   const distribution = useMemo(() => {
     const categories = [
       "Paid",
@@ -302,7 +307,7 @@ export function OrderStatusDistributionCard({
   return (
     <Card className={`rounded-[32px] border-[#F0E1E6] bg-white shadow-xs ${className ?? ""}`}>
       <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-lg font-bold text-[#33272C]">{title}</CardTitle>
+        <CardTitle className="font-serif text-lg font-bold text-[#33272C]">{resolvedTitle}</CardTitle>
         <CardDescription className="text-xs text-[#806B73]">
           {description ?? `Real-time live breakdown across ${totalOrders} orders`}
         </CardDescription>

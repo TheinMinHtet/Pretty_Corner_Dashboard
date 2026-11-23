@@ -445,7 +445,11 @@ export class SupabaseStoreRepository implements StoreRepository {
     const derivedCustomers = deriveCustomersFromOrders(orders);
     const customers =
       derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
-    const notifications = deriveNotificationsFromOrdersAndProducts(orders, products);
+    const notifications = deriveNotificationsFromOrdersAndProducts(
+      orders,
+      products,
+      local.readNotificationIds ?? []
+    );
 
     return {
       ...local,
@@ -508,7 +512,11 @@ export class SupabaseStoreRepository implements StoreRepository {
         const derivedCustomers = deriveCustomersFromOrders(orders);
         const customers =
           derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
-        const notifications = deriveNotificationsFromOrdersAndProducts(orders, []);
+        const notifications = deriveNotificationsFromOrdersAndProducts(
+          orders,
+          [],
+          local.readNotificationIds ?? []
+        );
         const catalogIndex = products.map((p) => ({
           id: p.id,
           name: p.name,
@@ -1467,7 +1475,14 @@ export class SupabaseStoreRepository implements StoreRepository {
     return this.localFallback.markNotificationRead(id);
   }
 
-  async markAllNotificationsRead(): Promise<void> {
-    return this.localFallback.markAllNotificationsRead();
+  async markAllNotificationsRead(ids?: string[]): Promise<void> {
+    if (ids && ids.length > 0) {
+      return this.localFallback.markAllNotificationsRead(ids);
+    }
+    const orders = await this.listOrders().catch(() => []);
+    const derivedIds = deriveNotificationsFromOrdersAndProducts(orders, []).map(
+      (n) => n.id
+    );
+    return this.localFallback.markAllNotificationsRead(derivedIds);
   }
 }

@@ -222,8 +222,10 @@ export function deriveCustomersFromOrders(orders: Order[]): Customer[] {
  */
 export function deriveNotificationsFromOrdersAndProducts(
   orders: Order[],
-  products: Product[]
+  products: Product[],
+  readIds: string[] = []
 ): NotificationItem[] {
+  const readSet = new Set(readIds);
   const notifications: NotificationItem[] = [];
 
   // 1. Order notifications from recent real orders
@@ -267,9 +269,11 @@ export function deriveNotificationsFromOrdersAndProducts(
     }
   }
 
-  // Sort by createdAt descending
-  return notifications.sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  // Sort by createdAt descending and omit read/dismissed notifications
+  return notifications
+    .filter((n) => !readSet.has(n.id))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 }

@@ -70,6 +70,13 @@ export interface AdminTranslationSchema {
   outOfStock: string;
 
   // Dashboard Overview
+  overviewTitle: string;
+  overviewSubtitle: string;
+  salesSummaryTitle: string;
+  revenueOverviewTitle: string;
+  ordersOverTimeTitle: string;
+  orderStatusDistTitle: string;
+  liveBadge: string;
   totalSales: string;
   totalOrders: string;
   avgOrderValue: string;
@@ -77,6 +84,7 @@ export interface AdminTranslationSchema {
   urgentAttention: string;
   pendingOrders: string;
   lowStockAlert: string;
+  lowStockAlertDesc: string;
   recentOrders: string;
   recentOrdersDesc: string;
   topSellingProducts: string;
@@ -84,6 +92,119 @@ export interface AdminTranslationSchema {
   viewAllOrders: string;
   viewAllProducts: string;
   viewAllInventory: string;
+
+  // Page & Section Titles
+  ordersPageTitle: string;
+  ordersPageSubtitle: string;
+  ordersListTitle: string;
+  purchasedProductsTitle: string;
+  orderTimelineTitle: string;
+  orderTimelineDesc: string;
+  orderPaymentStatusTitle: string;
+  customerInfoTitle: string;
+
+  productsPageTitle: string;
+  productsPageSubtitle: string;
+  addProductBtn: string;
+  addNewProductTitle: string;
+  editProductPrefix: string;
+  productFormSubtitle: string;
+  generalInfoTitle: string;
+  generalInfoDesc: string;
+  productNameLabel: string;
+  productDescriptionLabel: string;
+  productCategoryLabel: string;
+  productBrandLabel: string;
+  storefrontContentTitle: string;
+  storefrontContentDesc: string;
+  badgeOptionalLabel: string;
+  taglineOptionalLabel: string;
+  whyWeLoveItLabel: string;
+  howToUseLabel: string;
+  productImagesTitle: string;
+  productImagesDesc: string;
+  uploadLabel: string;
+  productVisibilityLabel: string;
+  pricingMmkTitle: string;
+  priceMmkLabel: string;
+  inventorySkuTitle: string;
+  skuLabel: string;
+  stockQuantityLabel: string;
+  lowStockThresholdLabel: string;
+  cancelBtn: string;
+  createProductBtn: string;
+  saveChangesBtn: string;
+
+  categoriesPageTitle: string;
+  categoriesPageSubtitle: string;
+  addCategoryBtn: string;
+  addNewCategoryTitle: string;
+  editCategoryTitle: string;
+  addNewCategoryDesc: string;
+  editCategoryDesc: string;
+  categoryNameLabel: string;
+  activeOnStorefrontLabel: string;
+  activeOnStorefrontDesc: string;
+  createCategoryBtn: string;
+
+  inventoryPageTitle: string;
+  inventoryPageSubtitle: string;
+  stockLevelsTab: string;
+  stockHistoryTab: string;
+
+  customersPageTitle: string;
+  customersPageSubtitle: string;
+
+  promotionsPageTitle: string;
+  promotionsPageSubtitle: string;
+  newPromotionBtn: string;
+
+  reportsPageTitle: string;
+  reportsPageSubtitle: string;
+  revenueTrendsTitle: string;
+  revenueTrendsDesc: string;
+  salesByCategoryTitle: string;
+  salesByCategoryDesc: string;
+  ordersByStatusTitle: string;
+  ordersByStatusDesc: string;
+  paymentChannelsTitle: string;
+  paymentChannelsDesc: string;
+  customerRetentionTitle: string;
+  customerRetentionDesc: string;
+  bestSellingProductsTitle: string;
+  bestSellingProductsDesc: string;
+
+  settingsPageTitle: string;
+  settingsPageSubtitle: string;
+  tabStoreContact: string;
+  tabPayments: string;
+  tabStockAlerts: string;
+  tabAdminProfile: string;
+  storeContactTitle: string;
+  storeContactDesc: string;
+  storeNameLabel: string;
+  taglineLabel: string;
+  supportEmailLabel: string;
+  supportPhoneLabel: string;
+  viberHotlineLabel: string;
+  boutiqueAddressLabel: string;
+  currencyLabel: string;
+  socialChannelsTitle: string;
+  socialChannelsDesc: string;
+  paymentSettingsTitle: string;
+  paymentSettingsDesc: string;
+  lowStockThresholdTitle: string;
+  lowStockThresholdDesc: string;
+  defaultThresholdLabel: string;
+  notificationPrefsTitle: string;
+  notificationPrefsDesc: string;
+  adminProfileTitle: string;
+  adminProfileDesc: string;
+  fullNameLabel: string;
+  roleLabel: string;
+  emailAddressLabel: string;
+  phoneNumberLabel: string;
+  saveSettingsBtn: string;
 
   // Table Columns & Common Labels
   orderCol: string;
@@ -178,6 +299,13 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     lowStock: "Low Stock",
     outOfStock: "Out of Stock",
 
+    overviewTitle: "Pretty Corner Overview",
+    overviewSubtitle: "Monitor daily sales, order fulfillment, and beauty inventory at a glance.",
+    salesSummaryTitle: "Sales Summary",
+    revenueOverviewTitle: "Revenue Overview",
+    ordersOverTimeTitle: "Orders Over Time",
+    orderStatusDistTitle: "Order Status Distribution",
+    liveBadge: "Live",
     totalSales: "Total Sales",
     totalOrders: "Total Orders",
     avgOrderValue: "Avg Order Value",
@@ -185,6 +313,7 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     urgentAttention: "Urgent Attention",
     pendingOrders: "Pending Orders",
     lowStockAlert: "Low Stock Alert",
+    lowStockAlertDesc: "Products at or below reorder threshold",
     recentOrders: "Recent Orders",
     recentOrdersDesc: "Latest storefront and counter orders",
     topSellingProducts: "Top Selling Products",
@@ -192,6 +321,121 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     viewAllOrders: "View all orders",
     viewAllProducts: "View all products",
     viewAllInventory: "Open inventory",
+
+    ordersPageTitle: "Order Management",
+    ordersPageSubtitle: "Track customer orders, verify payments, and update fulfillment stages.",
+    ordersListTitle: "Orders List",
+    purchasedProductsTitle: "Purchased Products",
+    orderTimelineTitle: "Order Status Timeline",
+    orderTimelineDesc: "Chronological history of order & fulfillment updates",
+    orderPaymentStatusTitle: "Order & Payment Status",
+    customerInfoTitle: "Customer Information",
+
+    productsPageTitle: "Products",
+    productsPageSubtitle: "Manage your beauty and skincare catalog, pricing, and stock.",
+    addProductBtn: "Add Product",
+    addNewProductTitle: "Add New Product",
+    editProductPrefix: "Edit",
+    productFormSubtitle: "Configure pricing, stock levels, and images",
+    generalInfoTitle: "General Information",
+    generalInfoDesc: "Basic product identity and copy",
+    productNameLabel: "Product Name *",
+    productDescriptionLabel: "Description",
+    productCategoryLabel: "Category",
+    productBrandLabel: "Brand",
+    storefrontContentTitle: "Storefront Content",
+    storefrontContentDesc:
+      "Controls the “Why we love it” and “How to use” sections on the customer product page",
+    badgeOptionalLabel: "Badge (Optional)",
+    taglineOptionalLabel: "Tagline (Optional)",
+    whyWeLoveItLabel: "Why We Love It — Key Benefits (one bullet per line)",
+    howToUseLabel: "How to Use",
+    productImagesTitle: "Product Images",
+    productImagesDesc:
+      "Upload local images for instant preview (stored in browser state)",
+    uploadLabel: "Upload",
+    productVisibilityLabel: "Product Visibility",
+    pricingMmkTitle: "Pricing (MMK)",
+    priceMmkLabel: "Price (MMK) *",
+    inventorySkuTitle: "Inventory & SKU",
+    skuLabel: "SKU *",
+    stockQuantityLabel: "Stock Quantity",
+    lowStockThresholdLabel: "Low-Stock Threshold",
+    cancelBtn: "Cancel",
+    createProductBtn: "Create Product",
+    saveChangesBtn: "Save Changes",
+
+    categoriesPageTitle: "Categories",
+    categoriesPageSubtitle: "Organize Pretty Corner beauty collections and product departments.",
+    addCategoryBtn: "Add Category",
+    addNewCategoryTitle: "Add New Category",
+    editCategoryTitle: "Edit Category",
+    addNewCategoryDesc: "Create a new product department for catalog organization.",
+    editCategoryDesc: "Update category details and storefront visibility.",
+    categoryNameLabel: "Category Name *",
+    activeOnStorefrontLabel: "Active on Storefront",
+    activeOnStorefrontDesc:
+      "Inactive categories are hidden from the customer navigation menu.",
+    createCategoryBtn: "Create Category",
+
+    inventoryPageTitle: "Inventory Management",
+    inventoryPageSubtitle: "Monitor stock levels, handle restocks, and audit stock adjustment logs.",
+    stockLevelsTab: "Stock Levels",
+    stockHistoryTab: "Stock History",
+
+    customersPageTitle: "Customers",
+    customersPageSubtitle: "View loyal shoppers, order history, and saved delivery addresses.",
+
+    promotionsPageTitle: "Promotions & Campaigns",
+    promotionsPageSubtitle: "Curate high-impact seasonal boutique banners, discount codes, 4-tier target routing, and hero product drops.",
+    newPromotionBtn: "New Promotion",
+
+    reportsPageTitle: "Sales Reports & Analytics",
+    reportsPageSubtitle: "Evaluate revenue growth, category performance, and order conversion.",
+    revenueTrendsTitle: "Revenue Trends",
+    revenueTrendsDesc: "Sales performance over selected period",
+    salesByCategoryTitle: "Sales by Category",
+    salesByCategoryDesc: "Cumulative revenue per beauty category",
+    ordersByStatusTitle: "Orders by Status",
+    ordersByStatusDesc: "Current active order distribution",
+    paymentChannelsTitle: "Payment Channels & Settlements",
+    paymentChannelsDesc: "Volume and revenue distribution across payment providers",
+    customerRetentionTitle: "Customer Retention & Segmentation",
+    customerRetentionDesc: "First-time buyers vs. repeat beauty enthusiasts",
+    bestSellingProductsTitle: "Best-Selling Products",
+    bestSellingProductsDesc: "Top revenue-generating items in the selected period",
+
+    settingsPageTitle: "Store Settings",
+    settingsPageSubtitle: "Configure Pretty Corner store details, payment methods, and alerts.",
+    tabStoreContact: "Store & Contact",
+    tabPayments: "Payments",
+    tabStockAlerts: "Stock & Alerts",
+    tabAdminProfile: "Admin Profile",
+    storeContactTitle: "Store & Contact Information",
+    storeContactDesc: "Boutique identity and customer support channels",
+    storeNameLabel: "Store Name",
+    taglineLabel: "Tagline",
+    supportEmailLabel: "Support Email",
+    supportPhoneLabel: "Support Phone",
+    viberHotlineLabel: "Viber Hotline",
+    boutiqueAddressLabel: "Boutique Address",
+    currencyLabel: "Currency",
+    socialChannelsTitle: "Social Channels",
+    socialChannelsDesc: "Public links used on storefront content (PC-CT-006)",
+    paymentSettingsTitle: "Payment Method Settings",
+    paymentSettingsDesc: "Enable or disable accepted checkout payment channels",
+    lowStockThresholdTitle: "Low-Stock Threshold",
+    lowStockThresholdDesc: "Default reorder alert threshold for new products",
+    defaultThresholdLabel: "Default Threshold (Units)",
+    notificationPrefsTitle: "Notification Preferences",
+    notificationPrefsDesc: "Choose which admin alerts appear in your dashboard",
+    adminProfileTitle: "Administrator Profile",
+    adminProfileDesc: "Manage your administrator display details",
+    fullNameLabel: "Full Name",
+    roleLabel: "Role",
+    emailAddressLabel: "Email Address",
+    phoneNumberLabel: "Phone Number",
+    saveSettingsBtn: "Save Settings",
 
     orderCol: "Order",
     customerCol: "Customer",
@@ -282,6 +526,13 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     lowStock: "လက်ကျန်နည်း",
     outOfStock: "ပစ္စည်းပြတ်လပ်",
 
+    overviewTitle: "Pretty Corner ခြုံငုံသုံးသပ်ချက်",
+    overviewSubtitle: "နေ့စဉ် အရောင်း၊ အော်ဒါပို့ဆောင်မှုနှင့် ကုန်ပစ္စည်းလက်ကျန်များကို တစ်နေရာတည်းတွင် ကြည့်ရှုစစ်ဆေးပါ။",
+    salesSummaryTitle: "အရောင်းအကျဉ်းချုပ်",
+    revenueOverviewTitle: "ဝင်ငွေ ခြုံငုံသုံးသပ်ချက်",
+    ordersOverTimeTitle: "အချိန်အလိုက် အော်ဒါပမာဏ",
+    orderStatusDistTitle: "အော်ဒါအခြေအနေ ခွဲခြမ်းစိတ်ဖြာမှု",
+    liveBadge: "တိုက်ရိုက်",
     totalSales: "စုစုပေါင်း အရောင်းပမာဏ",
     totalOrders: "စုစုပေါင်း အော်ဒါ",
     avgOrderValue: "ပျမ်းမျှ အော်ဒါတန်ဖိုး",
@@ -289,6 +540,7 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     urgentAttention: "အရေးပေါ် စစ်ဆေးရန်များ",
     pendingOrders: "စစ်ဆေးရန်ကျန် အော်ဒါများ",
     lowStockAlert: "လက်ကျန်နည်း ပစ္စည်းများ",
+    lowStockAlertDesc: "ပြန်လည်မှာယူရန် သတ်မှတ်ပမာဏသို့ ရောက်ရှိနေသော ပစ္စည်းများ",
     recentOrders: "လတ်တလော အော်ဒါများ",
     recentOrdersDesc: "အွန်လိုင်းဆိုင်နှင့် ကောင်တာမှ နောက်ဆုံးရရှိသော အော်ဒါများ",
     topSellingProducts: "အရောင်းရဆုံး ပစ္စည်းများ",
@@ -296,6 +548,120 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     viewAllOrders: "အော်ဒါအားလုံး ကြည့်မည်",
     viewAllProducts: "ပစ္စည်းအားလုံး ကြည့်မည်",
     viewAllInventory: "ကုန်ပစ္စည်းလက်ကျန် ကြည့်မည်",
+
+    ordersPageTitle: "အော်ဒါ စီမံခန့်ခွဲမှု",
+    ordersPageSubtitle: "ဝယ်ယူသူ အော်ဒါများ၊ ငွေပေးချေမှု စစ်ဆေးခြင်းနှင့် ပို့ဆောင်မှုအဆင့်များကို စီမံပါ။",
+    ordersListTitle: "အော်ဒါစာရင်း",
+    purchasedProductsTitle: "ဝယ်ယူထားသော ပစ္စည်းများ",
+    orderTimelineTitle: "အော်ဒါအခြေအနေ မှတ်တမ်း",
+    orderTimelineDesc: "အော်ဒါနှင့် ပို့ဆောင်မှု အဆင့်ဆင့် ပြောင်းလဲမှု မှတ်တမ်း",
+    orderPaymentStatusTitle: "အော်ဒါနှင့် ငွေပေးချေမှု အခြေအနေ",
+    customerInfoTitle: "ဝယ်ယူသူ အချက်အလက်",
+
+    productsPageTitle: "ကုန်ပစ္စည်းများ",
+    productsPageSubtitle: "အလှကုန်ပစ္စည်း စာရင်း၊ ဈေးနှုန်းနှင့် လက်ကျန်ပမာဏများကို စီမံခန့်ခွဲပါ။",
+    addProductBtn: "ပစ္စည်းအသစ်ထည့်မည်",
+    addNewProductTitle: "ကုန်ပစ္စည်းအသစ် ထည့်သွင်းရန်",
+    editProductPrefix: "ပြင်ဆင်ရန် -",
+    productFormSubtitle: "ဈေးနှုန်း၊ ကုန်ပစ္စည်းလက်ကျန်နှင့် ဓာတ်ပုံများကို သတ်မှတ်ပါ",
+    generalInfoTitle: "အခြေခံ အချက်အလက်",
+    generalInfoDesc: "ကုန်ပစ္စည်း၏ အခြေခံအမည်နှင့် အကြောင်းအရာ",
+    productNameLabel: "ကုန်ပစ္စည်းအမည် *",
+    productDescriptionLabel: "ဖော်ပြချက်",
+    productCategoryLabel: "အမျိုးအစား",
+    productBrandLabel: "တံဆိပ် (Brand)",
+    storefrontContentTitle: "ဆိုင်စာမျက်နှာ အချက်အလက်",
+    storefrontContentDesc:
+      "ဝယ်ယူသူစာမျက်နှာရှိ “Why we love it” နှင့် “How to use” အပိုင်းများကို ထိန်းချုပ်သည်",
+    badgeOptionalLabel: "တံဆိပ်အမှတ်အသား (Badge - ရွေးချယ်နိုင်)",
+    taglineOptionalLabel: "ဆောင်ပုဒ် (Tagline - ရွေးချယ်နိုင်)",
+    whyWeLoveItLabel: "နှစ်သက်ရသည့် အဓိကအချက်များ (တစ်ကြောင်းလျှင် တစ်ချက်)",
+    howToUseLabel: "အသုံးပြုနည်း",
+    productImagesTitle: "ကုန်ပစ္စည်း ဓာတ်ပုံများ",
+    productImagesDesc: "ချက်ချင်းကြည့်ရှုရန် စက်ထဲမှ ဓာတ်ပုံများ တင်ပါ",
+    uploadLabel: "ပုံတင်မည်",
+    productVisibilityLabel: "ပြသမှု အခြေအနေ",
+    pricingMmkTitle: "ဈေးနှုန်းသတ်မှတ်ချက် (MMK)",
+    priceMmkLabel: "ဈေးနှုန်း (MMK) *",
+    inventorySkuTitle: "ကုန်ပစ္စည်းလက်ကျန်နှင့် SKU",
+    skuLabel: "ကုန်ပစ္စည်းကုဒ် (SKU) *",
+    stockQuantityLabel: "လက်ကျန် အရေအတွက်",
+    lowStockThresholdLabel: "လက်ကျန်နည်း သတိပေးမည့် ပမာဏ",
+    cancelBtn: "မလုပ်တော့ပါ",
+    createProductBtn: "ပစ္စည်းအသစ် ထည့်မည်",
+    saveChangesBtn: "ပြင်ဆင်မှု သိမ်းမည်",
+
+    categoriesPageTitle: "အမျိုးအစားများ",
+    categoriesPageSubtitle: "Pretty Corner အလှကုန် ကဏ္ဍများနှင့် အမျိုးအစားများကို စနစ်တကျ စီစဉ်ပါ။",
+    addCategoryBtn: "အမျိုးအစားအသစ် ထည့်မည်",
+    addNewCategoryTitle: "အမျိုးအစားအသစ် ထည့်သွင်းရန်",
+    editCategoryTitle: "အမျိုးအစား ပြင်ဆင်ရန်",
+    addNewCategoryDesc: "ကုန်ပစ္စည်းစာရင်း စနစ်တကျ စီစဉ်ရန် အမျိုးအစားအသစ် ဖန်တီးပါ။",
+    editCategoryDesc: "အမျိုးအစား အချက်အလက်နှင့် ဆိုင်စာမျက်နှာ ပြသမှုကို ပြင်ဆင်ပါ။",
+    categoryNameLabel: "အမျိုးအစား အမည် *",
+    activeOnStorefrontLabel: "ဆိုင်စာမျက်နှာတွင် ပြသမည်",
+    activeOnStorefrontDesc:
+      "ပိတ်ထားသော အမျိုးအစားများကို ဝယ်ယူသူ မီနူးတွင် ဖျောက်ထားပါမည်။",
+    createCategoryBtn: "အမျိုးအစား ဖန်တီးမည်",
+
+    inventoryPageTitle: "ကုန်ပစ္စည်းလက်ကျန် စီမံခန့်ခွဲမှု",
+    inventoryPageSubtitle: "ပစ္စည်းလက်ကျန် အခြေအနေများ၊ ဖြည့်တင်းမှုနှင့် ပြင်ဆင်မှုမှတ်တမ်းများကို စစ်ဆေးပါ။",
+    stockLevelsTab: "လက်ကျန်အခြေအနေ",
+    stockHistoryTab: "လက်ကျန် ပြင်ဆင်မှုမှတ်တမ်း",
+
+    customersPageTitle: "ဝယ်ယူသူများ",
+    customersPageSubtitle: "ပုံမှန်ဝယ်ယူသူများ၊ အော်ဒါမှတ်တမ်းနှင့် ပို့ဆောင်ရမည့် လိပ်စာများကို ကြည့်ရှုပါ။",
+
+    promotionsPageTitle: "ပရိုမိုးရှင်းနှင့် ကမ်ပိန်းများ",
+    promotionsPageSubtitle: "ရာသီအလိုက် ပရိုမိုးရှင်း ဘန်နာများ၊ လျှော့ဈေးကုဒ်များနှင့် အထူးထုတ်ကုန် ကမ်ပိန်းများကို စီမံဖန်တီးပါ။",
+    newPromotionBtn: "ပရိုမိုးရှင်းအသစ် ဖန်တီးမည်",
+
+    reportsPageTitle: "အရောင်းအစီရင်ခံစာနှင့် သုံးသပ်ချက်",
+    reportsPageSubtitle: "ဝင်ငွေတိုးတက်မှု၊ အမျိုးအစားအလိုက် ရောင်းအားနှင့် အော်ဒါအခြေအနေများကို သုံးသပ်ပါ။",
+    revenueTrendsTitle: "ဝင်ငွေ ပြောင်းလဲမှုနှုန်း",
+    revenueTrendsDesc: "ရွေးချယ်ထားသော ကာလအတွင်း အရောင်းစွမ်းဆောင်ရည်",
+    salesByCategoryTitle: "အမျိုးအစားအလိုက် ရောင်းအား",
+    salesByCategoryDesc: "အလှကုန် အမျိုးအစားတစ်ခုချင်းစီအလိုက် စုစုပေါင်းဝင်ငွေ",
+    ordersByStatusTitle: "အခြေအနေအလိုက် အော်ဒါများ",
+    ordersByStatusDesc: "လက်ရှိ အော်ဒါများ၏ အခြေအနေခွဲခြမ်းစိတ်ဖြာမှု",
+    paymentChannelsTitle: "ငွေပေးချေမှု နည်းလမ်းများ",
+    paymentChannelsDesc: "ငွေပေးချေမှုစနစ်အလိုက် အရေအတွက်နှင့် ဝင်ငွေခွဲဝေမှု",
+    customerRetentionTitle: "ဝယ်ယူသူ ထပ်မံဝယ်ယူမှုနှင့် အမျိုးအစားခွဲခြားမှု",
+    customerRetentionDesc: "ပထမဆုံးအကြိမ် ဝယ်ယူသူများနှင့် ပုံမှန်ဖောက်သည်များ",
+    bestSellingProductsTitle: "အရောင်းရဆုံး ကုန်ပစ္စည်းများ",
+    bestSellingProductsDesc: "ရွေးချယ်ထားသော ကာလအတွင်း ဝင်ငွေအများဆုံး ရရှိသည့် ပစ္စည်းများ",
+
+    settingsPageTitle: "ဆိုင် ဆက်တင်များ",
+    settingsPageSubtitle: "Pretty Corner ဆိုင်အချက်အလက်၊ ငွေပေးချေမှုစနစ်နှင့် အသိပေးချက်များကို ပြင်ဆင်ပါ။",
+    tabStoreContact: "ဆိုင်နှင့် ဆက်သွယ်ရန်",
+    tabPayments: "ငွေပေးချေမှု",
+    tabStockAlerts: "လက်ကျန်နှင့် သတိပေးချက်",
+    tabAdminProfile: "စီမံခန့်ခွဲသူ ပရိုဖိုင်",
+    storeContactTitle: "ဆိုင်နှင့် ဆက်သွယ်ရန် အချက်အလက်",
+    storeContactDesc: "ဆိုင်အချက်အလက်နှင့် ဝယ်ယူသူ ဆက်သွယ်ရန် ချန်နယ်များ",
+    storeNameLabel: "ဆိုင်အမည်",
+    taglineLabel: "ဆောင်ပုဒ် (Tagline)",
+    supportEmailLabel: "ဝန်ဆောင်မှု အီးမေးလ်",
+    supportPhoneLabel: "ဝန်ဆောင်မှု ဖုန်းနံပါတ်",
+    viberHotlineLabel: "Viber ဖုန်းနံပါတ်",
+    boutiqueAddressLabel: "ဆိုင်လိပ်စာ",
+    currencyLabel: "ငွေကြေး",
+    socialChannelsTitle: "လူမှုကွန်ရက် စာမျက်နှာများ",
+    socialChannelsDesc: "ဆိုင်စာမျက်နှာတွင် အသုံးပြုမည့် လူမှုကွန်ရက် လင့်ခ်များ",
+    paymentSettingsTitle: "ငွေပေးချေမှု နည်းလမ်း ဆက်တင်များ",
+    paymentSettingsDesc: "လက်ခံမည့် ငွေပေးချေမှု နည်းလမ်းများကို ဖွင့်/ပိတ် ပြုလုပ်ပါ",
+    lowStockThresholdTitle: "လက်ကျန်နည်း သတိပေးချက် သတ်မှတ်ချက်",
+    lowStockThresholdDesc: "ကုန်ပစ္စည်းအသစ်များအတွက် မူလ လက်ကျန်နည်း သတိပေးပမာဏ",
+    defaultThresholdLabel: "မူလ သတ်မှတ်ပမာဏ (အရေအတွက်)",
+    notificationPrefsTitle: "အသိပေးချက် ဆက်တင်များ",
+    notificationPrefsDesc: "ဒက်ရှ်ဘုတ်တွင် ပြသမည့် အသိပေးချက်များကို ရွေးချယ်ပါ",
+    adminProfileTitle: "စီမံခန့်ခွဲသူ ပရိုဖိုင်",
+    adminProfileDesc: "စီမံခန့်ခွဲသူ၏ ပြသမည့် အချက်အလက်များကို စီမံပါ",
+    fullNameLabel: "အမည်အပြည့်အစုံ",
+    roleLabel: "ရာထူး / တာဝန်",
+    emailAddressLabel: "အီးမေးလ်လိပ်စာ",
+    phoneNumberLabel: "ဖုန်းနံပါတ်",
+    saveSettingsBtn: "ဆက်တင်များ သိမ်းဆည်းမည်",
 
     orderCol: "အော်ဒါ",
     customerCol: "ဝယ်ယူသူ",
