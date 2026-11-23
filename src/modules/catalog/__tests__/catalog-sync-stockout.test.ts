@@ -87,47 +87,6 @@ describe('evaluatePromotionStockout', () => {
     assert.equal(evaluatePromotionStockout(promo, mockProducts), false);
   });
 
-  test('SELECTED_PRODUCTS target tier: returns true only if ALL featured products are out of stock', () => {
-    const allOutPromo: Promotion = {
-      id: 'p3',
-      title: 'Out of Stock Drop',
-      subtitle: '',
-      code: 'EMPTYDROP',
-      discountPercentage: 25,
-      startDate: '2026-01-01',
-      endDate: '2026-12-31',
-      active: true,
-      targetType: 'SELECTED_PRODUCTS',
-      redemptionMethod: 'CODE',
-      usageCount: 0,
-      bannerColor: '#FCEEF2',
-      featuredProductIds: ['prod-out-stock'],
-      isOutOfStock: false,
-    };
-
-    assert.equal(evaluatePromotionStockout(allOutPromo, mockProducts), true);
-
-    const mixedPromo: Promotion = {
-      id: 'p4',
-      title: 'Mixed Drop',
-      subtitle: '',
-      code: 'MIXEDDROP',
-      discountPercentage: 25,
-      startDate: '2026-01-01',
-      endDate: '2026-12-31',
-      active: true,
-      targetType: 'SELECTED_PRODUCTS',
-      redemptionMethod: 'CODE',
-      usageCount: 0,
-      bannerColor: '#FCEEF2',
-      featuredProductIds: ['prod-out-stock', 'prod-in-stock'],
-      isOutOfStock: false,
-    };
-
-    // Since at least 1 item is still in stock, the campaign is NOT out of stock
-    assert.equal(evaluatePromotionStockout(mixedPromo, mockProducts), false);
-  });
-
   test('ENTIRE_STORE target tier: returns false (storewide campaigns remain active)', () => {
     const storewidePromo: Promotion = {
       id: 'p5',

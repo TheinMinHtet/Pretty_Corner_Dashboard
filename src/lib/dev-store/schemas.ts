@@ -161,7 +161,6 @@ export const StockAdjustmentRequestSchema = z.object({
 
 export const PromotionTargetTypeSchema = z.enum([
   "SINGLE_PRODUCT",
-  "SELECTED_PRODUCTS",
   "CATEGORY",
   "ENTIRE_STORE",
 ]);

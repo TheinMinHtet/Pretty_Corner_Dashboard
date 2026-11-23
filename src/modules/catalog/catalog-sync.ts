@@ -274,13 +274,5 @@ export function evaluatePromotionStockout(promo: Promotion, products: Product[])
     return (matched.stock || 0) <= 0;
   }
 
-  if (promo.targetType === "SELECTED_PRODUCTS") {
-    const ids = promo.featuredProductIds || [];
-    if (ids.length === 0) return false;
-    const featuredItems = products.filter((p) => ids.includes(p.id) || ids.includes(p.slug || ""));
-    // If all featured items are out of stock (stock <= 0), mark promotion out of stock
-    return featuredItems.length > 0 && featuredItems.every((p) => (p.stock || 0) <= 0);
-  }
-
   return false;
 }

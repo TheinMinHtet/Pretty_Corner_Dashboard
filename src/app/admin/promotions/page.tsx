@@ -69,14 +69,6 @@ function deriveDestination(p: {
       return p.targetSlug
         ? `/shop?product=${encodeURIComponent(p.targetSlug)}${codeParam ? `&${codeParam}` : ""}`
         : `/shop${querySuffix}`;
-    case "SELECTED_PRODUCTS":
-      if (p.slug) {
-        return `/shop?drop=${encodeURIComponent(p.slug)}${codeParam ? `&${codeParam}` : ""}`
-      }
-      if (p.featuredProductIds && p.featuredProductIds.length > 0) {
-        return `/shop?products=${encodeURIComponent(p.featuredProductIds.join(","))}${codeParam ? `&${codeParam}` : ""}`;
-      }
-      return `/shop${querySuffix}`;
     case "CATEGORY":
       return p.targetSlug
         ? `/shop?category=${encodeURIComponent(p.targetSlug)}${codeParam ? `&${codeParam}` : ""}`
@@ -197,14 +189,6 @@ export default function PromotionsPage() {
     setDialogOpen(true);
   };
 
-  const toggleFeaturedProduct = (prodId: string) => {
-    setFeaturedProductIds((prev) =>
-      prev.includes(prodId)
-        ? prev.filter((id) => id !== prodId)
-        : [...prev, prodId]
-    );
-  };
-
   const copyPromoCode = (promoCode: string) => {
     navigator.clipboard.writeText(promoCode);
     setCopiedCode(promoCode);
@@ -221,7 +205,7 @@ export default function PromotionsPage() {
 
   const handleSelectTier = (newTier: PromotionTargetType) => {
     setTargetType(newTier);
-    if (newTier === "ENTIRE_STORE" || newTier === "SELECTED_PRODUCTS") {
+    if (newTier === "ENTIRE_STORE") {
       setTargetSlug("");
     }
   };
@@ -274,7 +258,7 @@ export default function PromotionsPage() {
       ctaLink: null,
       bannerColor: "#FCEEF2",
       bannerImage: bannerImage.trim() || null,
-      featuredProductIds: targetType === "SELECTED_PRODUCTS" ? featuredProductIds : [],
+      featuredProductIds: [],
     };
 
     if (editing) {
@@ -462,12 +446,6 @@ export default function PromotionsPage() {
                           <>
                             <Package className="h-3.5 w-3.5 text-[#B73D67]" />
                             <span>Single Product: <span className="font-mono text-[#B73D67]">{promo.targetSlug || "Designated Item"}</span></span>
-                          </>
-                        )}
-                        {promo.targetType === "SELECTED_PRODUCTS" && (
-                          <>
-                            <Sparkles className="h-3.5 w-3.5 text-[#B73D67]" />
-                            <span>Curated Drop ({featuredItems.length} items)</span>
                           </>
                         )}
                         {promo.targetType === "CATEGORY" && (
@@ -698,12 +676,11 @@ export default function PromotionsPage() {
               </div>
 
               {/* Tier Selection Buttons */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {[
                   { id: "ENTIRE_STORE", label: "Storewide", desc: "Whole Catalog", icon: Store },
                   { id: "CATEGORY", label: "Category", desc: "Specific Line", icon: FolderTree },
                   { id: "SINGLE_PRODUCT", label: "Hero Item", desc: "Single Product", icon: Package },
-                  { id: "SELECTED_PRODUCTS", label: "Curated Drop", desc: "Selected Group", icon: Sparkles },
                 ].map((tier) => {
                   const isSelected = targetType === tier.id;
                   const Icon = tier.icon;
@@ -765,42 +742,6 @@ export default function PromotionsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-              )}
-
-              {targetType === "SELECTED_PRODUCTS" && (
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-bold text-[#38262E]">
-                      Curated Group Drop Items ({featuredProductIds.length} selected)
-                    </Label>
-                    <Input
-                      value={slug}
-                      onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                      placeholder="campaign-hub-slug (e.g. holiday-drop)"
-                      className="h-8 text-xs max-w-xs rounded-lg font-mono"
-                    />
-                  </div>
-                  <div className="max-h-36 overflow-y-auto rounded-xl border border-[#F0E1E6] p-2 space-y-1 bg-white">
-                    {products.map((p) => {
-                      const selected = featuredProductIds.includes(p.id);
-                      return (
-                        <button
-                          type="button"
-                          key={p.id}
-                          onClick={() => toggleFeaturedProduct(p.id)}
-                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition-colors cursor-pointer ${
-                            selected
-                              ? "bg-[#FCEEF2] text-[#B73D67] font-bold"
-                              : "hover:bg-[#FAF7F8] text-[#33272C]"
-                          }`}
-                        >
-                          <span className="truncate">{p.name}</span>
-                          <span>{selected ? "✓ Added" : "+ Add"}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
 

@@ -171,7 +171,6 @@ export interface StockAdjustment {
 
 export type PromotionTargetType =
   | "SINGLE_PRODUCT"
-  | "SELECTED_PRODUCTS"
   | "CATEGORY"
   | "ENTIRE_STORE";
 
