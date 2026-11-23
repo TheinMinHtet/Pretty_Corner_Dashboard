@@ -5,10 +5,12 @@ import {
   OrderStatus,
   PaymentStatus,
   Product,
+  Promotion,
   StockAdjustment,
   OrderTimelineEvent,
 } from "@/types/admin";
 import { generateId } from "@/lib/utils";
+import { evaluatePromotionStockout } from "@/modules/catalog/catalog-sync";
 
 export interface OrderTransitionResult {
   updatedOrder: Order;
@@ -24,6 +26,7 @@ export interface OrderMutationResult {
   newNotifications: NotificationItem[];
   newActivity?: ActivityLogItem;
   timelineNote: string;
+  updatedPromotions?: Promotion[];
 }
 
 export interface PaymentSettlementInput {
@@ -36,6 +39,12 @@ export interface OrderUpdateExecutionInput {
   paymentStatus?: PaymentStatus;
   transactionReference?: string;
   note?: string;
+}
+
+export interface OrderUpdateExecutionOptions {
+  actorName: string;
+  lowStockAlertEnabled?: boolean;
+  promotions?: Promotion[];
 }
 
 /**
@@ -168,14 +177,14 @@ export function executeOrderUpdate(
   order: Order,
   input: OrderUpdateExecutionInput,
   currentProducts: Product[],
-  options: {
-    actorName: string;
-    lowStockAlertEnabled?: boolean;
-  }
+  options: OrderUpdateExecutionOptions
 ): OrderMutationResult {
   const now = new Date().toISOString();
   let workingOrder: Order = { ...order };
   let workingProducts: Product[] = [...currentProducts];
+  let workingPromotions: Promotion[] | undefined = options.promotions
+    ? [...options.promotions]
+    : undefined;
   const newAdjustments: StockAdjustment[] = [];
   const newNotifications: NotificationItem[] = [];
   let newActivity: ActivityLogItem | undefined;
@@ -198,6 +207,42 @@ export function executeOrderUpdate(
     workingProducts = transition.updatedProducts;
     newAdjustments.push(...transition.newAdjustments);
     timelineNote = transition.timelineNote;
+
+    // Invariant: If cancelling an order, restore promotional quota & re-evaluate stockout
+    if (input.orderStatus === "Cancelled" && prevStatus !== "Cancelled" && workingPromotions) {
+      const targetPromoId = workingOrder.appliedPromotionId;
+      const targetCode = workingOrder.promoCode?.trim().toUpperCase();
+
+      workingPromotions = workingPromotions.map((promo) => {
+        const matchesId = Boolean(targetPromoId && promo.id === targetPromoId);
+        const matchesCode = Boolean(
+          targetCode && promo.code && promo.code.trim().toUpperCase() === targetCode
+        );
+
+        if (matchesId || matchesCode) {
+          const nextCount = Math.max(0, (promo.usageCount ?? 0) - 1);
+          const isOut = evaluatePromotionStockout(promo, workingProducts);
+          return {
+            ...promo,
+            usageCount: nextCount,
+            isOutOfStock: isOut,
+            updatedAt: now,
+          };
+        }
+
+        // Re-evaluate stockout state for other promotions since stock was restored
+        const isOut = evaluatePromotionStockout(promo, workingProducts);
+        if (promo.isOutOfStock !== isOut) {
+          return {
+            ...promo,
+            isOutOfStock: isOut,
+            updatedAt: now,
+          };
+        }
+
+        return promo;
+      });
+    }
 
     // Invariant: Transitioning to Shipped increments soldCount
     if ((prevStatus === "Shipped") !== (input.orderStatus === "Shipped")) {
@@ -347,5 +392,6 @@ export function executeOrderUpdate(
     newNotifications,
     newActivity,
     timelineNote,
+    updatedPromotions: workingPromotions,
   };
 }

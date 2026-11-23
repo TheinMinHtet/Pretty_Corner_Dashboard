@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
+import { PromotionsPageSkeleton } from "@/components/skeletons/promotions-skeletons";
 import { Promotion, PromotionTargetType, RedemptionMethod } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export default function PromotionsPage() {
     addPromotion,
     updatePromotion,
     deletePromotion,
+    hydrated,
   } = useAdminStore();
   const { t } = useLanguage();
 
@@ -278,6 +280,10 @@ export default function PromotionsPage() {
     slug: slug.trim() || (code.trim() ? code.trim().toLowerCase() : undefined),
     code: code.trim().toUpperCase(),
   });
+
+  if (!hydrated) {
+    return <PromotionsPageSkeleton />;
+  }
 
   return (
     <div suppressHydrationWarning className="space-y-6">

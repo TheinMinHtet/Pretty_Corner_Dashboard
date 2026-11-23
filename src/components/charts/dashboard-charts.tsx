@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Order, OrderStatus } from "@/types/admin";
-import { formatCompactMMK, formatMMK } from "@/lib/utils";
+import { cn, formatCompactMMK, formatMMK } from "@/lib/utils";
 import {
   buildOrderSeries,
   DateRange,
@@ -72,8 +72,8 @@ export function RevenueChartCard({
   );
 
   return (
-    <Card className="col-span-1 lg:col-span-2">
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
+    <Card className="col-span-1 lg:col-span-2 rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 px-5 pt-5">
         <div>
           <div className="flex items-center gap-2">
             <CardTitle>{t.revenueOverviewTitle}</CardTitle>
@@ -167,9 +167,11 @@ export function RevenueChartCard({
 export function OrdersTrendCard({
   orders,
   range,
+  className,
 }: {
   orders: Order[];
   range: DateRange;
+  className?: string;
 }) {
   const { t } = useLanguage();
   const data = useMemo(
@@ -178,84 +180,86 @@ export function OrdersTrendCard({
   );
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className={cn("rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full", className)}>
+      <CardHeader className="pb-3 px-5 pt-5">
         <div className="flex items-center gap-2">
-          <CardTitle>{t.ordersOverTimeTitle}</CardTitle>
+          <CardTitle className="text-base font-bold text-[#38262E]">{t.ordersOverTimeTitle}</CardTitle>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {t.liveBadge}
           </span>
         </div>
-        <CardDescription>
+        <CardDescription className="text-xs text-[#7A6870]">
           Order volume over the {DATE_RANGE_LABELS[range]} (updated live through Today)
         </CardDescription>
       </CardHeader>
-      <CardContent className="h-[240px] pt-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#F0E1E6"
-            />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              minTickGap={16}
-              interval="preserveStartEnd"
-              tick={{ fill: "#806B73", fontSize: 11 }}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tick={{ fill: "#806B73", fontSize: 11 }}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
-                const point = payload[0].payload as (typeof data)[0];
-                return (
-                  <div className="rounded-xl border border-[#F0E1E6] bg-white p-2.5 shadow-md text-xs space-y-1">
-                    <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
-                      <span>{point.shortDate || point.label}</span>
-                      {point.isToday && (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          Today · Live
+      <CardContent className="flex-1 min-h-[260px] px-5 pb-5 pt-2 flex flex-col justify-between">
+        <div className="w-full flex-1 min-h-[240px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#F0E1E6"
+              />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                minTickGap={16}
+                interval="preserveStartEnd"
+                tick={{ fill: "#806B73", fontSize: 11 }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: "#806B73", fontSize: 11 }}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const point = payload[0].payload as (typeof data)[0];
+                  return (
+                    <div className="rounded-xl border border-[#F0E1E6] bg-white p-2.5 shadow-md text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
+                        <span>{point.shortDate || point.label}</span>
+                        {point.isToday && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Today · Live
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[#806B73]">
+                        Orders:{" "}
+                        <span className="font-bold text-[#38262E]">
+                          {point.orders}
                         </span>
-                      )}
+                      </p>
+                      <p className="text-[#806B73]">
+                        Revenue:{" "}
+                        <span className="font-bold text-[#B73D67]">
+                          {formatMMK(point.revenue)}
+                        </span>
+                      </p>
                     </div>
-                    <p className="text-[#806B73]">
-                      Orders:{" "}
-                      <span className="font-bold text-[#38262E]">
-                        {point.orders}
-                      </span>
-                    </p>
-                    <p className="text-[#806B73]">
-                      Revenue:{" "}
-                      <span className="font-bold text-[#B73D67]">
-                        {formatMMK(point.revenue)}
-                      </span>
-                    </p>
-                  </div>
-                );
-              }}
-            />
-            <Bar
-              dataKey="orders"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={range === "30d" ? 22 : 36}
-            >
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.isToday ? "#B73D67" : "#E99AB5"}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+                  );
+                }}
+              />
+              <Bar
+                dataKey="orders"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={range === "30d" ? 22 : 36}
+              >
+                {data.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.isToday ? "#B73D67" : "#E99AB5"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
@@ -308,7 +312,7 @@ export function OrderStatusDistributionCard({
   const totalOrders = orders.length;
 
   return (
-    <Card className={`rounded-[32px] border-[#F0E1E6] bg-white shadow-xs flex flex-col h-full ${className ?? ""}`}>
+    <Card className={`rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full ${className ?? ""}`}>
       <CardHeader className="pb-2">
         <CardTitle className="font-serif text-lg font-bold text-[#33272C]">{resolvedTitle}</CardTitle>
         <CardDescription className="text-xs text-[#806B73]">

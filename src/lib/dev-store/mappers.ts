@@ -277,3 +277,25 @@ export function deriveNotificationsFromOrdersAndProducts(
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 }
+
+export function resolveUnifiedOrderStatus(
+  orderStatus: OrderStatus,
+  paymentStatus: PaymentStatus,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _paymentMethod?: string
+): "pending" | "paid" | "failed" | "expired" | "cancelled" {
+  if (orderStatus === "Cancelled" || paymentStatus === "Cancelled") {
+    return "cancelled";
+  }
+  if (orderStatus === "Expired" || paymentStatus === "Expired") {
+    return "expired";
+  }
+  if (paymentStatus === "Failed") {
+    return "failed";
+  }
+  if (paymentStatus === "Paid" || orderStatus === "Shipped") {
+    return "paid";
+  }
+  return "pending";
+}
+

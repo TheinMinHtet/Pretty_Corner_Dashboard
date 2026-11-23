@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, FolderTree, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FolderTree } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PaginationControl } from "@/components/ui/pagination";
+import { CategoriesGridSkeleton } from "@/components/skeletons/categories-skeletons";
 
 type CategoryWithCount = Category & { productCount?: number };
 
@@ -147,12 +148,7 @@ export default function CategoriesPage() {
       </div>
 
       {isLoading && categories.length === 0 ? (
-        <Card className="p-12 text-center">
-          <div className="flex flex-col items-center justify-center gap-2 text-[#806B73]">
-            <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
-            <span className="text-xs">Fetching categories...</span>
-          </div>
-        </Card>
+        <CategoriesGridSkeleton count={6} />
       ) : categories.length === 0 ? (
         <Card className="p-12 text-center text-[#806B73]">
           <p className="text-sm font-medium text-[#33272C]">

@@ -1,4 +1,4 @@
-import { Product, StockAdjustment, Promotion } from "@/types/admin";
+import { NotificationItem, Product, StockAdjustment, Promotion } from "@/types/admin";
 import { generateId } from "@/lib/utils";
 
 export interface NormalizedProductDraft {
@@ -159,5 +159,106 @@ export function evaluatePromotionStockout(promo: Promotion, products: Product[])
     return (matched.stock || 0) <= 0;
   }
 
+  if (promo.targetType === "CATEGORY") {
+    const catTarget = promo.targetSlug;
+    if (!catTarget) return false;
+    const linked = products.filter((p) => p.categoryId === catTarget);
+    if (linked.length === 0) return false;
+    return linked.every((p) => (p.stock || 0) <= 0);
+  }
+
+  if (promo.featuredProductIds && promo.featuredProductIds.length > 0) {
+    const targets = promo.featuredProductIds;
+    const linked = products.filter((p) => targets.includes(p.id) || (p.slug && targets.includes(p.slug)));
+    if (linked.length === 0) return false;
+    return linked.every((p) => (p.stock || 0) <= 0);
+  }
+
   return false;
+}
+
+export interface DeepStockAdjustmentResult {
+  updatedProduct: Product;
+  adjustment: StockAdjustment;
+  updatedPromotions?: Promotion[];
+  newNotification?: NotificationItem;
+}
+
+/**
+ * Deep Inventory Ledger Orchestrator:
+ * 1. Clamps product stock to non-negative invariants.
+ * 2. Emits an immutable StockAdjustment ledger record.
+ * 3. Evaluates & updates affected promotion is_out_of_stock flags.
+ * 4. Dispatches low stock and out-of-stock notification triggers when enabled.
+ */
+export function executeStockAdjustment(
+  product: Product,
+  type: "increase" | "decrease",
+  quantity: number,
+  options: {
+    actorName: string;
+    reason?: string;
+    promotions?: Promotion[];
+    lowStockAlertEnabled?: boolean;
+  }
+): DeepStockAdjustmentResult {
+  const { updatedProduct, adjustment } = applyStockAdjustment(
+    product,
+    type,
+    quantity,
+    options.actorName,
+    options.reason
+  );
+
+  const now = new Date().toISOString();
+  let updatedPromotions: Promotion[] | undefined;
+  if (options.promotions && options.promotions.length > 0) {
+    updatedPromotions = options.promotions.map((promo) => {
+      const isOut = evaluatePromotionStockout(promo, [updatedProduct]);
+      if (promo.isOutOfStock !== isOut) {
+        return {
+          ...promo,
+          isOutOfStock: isOut,
+          updatedAt: now,
+        };
+      }
+      return promo;
+    });
+  }
+
+  let newNotification: NotificationItem | undefined;
+  if (options.lowStockAlertEnabled) {
+    if (updatedProduct.stock === 0 && product.stock > 0) {
+      newNotification = {
+        id: generateId("notif"),
+        type: "stock",
+        title: `Out of stock — ${updatedProduct.name}`,
+        message: `${updatedProduct.name} (${updatedProduct.sku}) is out of stock.`,
+        href: "/admin/inventory",
+        read: false,
+        createdAt: now,
+      };
+    } else if (
+      updatedProduct.stock > 0 &&
+      updatedProduct.stock <= updatedProduct.lowStockThreshold &&
+      product.stock > updatedProduct.lowStockThreshold
+    ) {
+      newNotification = {
+        id: generateId("notif"),
+        type: "stock",
+        title: `Low stock — ${updatedProduct.name}`,
+        message: `${updatedProduct.name} has only ${updatedProduct.stock} units remaining (threshold ${updatedProduct.lowStockThreshold}).`,
+        href: "/admin/inventory",
+        read: false,
+        createdAt: now,
+      };
+    }
+  }
+
+  return {
+    updatedProduct,
+    adjustment,
+    updatedPromotions,
+    newNotification,
+  };
 }

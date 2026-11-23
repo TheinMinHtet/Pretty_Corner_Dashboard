@@ -49,6 +49,9 @@ export function normalizePhoneNumber(raw: string): string {
 export interface CustomerDossierFilterOptions {
   query?: string;
   township?: string;
+  tier?: "all" | "vip" | "repeat" | "new";
+  sortKey?: "totalSpent" | "lastOrder" | "orderCount" | "joinedAt" | "name";
+  sortDir?: "asc" | "desc";
 }
 
 /**
@@ -222,8 +225,74 @@ export function getCustomerDossiers(
     });
   }
 
-  // Sort by recent order date or lifetime spend
-  dossiers.sort((a, b) => {
+  // Apply optional filtering
+  let filtered = dossiers;
+  if (options) {
+    const q = options.query?.trim().toLowerCase();
+    const townshipFilter = options.township?.trim().toLowerCase();
+    const tier = options.tier;
+
+    filtered = filtered.filter((d) => {
+      if (q) {
+        const matchName = d.name.toLowerCase().includes(q);
+        const matchPhone = d.phone.toLowerCase().includes(q) || d.normalizedPhone.includes(q);
+        const matchEmail = Boolean(d.email && d.email.toLowerCase().includes(q));
+        const matchTownship = d.primaryTownship.toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchEmail && !matchTownship) {
+          return false;
+        }
+      }
+      if (townshipFilter && townshipFilter !== "all") {
+        if (d.primaryTownship.toLowerCase() !== townshipFilter) {
+          return false;
+        }
+      }
+      if (tier && tier !== "all") {
+        if (tier === "vip" && d.totalSpent < 150000) {
+          return false;
+        }
+        if (tier === "repeat" && d.orderCount < 2) {
+          return false;
+        }
+        if (tier === "new") {
+          const joinedTime = d.joinedAt ? new Date(d.joinedAt).getTime() : 0;
+          const isRecent = joinedTime > 0 && Date.now() - joinedTime <= 30 * 24 * 60 * 60 * 1000;
+          if (d.orderCount > 1 && !isRecent) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  // Apply sorting
+  const sortKey = options?.sortKey;
+  const sortDir = options?.sortDir === "asc" ? 1 : -1;
+
+  filtered.sort((a, b) => {
+    if (sortKey === "totalSpent") {
+      return (a.totalSpent - b.totalSpent) * sortDir;
+    }
+    if (sortKey === "orderCount") {
+      return (a.orderCount - b.orderCount) * sortDir;
+    }
+    if (sortKey === "lastOrder") {
+      if (!a.lastOrderDate && !b.lastOrderDate) return 0;
+      if (!a.lastOrderDate) return 1;
+      if (!b.lastOrderDate) return -1;
+      return (new Date(a.lastOrderDate).getTime() - new Date(b.lastOrderDate).getTime()) * sortDir;
+    }
+    if (sortKey === "joinedAt") {
+      const timeA = a.joinedAt ? new Date(a.joinedAt).getTime() : 0;
+      const timeB = b.joinedAt ? new Date(b.joinedAt).getTime() : 0;
+      return (timeA - timeB) * sortDir;
+    }
+    if (sortKey === "name") {
+      return a.name.localeCompare(b.name) * sortDir;
+    }
+
+    // Default business sort: recent order date desc, then totalSpent desc
     if (a.lastOrderDate && b.lastOrderDate) {
       return new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime();
     }
@@ -232,29 +301,7 @@ export function getCustomerDossiers(
     return b.totalSpent - a.totalSpent;
   });
 
-  // Apply optional filtering
-  if (!options) return dossiers;
-
-  const q = options.query?.trim().toLowerCase();
-  const townshipFilter = options.township?.trim().toLowerCase();
-
-  return dossiers.filter((d) => {
-    if (q) {
-      const matchName = d.name.toLowerCase().includes(q);
-      const matchPhone = d.phone.toLowerCase().includes(q) || d.normalizedPhone.includes(q);
-      const matchEmail = Boolean(d.email && d.email.toLowerCase().includes(q));
-      const matchTownship = d.primaryTownship.toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchEmail && !matchTownship) {
-        return false;
-      }
-    }
-    if (townshipFilter && townshipFilter !== "all") {
-      if (d.primaryTownship.toLowerCase() !== townshipFilter) {
-        return false;
-      }
-    }
-    return true;
-  });
+  return filtered;
 }
 
 /**

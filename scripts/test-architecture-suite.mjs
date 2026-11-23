@@ -530,6 +530,123 @@ test("Session validator distinguishes between standard 8-hour and Remember Me 7-
   assert.equal(testIsSessionValid(rememberSession, pastStandard), true, "Remember Me session remains valid at 9 hours");
 });
 
+
+// ==========================================
+// TEST SUITE 6: BUSINESS FILTERS & SORTING
+// ==========================================
+console.log("\nSuite 6: Business Filters & Sorting Suite");
+
+import { getStoreRepository } from "../src/lib/dev-store/repository.ts";
+
+test("Customer Dossier sorting by Most Spending and Newest", () => {
+  const dummyOrders = [
+    {
+      id: "ord-1",
+      reference: "ORD-001",
+      customerName: "Alice Low",
+      customerPhone: "09111111111",
+      total: 30000,
+      orderStatus: "Shipped",
+      paymentStatus: "Paid",
+      createdAt: "2026-01-01T10:00:00Z",
+      deliveryAddress: "Bahan",
+      township: "Bahan",
+      city: "Yangon",
+      items: [],
+    },
+    {
+      id: "ord-2",
+      reference: "ORD-002",
+      customerName: "Bob High",
+      customerPhone: "09222222222",
+      total: 250000,
+      orderStatus: "Shipped",
+      paymentStatus: "Paid",
+      createdAt: "2026-02-01T10:00:00Z",
+      deliveryAddress: "Kamayut",
+      township: "Kamayut",
+      city: "Yangon",
+      items: [],
+    },
+  ];
+
+  const sortedBySpend = getCustomerDossiers(dummyOrders, [], {
+    sortKey: "totalSpent",
+    sortDir: "desc",
+  });
+  assert.equal(sortedBySpend[0].name, "Bob High");
+  assert.equal(sortedBySpend[0].totalSpent, 250000);
+
+  const sortedByNewest = getCustomerDossiers(dummyOrders, [], {
+    sortKey: "joinedAt",
+    sortDir: "desc",
+  });
+  assert.equal(sortedByNewest[0].name, "Bob High");
+});
+
+test("Customer Dossier VIP and Repeat segmentation pills", () => {
+  const dummyOrders = [
+    {
+      id: "ord-1",
+      reference: "ORD-001",
+      customerName: "VIP Customer",
+      customerPhone: "09333333333",
+      total: 180000,
+      orderStatus: "Shipped",
+      paymentStatus: "Paid",
+      createdAt: "2026-01-01T10:00:00Z",
+      deliveryAddress: "Bahan",
+      township: "Bahan",
+      city: "Yangon",
+      items: [],
+    },
+    {
+      id: "ord-2",
+      reference: "ORD-002",
+      customerName: "Regular Shopper",
+      customerPhone: "09444444444",
+      total: 20000,
+      orderStatus: "Shipped",
+      paymentStatus: "Paid",
+      createdAt: "2026-01-02T10:00:00Z",
+      deliveryAddress: "Bahan",
+      township: "Bahan",
+      city: "Yangon",
+      items: [],
+    },
+  ];
+
+  const vipDossiers = getCustomerDossiers(dummyOrders, [], { tier: "vip" });
+  assert.equal(vipDossiers.length, 1);
+  assert.equal(vipDossiers[0].name, "VIP Customer");
+
+  const repeatDossiers = getCustomerDossiers(dummyOrders, [], { tier: "repeat" });
+  assert.equal(repeatDossiers.length, 0); // Both only have 1 order
+});
+
+test("Repository listOrdersPaginated supports highValueOnly and time filters", async () => {
+  const repo = getStoreRepository();
+  const resHigh = await repo.listOrdersPaginated({ highValueOnly: true });
+  assert.ok(resHigh.items.every((o) => o.total >= 100000), "Every high value order must have total >= 100k MMK");
+
+  const resAll = await repo.listOrdersPaginated({ dateFilter: "all" });
+  assert.ok(resAll.items.length >= 0);
+});
+
+test("Repository listProductsPaginated supports merchandising and best-seller sorting", async () => {
+  const repo = getStoreRepository();
+  const resBest = await repo.listProductsPaginated({
+    sortKey: "soldCount",
+    sortDir: "desc",
+  });
+  for (let i = 0; i < resBest.items.length - 1; i++) {
+    assert.ok(
+      (resBest.items[i].soldCount ?? 0) >= (resBest.items[i + 1].soldCount ?? 0),
+      "Items must be sorted descending by soldCount"
+    );
+  }
+});
+
 console.log("\n=================================================");
 console.log(`ALL ARCHITECTURE TESTS PASSED (${passed}/${passed})`);
 console.log("=================================================");

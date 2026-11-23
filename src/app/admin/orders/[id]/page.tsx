@@ -36,6 +36,7 @@ import {
   UNIFIED_STATUS_CONFIG,
 } from "@/components/ui/status-badge";
 import { formatDateTime, formatMMK } from "@/lib/utils";
+import { OrderDetailsSkeleton } from "@/components/skeletons/order-details-skeleton";
 
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -45,6 +46,7 @@ export default function OrderDetailsPage() {
     updatePaymentStatus,
     updateUnifiedStatus,
     updatePaymentReference,
+    hydrated,
   } = useAdminStore();
   const { t } = useLanguage();
   const order = orders.find((o) => o.id === params.id);
@@ -55,6 +57,10 @@ export default function OrderDetailsPage() {
   const [copiedTrx, setCopiedTrx] = useState(false);
 
   if (!order) {
+    if (!hydrated) {
+      return <OrderDetailsSkeleton />;
+    }
+
     return (
       <Card className="p-8 text-center">
         <p className="text-base font-semibold text-[#33272C]">

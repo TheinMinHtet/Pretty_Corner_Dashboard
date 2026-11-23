@@ -80,9 +80,10 @@ import {
   computePaymentStatusStats,
   deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
+import { SalesReportsPageSkeleton } from "@/components/skeletons/reports-skeletons";
 
 export default function SalesReportsPage() {
-  const { orders, products, categories, catalogIndex } = useAdminStore();
+  const { orders, products, categories, catalogIndex, hydrated } = useAdminStore();
   const { t } = useLanguage();
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [localCatalogIndex, setLocalCatalogIndex] = useState<CatalogIndexItem[]>([]);
@@ -210,6 +211,10 @@ export default function SalesReportsPage() {
       ),
     [rangeOrders, activeCatalog, products]
   );
+
+  if (!hydrated) {
+    return <SalesReportsPageSkeleton />;
+  }
 
   return (
     <div className="space-y-5">

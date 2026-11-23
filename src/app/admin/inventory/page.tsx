@@ -14,7 +14,6 @@ import {
   SlidersHorizontal,
   ArrowRight,
   RotateCcw,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -49,6 +48,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PaginationControl } from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
+import { InventoryStatsSkeleton } from "@/components/skeletons/inventory-skeletons";
 import { formatDateTime, cn } from "@/lib/utils";
 
 export default function InventoryPage() {
@@ -280,55 +281,59 @@ export default function InventoryPage() {
       </div>
 
       {/* 4 Summary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-[#D96B91]/40 hover:shadow-xs">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Total Products</p>
-            <p className="text-3xl font-black text-[#38262E] mt-1 tabular-nums">
-              {stats.total}
-            </p>
+      {isLoading && products.length === 0 ? (
+        <InventoryStatsSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-[#D96B91]/40 hover:shadow-xs">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Total Products</p>
+              <p className="text-3xl font-black text-[#38262E] mt-1 tabular-nums">
+                {stats.total}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl bg-[#FCEEF2] flex items-center justify-center shrink-0">
+              <Boxes className="h-5 w-5 text-[#B73D67]" />
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-2xl bg-[#FCEEF2] flex items-center justify-center shrink-0">
-            <Boxes className="h-5 w-5 text-[#B73D67]" />
-          </div>
-        </div>
 
-        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-emerald-200 hover:shadow-xs">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">In-Stock</p>
-            <p className="text-3xl font-black text-emerald-600 mt-1 tabular-nums">
-              {stats.inStock}
-            </p>
+          <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-emerald-200 hover:shadow-xs">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">In-Stock</p>
+              <p className="text-3xl font-black text-emerald-600 mt-1 tabular-nums">
+                {stats.inStock}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-          </div>
-        </div>
 
-        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-amber-200 hover:shadow-xs">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Low-Stock Alerts</p>
-            <p className="text-3xl font-black text-amber-600 mt-1 tabular-nums">
-              {stats.lowStock}
-            </p>
+          <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-amber-200 hover:shadow-xs">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Low-Stock Alerts</p>
+              <p className="text-3xl font-black text-amber-600 mt-1 tabular-nums">
+                {stats.lowStock}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
           </div>
-          <div className="h-11 w-11 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
-          </div>
-        </div>
 
-        <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-rose-200 hover:shadow-xs">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Out-of-Stock</p>
-            <p className="text-3xl font-black text-rose-600 mt-1 tabular-nums">
-              {stats.outOfStock}
-            </p>
-          </div>
-          <div className="h-11 w-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
-            <XCircle className="h-5 w-5 text-rose-600" />
+          <div className="rounded-[28px] border border-[#EEDFE5] bg-white p-5 flex items-center justify-between transition-all hover:border-rose-200 hover:shadow-xs">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870]">Out-of-Stock</p>
+              <p className="text-3xl font-black text-rose-600 mt-1 tabular-nums">
+                {stats.outOfStock}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+              <XCircle className="h-5 w-5 text-rose-600" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <Tabs defaultValue="stock" className="space-y-4">
         <TabsList className="bg-[#FAF7F8] border border-[#EEDFE5] p-1.5 rounded-2xl h-auto">
@@ -448,14 +453,34 @@ export default function InventoryPage() {
                 </TableHeader>
                 <TableBody>
                   {isLoading && products.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
-                        <div className="flex flex-col items-center justify-center gap-2.5">
-                          <Loader2 className="h-6 w-6 animate-spin text-[#B73D67]" />
-                          <span className="text-xs font-medium">Fetching stock levels...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i} className="border-b border-[#F0E1E6]/50">
+                        <TableCell className="pl-6 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                            <div className="space-y-1.5 min-w-0">
+                              <Skeleton className="h-4 w-40 rounded-md" />
+                              <Skeleton className="h-3 w-20 rounded-md" />
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <Skeleton className="h-6 w-24 rounded-full" />
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-16 rounded-md" />
+                            <Skeleton className="h-2 w-28 rounded-full" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <Skeleton className="h-6 w-20 rounded-full" />
+                        </TableCell>
+                        <TableCell className="pr-6 py-3.5 text-right">
+                          <Skeleton className="h-8 w-24 rounded-xl ml-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ))
                   ) : products.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
@@ -642,14 +667,28 @@ export default function InventoryPage() {
                 </TableHeader>
                 <TableBody>
                   {historyLoading && historyItems.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">
-                        <div className="flex flex-col items-center justify-center gap-2.5">
-                          <Loader2 className="h-6 w-6 animate-spin text-[#B73D67]" />
-                          <span className="text-xs font-medium">Fetching history logs...</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i} className="border-b border-[#F0E1E6]/50">
+                        <TableCell className="pl-6 py-3.5">
+                          <Skeleton className="h-3.5 w-28 rounded-md" />
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-36 rounded-md" />
+                            <Skeleton className="h-3 w-20 rounded-md" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <Skeleton className="h-6 w-20 rounded-full" />
+                        </TableCell>
+                        <TableCell className="px-4 py-3.5">
+                          <Skeleton className="h-3.5 w-32 rounded-md" />
+                        </TableCell>
+                        <TableCell className="pr-6 py-3.5 text-right">
+                          <Skeleton className="h-3.5 w-20 rounded-md ml-auto" />
+                        </TableCell>
+                      </TableRow>
+                    ))
                   ) : historyItems.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-16 text-[#7A6870]">

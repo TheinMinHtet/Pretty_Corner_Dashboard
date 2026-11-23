@@ -39,6 +39,7 @@ import {
   UnifiedOrderStatusBadge,
 } from "@/components/ui/status-badge";
 import { ChartCardSkeleton } from "@/components/charts/dashboard-charts";
+import { DashboardPageSkeleton } from "@/components/skeletons/dashboard-skeletons";
 import { formatDate, formatMMK } from "@/lib/utils";
 import {
   DATE_RANGES,
@@ -71,7 +72,12 @@ const OrdersTrendCard = dynamic(
     ),
   {
     ssr: false,
-    loading: () => <ChartCardSkeleton height="h-[280px]" />,
+    loading: () => (
+      <ChartCardSkeleton
+        className="h-full rounded-[28px] border-[#EEDFE5]"
+        height="h-[280px]"
+      />
+    ),
   }
 );
 
@@ -87,7 +93,7 @@ const OrderStatusDistributionCard = dynamic(
 );
 
 export default function AdminDashboardPage() {
-  const { orders, products, categories, inventoryStats } = useAdminStore();
+  const { orders, products, categories, inventoryStats, hydrated } = useAdminStore();
   const { t } = useLanguage();
   const [range, setRange] = useState<DateRange>("30d");
 
@@ -193,6 +199,10 @@ export default function AdminDashboardPage() {
     return found?.name ?? "Uncategorized";
   };
 
+  if (!hydrated) {
+    return <DashboardPageSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Welcome / Quick Action Strip */}
@@ -278,86 +288,107 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Charts Row 1: Revenue (2 cols) + Order Status Distribution (1 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         <RevenueChartCard orders={rangeOrders} range={range} />
         <OrderStatusDistributionCard orders={rangeOrders} />
       </div>
 
       {/* Charts Row 2: Orders Trend + Sales Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <OrdersTrendCard orders={rangeOrders} range={range} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+        <div className="lg:col-span-2 flex flex-col h-full">
+          <OrdersTrendCard orders={rangeOrders} range={range} className="h-full flex-1" />
         </div>
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+        <Card className="rounded-[28px] border-[#EEDFE5]/80 bg-white shadow-xs flex flex-col justify-between h-full">
+          <CardHeader className="pb-2 px-6 pt-6">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <CardTitle>{t.salesSummaryTitle}</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-base font-bold text-[#38262E]">{t.salesSummaryTitle}</CardTitle>
+                <CardDescription className="text-xs text-[#7A6870] mt-0.5">
                   {localizedDateRangeLabels[range]}
                 </CardDescription>
               </div>
-              <span className="text-xs font-semibold text-[#B73D67] bg-[#FCEEF2] px-2.5 py-1 rounded-full">
+              <span className="text-[11px] font-medium text-[#7A6870] bg-[#FAF5F7] border border-[#EEDFE5] px-2.5 py-0.5 rounded-full">
                 {metrics.totalOrders} Orders
               </span>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl bg-[#FDF6F8] border border-[#F0E1E6] p-3.5">
-              <p className="text-xs text-[#806B73]">{t.revenueCol}</p>
-              <p className="text-lg font-bold text-[#33272C] mt-0.5">
+          <CardContent className="space-y-4 px-6 pb-6 flex-1 flex flex-col justify-between">
+            {/* Primary Revenue Display — Quiet, unboxed typographic hero */}
+            <div className="pt-1">
+              <span className="text-xs font-medium text-[#7A6870] tracking-wide">{t.revenueCol}</span>
+              <div className="text-2xl font-bold tracking-tight text-[#33272C] mt-0.5">
                 {formatMMK(metrics.revenue)}
-              </p>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-[#F0E1E6] p-3">
-                <p className="text-[11px] text-[#806B73]">{t.avgOrderValue}</p>
+
+            {/* Secondary Metrics — Clean two-column split with soft dividers */}
+            <div className="grid grid-cols-2 gap-4 py-3 border-y border-[#F3E8EC]">
+              <div>
+                <p className="text-[11px] font-medium text-[#7A6870]">{t.avgOrderValue}</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
                   {formatMMK(metrics.avgOrderValue)}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#F0E1E6] p-3">
-                <p className="text-[11px] text-[#806B73]">{t.activeProducts}</p>
+              <div>
+                <p className="text-[11px] font-medium text-[#7A6870]">{t.activeProducts}</p>
                 <p className="text-sm font-semibold text-[#33272C] mt-0.5">
                   {inventoryStats ? inventoryStats.inStock + inventoryStats.lowStock : 0}
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-2.5">
-                <p className="text-[11px] text-emerald-700">{t.payPaid}</p>
-                <p className="text-sm font-semibold text-emerald-800">
-                  {metrics.paidPayments}
-                </p>
-              </div>
-              <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-2.5">
-                <p className="text-[11px] text-amber-700">{t.payPending}</p>
-                <p className="text-sm font-semibold text-amber-800">
-                  {metrics.pendingPayments}
-                </p>
-              </div>
-              <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-2.5">
-                <p className="text-[11px] text-rose-700">{t.payFailed}</p>
-                <p className="text-sm font-semibold text-rose-800">
-                  {metrics.failedPayments}
-                </p>
+
+            {/* Payment Status Breakdown — Calmer neutral pods with delicate status dots */}
+            <div>
+              <p className="text-[11px] font-medium text-[#7A6870] mb-2">{t.paymentCol}</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg bg-[#FAF7F8] border border-[#F3E8EC] px-2.5 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[11px] text-[#7A6870]">{t.payPaid}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#33272C] mt-1 pl-3">
+                    {metrics.paidPayments}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-[#FAF7F8] border border-[#F3E8EC] px-2.5 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span className="text-[11px] text-[#7A6870]">{t.payPending}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#33272C] mt-1 pl-3">
+                    {metrics.pendingPayments}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-[#FAF7F8] border border-[#F3E8EC] px-2.5 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    <span className="text-[11px] text-[#7A6870]">{t.payFailed}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#33272C] mt-1 pl-3">
+                    {metrics.failedPayments}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs pt-1 border-t border-[#F0E1E6]">
-              <span className="text-[#806B73]">Top payment method</span>
-              <Badge variant="default">
-                {metrics.topPayment
-                  ? `${metrics.topPayment.value} (${metrics.topPayment.share}%)`
-                  : "—"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-[#806B73]">Top city</span>
-              <span className="font-semibold text-[#33272C]">
-                {metrics.topCity
-                  ? `${metrics.topCity.value} (${metrics.topCity.share}%)`
-                  : "—"}
-              </span>
+
+            {/* Footer Summary — Understated boutique pill */}
+            <div className="space-y-2 pt-2 border-t border-[#F3E8EC]">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#7A6870]">Top payment method</span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium text-[#5A454F] bg-[#FAF5F7] border border-[#EEDFE5]">
+                  {metrics.topPayment
+                    ? `${metrics.topPayment.value} (${metrics.topPayment.share}%)`
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#7A6870]">Top city</span>
+                <span className="font-semibold text-[#33272C]">
+                  {metrics.topCity
+                    ? `${metrics.topCity.value} (${metrics.topCity.share}%)`
+                    : "—"}
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>

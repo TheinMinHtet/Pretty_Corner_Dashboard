@@ -47,6 +47,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { NotificationsDropdownSkeleton } from "@/components/skeletons/shell-skeletons";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -99,6 +100,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     isAuthenticated,
     session,
     logout,
+    hydrated,
   } = useAdminStore();
 
   const activeUser = useMemo(() => {
@@ -516,7 +518,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-[#F0E1E6]/60">
-                  {visibleNotifications.length === 0 ? (
+                  {!hydrated ? (
+                    <NotificationsDropdownSkeleton count={3} />
+                  ) : visibleNotifications.length === 0 ? (
                     <div className="p-4 text-center text-xs text-[#806B73]">
                       {t.noNotifications}
                     </div>
