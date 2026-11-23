@@ -21,7 +21,6 @@ import {
   Bell,
   ChevronRight,
   CheckCheck,
-  RotateCcw,
   User,
   LogOut,
   AlertTriangle,
@@ -96,7 +95,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     settings,
     globalSearch,
     setGlobalSearch,
-    resetDemoData,
     isAuthenticated,
     session,
     logout,
@@ -604,16 +602,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem onClick={() => router.push("/admin/settings")}>
                   <User className="h-4 w-4" />
                   {t.profileAndSettings}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    resetDemoData();
-                    toast.success(t.demoDataResetToast);
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  {t.resetDemoData}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

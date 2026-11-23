@@ -1,16 +1,20 @@
 import { NextRequest } from "next/server";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import { corsPreflightResponse, jsonWithCors } from "@/lib/dev-store/http";
+import { SESSION_COOKIE_NAME } from "@/lib/security/auth-guard";
 import crypto from "node:crypto";
 
-export async function OPTIONS() {
-  return corsPreflightResponse();
+export async function OPTIONS(req: NextRequest) {
+  return corsPreflightResponse(req);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const token = typeof body.token === "string" ? body.token.trim() : "";
+    let token = typeof body.token === "string" ? body.token.trim() : "";
+    if (!token) {
+      token = req.cookies.get(SESSION_COOKIE_NAME)?.value?.trim() ?? "";
+    }
     const email = typeof body.email === "string" ? body.email.trim() : "";
 
     if (isSupabaseConfigured() && token) {
@@ -28,9 +32,28 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return jsonWithCors({ ok: true });
+    const response = jsonWithCors({ ok: true }, undefined, undefined, req);
+    // Expire cookie immediately
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: "",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+
+    return response;
   } catch (error) {
     console.error("POST /api/admin/logout error:", error);
-    return jsonWithCors({ ok: true }); // Always allow client to logout cleanly
+    const response = jsonWithCors({ ok: true }, undefined, undefined, req);
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: "",
+      path: "/",
+      maxAge: 0,
+    });
+    return response;
   }
 }

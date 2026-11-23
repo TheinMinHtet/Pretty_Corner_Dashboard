@@ -79,6 +79,24 @@ export function resolveUnifiedOrderStatus(
   return "pending";
 }
 
+export function resolveStatusesFromUnifiedKey(key: UnifiedStatusKey): {
+  orderStatus: OrderStatus;
+  paymentStatus: PaymentStatus;
+} {
+  switch (key) {
+    case "paid":
+      return { orderStatus: "Shipped", paymentStatus: "Paid" };
+    case "pending":
+      return { orderStatus: "Pending", paymentStatus: "Pending" };
+    case "failed":
+      return { orderStatus: "Pending", paymentStatus: "Failed" };
+    case "expired":
+      return { orderStatus: "Expired", paymentStatus: "Expired" };
+    case "cancelled":
+      return { orderStatus: "Cancelled", paymentStatus: "Cancelled" };
+  }
+}
+
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const { t } = useLanguage();
 

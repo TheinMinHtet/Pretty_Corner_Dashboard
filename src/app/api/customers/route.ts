@@ -1,17 +1,27 @@
 import { NextRequest } from "next/server";
 import { getStoreRepository } from "@/lib/dev-store/repository";
 import { corsPreflightResponse, jsonWithCors } from "@/lib/dev-store/http";
+import { verifyStaffSession } from "@/lib/security/auth-guard";
 import {
   getCustomerDossiers,
   CustomerDossierFilterOptions,
 } from "@/modules/customers/customer-dossier";
 
-export async function OPTIONS() {
-  return corsPreflightResponse();
+export async function OPTIONS(request: NextRequest) {
+  return corsPreflightResponse(request);
 }
 
 export async function GET(request: NextRequest) {
   try {
+    const staff = await verifyStaffSession(request);
+    if (!staff) {
+      return jsonWithCors(
+        { error: "Unauthorized: Staff authentication required" },
+        { status: 401 },
+        undefined,
+        request
+      );
+    }
     const repo = getStoreRepository();
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q")?.trim() || undefined;

@@ -3,9 +3,10 @@ import { getStoreRepository } from "@/lib/dev-store/repository";
 import { CreateProductSchema, formatZodError } from "@/lib/dev-store/schemas";
 import { toStorefrontProduct } from "@/lib/dev-store/mappers";
 import { corsPreflightResponse, jsonWithCors } from "@/lib/dev-store/http";
+import { verifyStaffSession } from "@/lib/security/auth-guard";
 
-export async function OPTIONS() {
-  return corsPreflightResponse();
+export async function OPTIONS(request: NextRequest) {
+  return corsPreflightResponse(request);
 }
 
 export async function GET(request: NextRequest) {
@@ -92,6 +93,16 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const staff = await verifyStaffSession(request);
+    if (!staff) {
+      return jsonWithCors(
+        { error: "Unauthorized: Staff authentication required" },
+        { status: 401 },
+        undefined,
+        request
+      );
+    }
+
     const body = await request.json();
     const parsed = CreateProductSchema.safeParse(body);
     if (!parsed.success) {

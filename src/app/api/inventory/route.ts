@@ -2,8 +2,8 @@ import { NextRequest } from "next/server";
 import { getStoreRepository } from "@/lib/dev-store/repository";
 import { corsPreflightResponse, jsonWithCors } from "@/lib/dev-store/http";
 
-export async function OPTIONS() {
-  return corsPreflightResponse();
+export async function OPTIONS(request: NextRequest) {
+  return corsPreflightResponse(request);
 }
 
 export async function GET(request: NextRequest) {
@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
       limit: result.limit,
       totalPages: result.totalPages,
       stats: result.stats,
-    });
+    }, undefined, undefined, request);
   } catch (error) {
     console.error("GET /api/inventory error:", error);
-    return jsonWithCors({ error: "Failed to load inventory" }, { status: 500 });
+    return jsonWithCors({ error: "Failed to load inventory" }, { status: 500 }, undefined, request);
   }
 }

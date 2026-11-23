@@ -3,9 +3,10 @@ import { getStoreRepository } from "@/lib/dev-store/repository";
 import { formatZodError, UpdateProductSchema } from "@/lib/dev-store/schemas";
 import { toStorefrontProduct } from "@/lib/dev-store/mappers";
 import { corsPreflightResponse, jsonWithCors } from "@/lib/dev-store/http";
+import { verifyStaffSession } from "@/lib/security/auth-guard";
 
-export async function OPTIONS() {
-  return corsPreflightResponse();
+export async function OPTIONS(request: NextRequest) {
+  return corsPreflightResponse(request);
 }
 
 export async function GET(
@@ -48,6 +49,16 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const staff = await verifyStaffSession(request);
+    if (!staff) {
+      return jsonWithCors(
+        { error: "Unauthorized: Staff authentication required" },
+        { status: 401 },
+        undefined,
+        request
+      );
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const parsed = UpdateProductSchema.safeParse(body);
@@ -75,10 +86,20 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const staff = await verifyStaffSession(request);
+    if (!staff) {
+      return jsonWithCors(
+        { error: "Unauthorized: Staff authentication required" },
+        { status: 401 },
+        undefined,
+        request
+      );
+    }
+
     const { id } = await context.params;
     const repo = getStoreRepository();
     const deleted = await repo.deleteProduct(id);

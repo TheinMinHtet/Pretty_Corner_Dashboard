@@ -7,7 +7,11 @@ import {
 } from "../src/modules/customers/customer-dossier.ts";
 
 // 2. Test Order Lifecycle Engine
-import { executeOrderUpdate } from "../src/modules/orders/order-lifecycle.ts";
+import {
+  executeOrderUpdate,
+  evaluateOrderPromotion,
+} from "../src/modules/orders/order-lifecycle.ts";
+import { verifyStaffSession } from "../src/lib/security/auth-guard.ts";
 
 // 3. Test Analytics Engine
 import {
@@ -644,6 +648,137 @@ test("Repository listProductsPaginated supports merchandising and best-seller so
       (resBest.items[i].soldCount ?? 0) >= (resBest.items[i + 1].soldCount ?? 0),
       "Items must be sorted descending by soldCount"
     );
+  }
+});
+
+// ==========================================
+// TEST SUITE 7: SECURITY INVARIANTS & AUTHORITATIVE GUARDS
+// ==========================================
+console.log("\nSuite 7: Security Invariants & Authoritative Guard Suite");
+
+test("evaluateOrderPromotion returns 0 discount when promo code is absent or empty", () => {
+  const dummyPromotions = [
+    {
+      id: "promo-1",
+      code: "SUMMER20",
+      active: true,
+      discountPercentage: 20,
+      targetType: "ENTIRE_STORE",
+      startDate: "2026-01-01T00:00:00Z",
+      endDate: "2026-12-31T23:59:59Z",
+    },
+  ];
+  const items = [{ productId: "p-1", price: 50000, quantity: 1 }];
+  const res = evaluateOrderPromotion(undefined, dummyPromotions, items, 50000, []);
+  assert.equal(res.valid, true);
+  assert.equal(res.discountAmount, 0);
+});
+
+test("evaluateOrderPromotion authoritatively calculates discount for valid promo code", () => {
+  const dummyPromotions = [
+    {
+      id: "promo-1",
+      code: "SUMMER20",
+      active: true,
+      discountPercentage: 20,
+      targetType: "ENTIRE_STORE",
+      startDate: "2026-01-01T00:00:00Z",
+      endDate: "2026-12-31T23:59:59Z",
+    },
+  ];
+  const items = [{ productId: "p-1", price: 50000, quantity: 1 }];
+  const res = evaluateOrderPromotion("summer20", dummyPromotions, items, 50000, []);
+  assert.equal(res.valid, true);
+  assert.equal(res.discountAmount, 10000); // 20% of 50000
+  assert.equal(res.promoId, "promo-1");
+});
+
+test("evaluateOrderPromotion rejects invalid, expired, or out-of-stock promo code", () => {
+  const dummyPromotions = [
+    {
+      id: "promo-expired",
+      code: "OLD10",
+      active: true,
+      discountPercentage: 10,
+      targetType: "ENTIRE_STORE",
+      startDate: "2025-01-01T00:00:00Z",
+      endDate: "2025-02-01T00:00:00Z",
+    },
+    {
+      id: "promo-stockout",
+      code: "OUT20",
+      active: true,
+      isOutOfStock: true,
+      discountPercentage: 20,
+      targetType: "ENTIRE_STORE",
+      startDate: "2026-01-01T00:00:00Z",
+      endDate: "2026-12-31T23:59:59Z",
+    },
+  ];
+  const items = [{ productId: "p-1", price: 50000, quantity: 1 }];
+  assert.equal(evaluateOrderPromotion("NONEXISTENT", dummyPromotions, items, 50000, []).valid, false);
+  assert.equal(evaluateOrderPromotion("OLD10", dummyPromotions, items, 50000, []).valid, false);
+  assert.equal(evaluateOrderPromotion("OUT20", dummyPromotions, items, 50000, []).valid, false);
+});
+
+test("evaluateOrderPromotion respects CATEGORY target tier scoping", () => {
+  const dummyPromotions = [
+    {
+      id: "promo-cat",
+      code: "SKINCARE10",
+      active: true,
+      discountPercentage: 10,
+      targetType: "CATEGORY",
+      targetSlug: "cat-skincare",
+      startDate: "2026-01-01T00:00:00Z",
+      endDate: "2026-12-31T23:59:59Z",
+    },
+  ];
+  const catalog = [
+    { id: "p-1", name: "Toner", categoryId: "cat-skincare", regularPrice: 30000 },
+    { id: "p-2", name: "Lipstick", categoryId: "cat-makeup", regularPrice: 20000 },
+  ];
+  const items = [
+    { productId: "p-1", price: 30000, quantity: 1 },
+    { productId: "p-2", price: 20000, quantity: 1 },
+  ];
+  const res = evaluateOrderPromotion("SKINCARE10", dummyPromotions, items, 50000, catalog);
+  assert.equal(res.valid, true);
+  // Only Toner qualifies (30000 MMK * 10% = 3000 MMK discount)
+  assert.equal(res.discountAmount, 3000);
+});
+
+test("evaluateOrderPromotion rejects promo when minimumOrderAmount is not met", () => {
+  const dummyPromotions = [
+    {
+      id: "promo-min",
+      code: "VIP50",
+      active: true,
+      discountPercentage: 50,
+      minimumOrderAmount: 100000,
+      targetType: "ENTIRE_STORE",
+      startDate: "2026-01-01T00:00:00Z",
+      endDate: "2026-12-31T23:59:59Z",
+    },
+  ];
+  const items = [{ productId: "p-1", price: 60000, quantity: 1 }];
+  const res = evaluateOrderPromotion("VIP50", dummyPromotions, items, 60000, []);
+  assert.equal(res.valid, false);
+  assert.match(res.reason, /Minimum order amount/);
+});
+
+test("auth-guard rejects arbitrary token in production mode", async () => {
+  const originalEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    const dummyReq = {
+      headers: new Headers({ authorization: "Bearer 12345678" }),
+      cookies: { get: () => undefined },
+    };
+    const staff = await verifyStaffSession(dummyReq);
+    assert.equal(staff, null, "Arbitrary token must return null in production mode when Supabase is unconfigured");
+  } finally {
+    process.env.NODE_ENV = originalEnv;
   }
 });
 

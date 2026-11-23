@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Share2,
   Bell,
@@ -12,6 +12,12 @@ import {
   ExternalLink,
   ShieldCheck,
   CheckCircle2,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -61,6 +67,83 @@ export default function SettingsPage() {
     setDraft(INITIAL_SETTINGS);
     setIsResetConfirmOpen(false);
     toast.success("Demo data reset to defaults");
+  };
+
+  // Password Change State & Strength Meter
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const passwordStrength = useMemo(() => {
+    if (!newPassword) return { score: 0, label: "", color: "bg-slate-200", text: "text-slate-400" };
+    let score = 0;
+    if (newPassword.length >= 8) score++;
+    if (newPassword.length >= 12) score++;
+    if (/[0-9]/.test(newPassword)) score++;
+    if (/[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\/]/.test(newPassword)) score++;
+    if (/[A-Z]/.test(newPassword) && /[a-z]/.test(newPassword)) score++;
+
+    if (score <= 1) return { score: 1, label: "Weak", color: "bg-rose-500", text: "text-rose-600" };
+    if (score <= 3) return { score: 2, label: "Medium", color: "bg-amber-500", text: "text-amber-600" };
+    return { score: 3, label: "Strong", color: "bg-emerald-500", text: "text-emerald-600" };
+  }, [newPassword]);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      toast.error(t.currentPasswordRequiredToast);
+      return;
+    }
+    if (newPassword.length < 8 || !/[0-9!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\/]/.test(newPassword)) {
+      toast.error(t.passwordLengthToast);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error(t.passwordMismatchToast);
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const stored =
+        typeof window !== "undefined"
+          ? JSON.parse(
+              window.sessionStorage.getItem("pretty_corner_auth_session_v1") ||
+                window.localStorage.getItem("pretty_corner_auth_session_v1") ||
+                "null"
+            )
+          : null;
+
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (stored?.token) {
+        headers["Authorization"] = `Bearer ${stored.token}`;
+      }
+
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        toast.success(t.passwordChangedToast);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        toast.error(data.error || "Failed to update password");
+      }
+    } catch (err) {
+      console.error("Change password error:", err);
+      toast.error("Network error. Please try again.");
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -573,6 +656,216 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Security & Authentication Card (Change Password) */}
+          <Card className="rounded-[32px] border border-[#EEDFE5] bg-white shadow-2xs overflow-hidden mt-6 transition-all duration-200">
+            <CardHeader className="p-6 pb-4 border-b border-[#F5EDF0]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#FCEEF2] text-[#B73D67] shadow-2xs">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg font-black tracking-tight text-[#38262E]">
+                    {t.securityPasswordTitle}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#7A6870] mt-0.5">
+                    {t.securityPasswordDesc}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <form onSubmit={handlePasswordChange} className="space-y-5 max-w-xl">
+                {/* Current Password */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="currentPassword" className="text-xs font-bold text-[#38262E]">
+                    {t.currentPasswordLabel}
+                  </Label>
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A6870]">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <Input
+                      id="currentPassword"
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      className="pl-10 pr-10 rounded-xl border-[#EEDFE5] bg-[#FAF7F8]/40 focus:bg-white focus:border-[#B73D67] focus:ring-2 focus:ring-[#B73D67]/15 transition-all text-sm h-11 text-[#38262E]"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#7A6870] hover:text-[#38262E] transition-colors p-1"
+                      tabIndex={-1}
+                      aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                    >
+                      {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* New Password & Confirm Password Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* New Password */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newPassword" className="text-xs font-bold text-[#38262E]">
+                      {t.newPasswordLabel}
+                    </Label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A6870]">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <Input
+                        id="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="pl-10 pr-10 rounded-xl border-[#EEDFE5] bg-[#FAF7F8]/40 focus:bg-white focus:border-[#B73D67] focus:ring-2 focus:ring-[#B73D67]/15 transition-all text-sm h-11 text-[#38262E]"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((prev) => !prev)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#7A6870] hover:text-[#38262E] transition-colors p-1"
+                        tabIndex={-1}
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirmPassword" className="text-xs font-bold text-[#38262E]">
+                      {t.confirmPasswordLabel}
+                    </Label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7A6870]">
+                        <Lock className="h-4 w-4" />
+                      </div>
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className={`pl-10 pr-10 rounded-xl bg-[#FAF7F8]/40 focus:bg-white focus:ring-2 transition-all text-sm h-11 text-[#38262E] ${
+                          confirmPassword && confirmPassword !== newPassword
+                            ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/15"
+                            : "border-[#EEDFE5] focus:border-[#B73D67] focus:ring-[#B73D67]/15"
+                        }`}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#7A6870] hover:text-[#38262E] transition-colors p-1"
+                        tabIndex={-1}
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Strength Indicator & Live Requirements Checklist */}
+                {newPassword && (
+                  <div className="space-y-2 pt-1 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#7A6870] font-medium">Password Strength:</span>
+                      <span className={`font-bold ${passwordStrength.text}`}>
+                        {passwordStrength.label}
+                      </span>
+                    </div>
+                    {/* Segmented bar */}
+                    <div className="grid grid-cols-3 gap-1.5 h-1.5">
+                      <div
+                        className={`rounded-full transition-all duration-300 ${
+                          passwordStrength.score >= 1 ? passwordStrength.color : "bg-slate-200"
+                        }`}
+                      />
+                      <div
+                        className={`rounded-full transition-all duration-300 ${
+                          passwordStrength.score >= 2 ? passwordStrength.color : "bg-slate-200"
+                        }`}
+                      />
+                      <div
+                        className={`rounded-full transition-all duration-300 ${
+                          passwordStrength.score >= 3 ? passwordStrength.color : "bg-slate-200"
+                        }`}
+                      />
+                    </div>
+                    {/* Compact checklist */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#7A6870] pt-1">
+                      <span
+                        className={`inline-flex items-center gap-1 ${
+                          newPassword.length >= 8 ? "text-emerald-700 font-semibold" : ""
+                        }`}
+                      >
+                        {newPassword.length >= 8 ? <Check className="h-3 w-3" /> : "•"} At least 8 characters
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 ${
+                          /[0-9!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\/]/.test(newPassword)
+                            ? "text-emerald-700 font-semibold"
+                            : ""
+                        }`}
+                      >
+                        {/[0-9!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\/]/.test(newPassword) ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          "•"
+                        )}{" "}
+                        Number or symbol
+                      </span>
+                      {confirmPassword && (
+                        <span
+                          className={`inline-flex items-center gap-1 ${
+                            newPassword === confirmPassword
+                              ? "text-emerald-700 font-semibold"
+                              : "text-rose-600 font-semibold"
+                          }`}
+                        >
+                          {newPassword === confirmPassword ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            "•"
+                          )}{" "}
+                          Passwords match
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Action */}
+                <div className="pt-2">
+                  <Button
+                    type="submit"
+                    disabled={isChangingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                    className="rounded-2xl bg-[#B73D67] hover:bg-[#982F53] text-white font-semibold text-xs sm:text-sm h-11 px-6 shadow-xs hover:shadow-sm active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isChangingPassword ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Updating Password...</span>
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="h-4 w-4" />
+                        <span>{t.updatePasswordBtn}</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
