@@ -105,7 +105,11 @@ export const CreateStorefrontOrderSchema = z.object({
         name: z.string().min(1),
         size: z.string().optional().default(""),
         price: z.number().nonnegative(),
-        quantity: z.number().int().positive(),
+        quantity: z
+          .number()
+          .int()
+          .positive("Quantity must be at least 1")
+          .max(50, "Quantity cannot exceed 50 units per line item"),
         image: z.string().optional().default(""),
       })
     )

@@ -175,7 +175,7 @@ interface AdminContextValue extends PersistedState {
     orderId: string,
     status: "pending" | "paid" | "failed" | "expired" | "cancelled",
     note?: string
-  ) => void;
+  ) => Promise<void> | void;
   updatePaymentReference: (orderId: string, reference: string) => void;
 
   // Products
@@ -276,7 +276,27 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
     const promise = (async () => {
       try {
-        const res = await fetch("/api/admin/bootstrap", { cache: "no-store" });
+        const currentSession = getStoredSession();
+        const headers: Record<string, string> = {};
+        if (currentSession?.token) {
+          headers["Authorization"] = `Bearer ${currentSession.token}`;
+        }
+
+        const res = await fetch("/api/admin/bootstrap", {
+          cache: "no-store",
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+        });
+
+        if (res.status === 401) {
+          // If server rejects staff token or no session exists, clear expired session
+          if (currentSession) {
+            clearStoredSession();
+            setIsAuthenticated(false);
+            setSession(null);
+          }
+          return;
+        }
+
         if (!res.ok) return;
         const data = (await res.json()) as Partial<PersistedState>;
         const orders = data.orders ?? [];
@@ -345,9 +365,18 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const persistMutation = useCallback(
     async (url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => {
       try {
+        const currentSession = getStoredSession();
+        const headers: Record<string, string> = {};
+        if (body !== undefined) {
+          headers["Content-Type"] = "application/json";
+        }
+        if (currentSession?.token) {
+          headers["Authorization"] = `Bearer ${currentSession.token}`;
+        }
+
         const res = await fetch(url, {
           method,
-          headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+          headers,
           body: body !== undefined ? JSON.stringify(body) : undefined,
         });
         if (!res.ok) {
@@ -436,6 +465,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           saveStoredSession(newSession);
           setSession(newSession);
           setIsAuthenticated(true);
+          void refreshFromApi(true);
           return true;
         }
         return false;
@@ -661,7 +691,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+      return persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
         orderStatus: targetOrderStatus,
         paymentStatus: targetPaymentStatus,
         note,

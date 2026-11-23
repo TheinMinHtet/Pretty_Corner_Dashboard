@@ -64,6 +64,7 @@ import {
   UnifiedStatusSelector,
   UNIFIED_STATUS_CONFIG,
   UnifiedStatusKey,
+  resolveStatusesFromUnifiedKey,
 } from "@/components/ui/status-badge";
 import { PaginationControl } from "@/components/ui/pagination";
 import { formatDate, formatMMK, cn } from "@/lib/utils";
@@ -95,6 +96,7 @@ export default function OrdersPage() {
     setGlobalSearch,
     refreshData,
     hydrated,
+    session,
   } = useAdminStore();
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
@@ -160,7 +162,20 @@ export default function OrdersPage() {
       if (deliveryMethodFilter !== "all") sp.set("deliveryMethod", deliveryMethodFilter);
       if (highValueOnly) sp.set("highValueOnly", "true");
 
-      const res = await fetch(`/api/orders?${sp.toString()}`);
+      const headers: Record<string, string> = {};
+      if (session?.token) {
+        headers["Authorization"] = `Bearer ${session.token}`;
+      } else if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem("pc_admin_session");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.token) headers["Authorization"] = `Bearer ${parsed.token}`;
+          }
+        } catch {}
+      }
+
+      const res = await fetch(`/api/orders?${sp.toString()}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setOrdersList(data.orders || []);
@@ -266,28 +281,75 @@ export default function OrdersPage() {
     return ordersList.filter((o) => selectedOrderIds.includes(o.id));
   }, [ordersList, selectedOrderIds]);
 
-  const handleBatchUnifiedStatus = (targetStatus: UnifiedStatusKey) => {
+  const handleBatchUnifiedStatus = async (targetStatus: UnifiedStatusKey) => {
     if (selectedOrderIds.length === 0) return;
-    selectedOrderIds.forEach((id) => {
-      updateUnifiedStatus(id, targetStatus);
-    });
-    const label = UNIFIED_STATUS_CONFIG[targetStatus].label;
-    toast.success(
-      `Updated ${selectedOrderIds.length} orders to ${label}`
-    );
+    const { orderStatus: nextOrderStatus, paymentStatus: nextPaymentStatus } =
+      resolveStatusesFromUnifiedKey(targetStatus);
+    const idsToUpdate = [...selectedOrderIds];
     setSelectedOrderIds([]);
-    setRefreshTrigger((prev) => prev + 1);
+
+    // 1. Instant optimistic update to local ordersList
+    setOrdersList((prev) =>
+      prev.map((order) =>
+        idsToUpdate.includes(order.id)
+          ? {
+              ...order,
+              orderStatus: nextOrderStatus,
+              paymentStatus: nextPaymentStatus,
+              updatedAt: new Date().toISOString(),
+            }
+          : order
+      )
+    );
+
+    const label = UNIFIED_STATUS_CONFIG[targetStatus].label;
+    toast.success(`Updated ${idsToUpdate.length} orders to ${label}`);
+
+    // 2. Persist to store & database
+    try {
+      await Promise.all(
+        idsToUpdate.map((id) => updateUnifiedStatus(id, targetStatus))
+      );
+    } catch (err) {
+      console.error("Batch status update error:", err);
+      toast.error("Failed to save some status updates");
+      void fetchOrders();
+    }
   };
 
-  const handleSingleStatusChange = (
+  const handleSingleStatusChange = async (
     orderId: string,
     newKey: UnifiedStatusKey,
     reference: string
   ) => {
-    updateUnifiedStatus(orderId, newKey);
+    // 1. Instant optimistic update to local ordersList
+    const { orderStatus: nextOrderStatus, paymentStatus: nextPaymentStatus } =
+      resolveStatusesFromUnifiedKey(newKey);
+
+    setOrdersList((prev) =>
+      prev.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              orderStatus: nextOrderStatus,
+              paymentStatus: nextPaymentStatus,
+              updatedAt: new Date().toISOString(),
+            }
+          : order
+      )
+    );
+
     const label = UNIFIED_STATUS_CONFIG[newKey].label;
     toast.success(`Order ${reference} updated to ${label}`);
-    setRefreshTrigger((prev) => prev + 1);
+
+    // 2. Persist to store & database
+    try {
+      await updateUnifiedStatus(orderId, newKey);
+    } catch (err) {
+      console.error("Single status update error:", err);
+      toast.error("Failed to save status change");
+      void fetchOrders();
+    }
   };
 
   if (!hydrated && ordersList.length === 0) {

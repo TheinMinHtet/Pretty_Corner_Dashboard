@@ -15,11 +15,23 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**",
+        hostname: "*.supabase.co",
+      },
+      {
+        protocol: "https",
+        hostname: "vbcdopdttqmplwnknppl.supabase.co",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
       },
       {
         protocol: "http",
         hostname: "localhost",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
       },
     ],
   },
@@ -70,10 +82,17 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        // Transparently proxy /supabase/* requests to Supabase Cloud, bypassing
-        // Myanmar ISP SNI filtering and VPN requirements on Vercel and local dev.
-        source: "/supabase/:path*",
-        destination: `${supabaseUrl}/:path*`,
+        // Explicitly proxy Supabase REST, Auth, and Storage APIs to bypass Myanmar SNI blocking
+        source: "/supabase/rest/v1/:path*",
+        destination: `${supabaseUrl}/rest/v1/:path*`,
+      },
+      {
+        source: "/supabase/auth/v1/:path*",
+        destination: `${supabaseUrl}/auth/v1/:path*`,
+      },
+      {
+        source: "/supabase/storage/v1/:path*",
+        destination: `${supabaseUrl}/storage/v1/:path*`,
       },
     ];
   },

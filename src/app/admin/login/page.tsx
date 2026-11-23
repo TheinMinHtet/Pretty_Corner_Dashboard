@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const { login } = useAdminStore();
   const { t } = useLanguage();
-  const [email, setEmail] = useState("admin@prettycorner.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -46,12 +46,6 @@ export default function AdminLoginPage() {
     } else {
       toast.error(t.loginErrorToast);
     }
-  };
-
-  const handleFillDemo = () => {
-    setEmail("admin@prettycorner.com");
-    setPassword("admin123");
-    toast.info(t.demoPin);
   };
 
   return (
@@ -106,12 +100,9 @@ export default function AdminLoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="text-xs font-semibold text-[#33272C]">
-                {t.password}
-              </Label>
-              <span className="text-[11px] text-[#806B73]">{t.demoPin}</span>
-            </div>
+            <Label htmlFor="password" className="text-xs font-semibold text-[#33272C]">
+              {t.password}
+            </Label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-3 h-4 w-4 text-[#806B73]" />
               <Input
@@ -160,17 +151,6 @@ export default function AdminLoginPage() {
               </>
             )}
           </Button>
-
-          {/* 1-Click Demo Shortcut */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="w-full text-center py-2.5 px-3 rounded-2xl border border-dashed border-[#F0E1E6] hover:border-[#D96B91] bg-[#FDF6F8] hover:bg-[#FCEEF2] text-xs text-[#806B73] hover:text-[#D96B91] font-medium transition-all duration-150 cursor-pointer"
-            >
-              ✨ {t.fillDemoCredentials}
-            </button>
-          </div>
         </form>
       </div>
 

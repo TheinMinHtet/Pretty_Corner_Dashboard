@@ -395,3 +395,131 @@ export function executeOrderUpdate(
     updatedPromotions: workingPromotions,
   };
 }
+
+export interface DiscountEvaluationResult {
+  valid: boolean;
+  discountAmount: number;
+  promoId?: string;
+  reason?: string;
+}
+
+/**
+ * Authoritative Server-Side Promotion Evaluator:
+ * Validates promo codes, expiration, quota, minimum order value,
+ * and target catalog scope (ENTIRE_STORE, CATEGORY, SINGLE_PRODUCT, SELECTED_PRODUCTS).
+ */
+export function evaluateOrderPromotion(
+  promoCode: string | undefined,
+  promotions: Promotion[],
+  items: Array<{ productId: string; price: number; quantity: number }>,
+  subtotal: number,
+  catalogProducts: Product[]
+): DiscountEvaluationResult {
+  if (!promoCode || !promoCode.trim()) {
+    return { valid: true, discountAmount: 0 };
+  }
+
+  const cleanCode = promoCode.trim().toUpperCase();
+  const promo = promotions.find(
+    (p) => p.code && p.code.trim().toUpperCase() === cleanCode
+  );
+
+  if (!promo) {
+    return { valid: false, discountAmount: 0, reason: "Invalid promotion code" };
+  }
+
+  if (!promo.active || promo.isOutOfStock) {
+    return { valid: false, discountAmount: 0, reason: "Promotion is inactive or out of stock" };
+  }
+
+  const now = new Date();
+  if (promo.startDate && new Date(promo.startDate) > now) {
+    return { valid: false, discountAmount: 0, reason: "Promotion has not started yet" };
+  }
+  if (promo.endDate && new Date(promo.endDate) < now) {
+    return { valid: false, discountAmount: 0, reason: "Promotion has expired" };
+  }
+
+  if (
+    promo.usageLimit !== null &&
+    promo.usageLimit !== undefined &&
+    promo.usageLimit > 0 &&
+    (promo.usageCount ?? 0) >= promo.usageLimit
+  ) {
+    return { valid: false, discountAmount: 0, reason: "Promotion usage limit reached" };
+  }
+
+  if (promo.minimumOrderAmount && subtotal < promo.minimumOrderAmount) {
+    return {
+      valid: false,
+      discountAmount: 0,
+      reason: `Minimum order amount of ${promo.minimumOrderAmount} MMK required`,
+    };
+  }
+
+  let eligibleSubtotal = 0;
+  if (promo.targetType === "ENTIRE_STORE") {
+    eligibleSubtotal = subtotal;
+  } else if (promo.targetType === "CATEGORY") {
+    const targetCat = (promo.targetSlug || "").toLowerCase();
+    for (const item of items) {
+      const prod = catalogProducts.find(
+        (p) => p.id === item.productId || p.slug === item.productId
+      );
+      if (
+        prod &&
+        (prod.categoryId?.toLowerCase() === targetCat ||
+          prod.subcategory?.toLowerCase() === targetCat)
+      ) {
+        eligibleSubtotal += item.price * item.quantity;
+      }
+    }
+  } else if (promo.targetType === "SINGLE_PRODUCT") {
+    const target = (promo.targetSlug || "").toLowerCase();
+    for (const item of items) {
+      if (
+        item.productId.toLowerCase() === target ||
+        catalogProducts.find(
+          (p) =>
+            (p.id.toLowerCase() === target || p.slug?.toLowerCase() === target) &&
+            (p.id === item.productId || p.slug === item.productId)
+        )
+      ) {
+        eligibleSubtotal += item.price * item.quantity;
+      }
+    }
+  } else if (promo.featuredProductIds && promo.featuredProductIds.length > 0) {
+    const targetIds = promo.featuredProductIds.map((id) => id.toLowerCase());
+    for (const item of items) {
+      const prod = catalogProducts.find(
+        (p) => p.id === item.productId || p.slug === item.productId
+      );
+      if (
+        targetIds.includes(item.productId.toLowerCase()) ||
+        (prod &&
+          (targetIds.includes(prod.id.toLowerCase()) ||
+            (prod.slug && targetIds.includes(prod.slug.toLowerCase()))))
+      ) {
+        eligibleSubtotal += item.price * item.quantity;
+      }
+    }
+  }
+
+  if (eligibleSubtotal <= 0) {
+    return {
+      valid: false,
+      discountAmount: 0,
+      reason: "No eligible products for this promotion in order",
+    };
+  }
+
+  const pct = Math.min(100, Math.max(0, promo.discountPercentage || 0));
+  const rawDiscount = Math.floor(eligibleSubtotal * (pct / 100));
+  const discountAmount = Math.min(rawDiscount, subtotal);
+
+  return {
+    valid: true,
+    discountAmount,
+    promoId: promo.id,
+  };
+}

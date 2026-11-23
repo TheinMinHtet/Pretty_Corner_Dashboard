@@ -36,8 +36,6 @@ export interface AdminTranslationSchema {
   secureAccessDesc: string;
   staffEmail: string;
   password: string;
-  demoPin: string;
-  fillDemoCredentials: string;
   enterAdminPortal: string;
   authenticating: string;
   loginWelcomeToast: string;
@@ -204,6 +202,16 @@ export interface AdminTranslationSchema {
   roleLabel: string;
   emailAddressLabel: string;
   phoneNumberLabel: string;
+  securityPasswordTitle: string;
+  securityPasswordDesc: string;
+  currentPasswordLabel: string;
+  newPasswordLabel: string;
+  confirmPasswordLabel: string;
+  updatePasswordBtn: string;
+  passwordChangedToast: string;
+  passwordMismatchToast: string;
+  passwordLengthToast: string;
+  currentPasswordRequiredToast: string;
   saveSettingsBtn: string;
 
   // Table Columns & Common Labels
@@ -269,12 +277,10 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     secureAccessDesc: "Secure access to inventory, orders & finance",
     staffEmail: "Staff Email",
     password: "Password",
-    demoPin: "Demo PIN: admin123",
-    fillDemoCredentials: "Fill Demo Credentials",
     enterAdminPortal: "Enter Administrator Portal",
     authenticating: "Authenticating...",
     loginWelcomeToast: "Welcome back to Pretty Corner Admin",
-    loginErrorToast: "Invalid credentials. Demo login: admin@prettycorner.com / admin123",
+    loginErrorToast: "Invalid email or password",
     loginEmptyToast: "Please enter both email and password",
     rememberMe: "Remember this device for 7 days",
     sessionExpiredToast: "Your session has expired due to inactivity. Please sign in again.",
@@ -437,6 +443,16 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     roleLabel: "Role",
     emailAddressLabel: "Email Address",
     phoneNumberLabel: "Phone Number",
+    securityPasswordTitle: "Security & Authentication",
+    securityPasswordDesc: "Update your administrator login password and credentials",
+    currentPasswordLabel: "Current Password",
+    newPasswordLabel: "New Password",
+    confirmPasswordLabel: "Confirm New Password",
+    updatePasswordBtn: "Update Password",
+    passwordChangedToast: "Password updated successfully",
+    passwordMismatchToast: "New passwords do not match",
+    passwordLengthToast: "Password must be at least 8 characters and include a number or symbol",
+    currentPasswordRequiredToast: "Please enter your current password",
     saveSettingsBtn: "Save Settings",
 
     orderCol: "Order",
@@ -498,12 +514,10 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     secureAccessDesc: "ကုန်ပစ္စည်း၊ အော်ဒါနှင့် ဘဏ္ဍာရေး စနစ်အား လုံခြုံစွာ ဝင်ရောက်နိုင်ပါသည်",
     staffEmail: "ဝန်ထမ်း အီးမေးလ်",
     password: "လျှို့ဝှက်နံပါတ်",
-    demoPin: "သရုပ်ပြ PIN: admin123",
-    fillDemoCredentials: "သရုပ်ပြ အကောင့်အချက်အလက် ဖြည့်မည်",
     enterAdminPortal: "စီမံခန့်ခွဲရေး စနစ်သို့ ဝင်ရောက်မည်",
     authenticating: "စစ်ဆေးနေပါသည်...",
     loginWelcomeToast: "Pretty Corner စီမံခန့်ခွဲရေး စနစ်မှ ကြိုဆိုပါသည်",
-    loginErrorToast: "အီးမေးလ် သို့မဟုတ် လျှို့ဝှက်နံပါတ် မှားယွင်းနေပါသည်။ သရုပ်ပြ: admin@prettycorner.com / admin123",
+    loginErrorToast: "အီးမေးလ် သို့မဟုတ် လျှို့ဝှက်နံပါတ် မှားယွင်းနေပါသည်",
     loginEmptyToast: "ကျေးဇူးပြု၍ အီးမေးလ်နှင့် လျှို့ဝှက်နံပါတ် ထည့်သွင်းပါ",
     rememberMe: "ဤစက်တွင် ၇ ရက် မှတ်ထားပေးပါ",
     sessionExpiredToast: "အချိန်ကြာမြင့်စွာ အသုံးမပြုသဖြင့် လုံခြုံရေးအရ ပြန်လည်ဝင်ရောက်ပေးပါ",
@@ -665,6 +679,16 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     roleLabel: "ရာထူး / တာဝန်",
     emailAddressLabel: "အီးမေးလ်လိပ်စာ",
     phoneNumberLabel: "ဖုန်းနံပါတ်",
+    securityPasswordTitle: "လုံခြုံရေးနှင့် စကားဝှက်",
+    securityPasswordDesc: "စီမံခန့်ခွဲသူ လျှို့ဝှက်နံပါတ်အား ပြောင်းလဲသတ်မှတ်ပါ",
+    currentPasswordLabel: "လက်ရှိ လျှို့ဝှက်နံပါတ်",
+    newPasswordLabel: "လျှို့ဝှက်နံပါတ် အသစ်",
+    confirmPasswordLabel: "လျှို့ဝှက်နံပါတ် အသစ် အတည်ပြုပါ",
+    updatePasswordBtn: "လျှို့ဝှက်နံပါတ် ပြောင်းလဲမည်",
+    passwordChangedToast: "လျှို့ဝှက်နံပါတ် အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ",
+    passwordMismatchToast: "လျှို့ဝှက်နံပါတ် အသစ်များ ကိုက်ညီမှု မရှိပါ",
+    passwordLengthToast: "လျှို့ဝှက်နံပါတ်သည် အနည်းဆုံး ၈ လုံးရှိပြီး နံပါတ် သို့မဟုတ် သင်္ကေတ ပါဝင်ရမည်",
+    currentPasswordRequiredToast: "ကျေးဇူးပြု၍ လက်ရှိ လျှို့ဝှက်နံပါတ် ထည့်သွင်းပါ",
     saveSettingsBtn: "ဆက်တင်များ သိမ်းဆည်းမည်",
 
     orderCol: "အော်ဒါ",

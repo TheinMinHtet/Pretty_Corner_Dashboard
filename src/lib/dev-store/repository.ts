@@ -163,6 +163,7 @@ export interface StoreRepository {
     limit?: number;
   }): Promise<PaginatedResult<StockAdjustment>>;
 
+  listPromotions(): Promise<Promotion[]>;
   createPromotion(
     input: Omit<Promotion, "id" | "usageCount">
   ): Promise<Promotion>;
@@ -988,11 +989,26 @@ export class JsonFileStoreRepository implements StoreRepository {
         }
       }
 
+      let updatedPromotions = data.promotions;
+      if (input.appliedPromotionId) {
+        updatedPromotions = data.promotions.map((p) => {
+          if (p.id === input.appliedPromotionId) {
+            return {
+              ...p,
+              usageCount: (p.usageCount || 0) + 1,
+              updatedAt: now,
+            };
+          }
+          return p;
+        });
+      }
+
       const next: DevStoreData = {
         ...data,
         products: updatedProducts,
         orders: [newOrder, ...data.orders],
         stockHistory: [...newAdjustments, ...data.stockHistory],
+        promotions: updatedPromotions,
         notifications,
         activity: appendActivity(
           data.activity,
@@ -1127,6 +1143,11 @@ export class JsonFileStoreRepository implements StoreRepository {
       limit,
       totalPages,
     };
+  }
+
+  async listPromotions(): Promise<Promotion[]> {
+    const data = await this.ensureInitialized();
+    return data.promotions;
   }
 
   async createPromotion(
