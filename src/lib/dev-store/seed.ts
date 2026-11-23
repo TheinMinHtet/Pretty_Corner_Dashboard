@@ -1,5 +1,6 @@
 import {
   ActivityLogItem,
+  CatalogIndexItem,
   Category,
   Customer,
   NotificationItem,
@@ -28,6 +29,7 @@ export interface DevStoreData {
   notifications: NotificationItem[];
   activity: ActivityLogItem[];
   settings: StoreSettings;
+  catalogIndex?: CatalogIndexItem[];
 }
 
 export const SEED_CATEGORIES: Category[] = [

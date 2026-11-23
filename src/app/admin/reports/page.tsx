@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
   Cell,
   XAxis,
   YAxis,
@@ -25,11 +23,10 @@ import {
   Repeat,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
-import { Order, OrderStatus } from "@/types/admin";
+import { CatalogIndexItem, Order, OrderStatus, Product } from "@/types/admin";
 import {
-  resolveUnifiedOrderStatus,
-  UnifiedStatusKey,
-} from "@/components/ui/status-badge";
+  OrderStatusDistributionCard,
+} from "@/components/charts/dashboard-charts";
 import {
   Card,
   CardContent,
@@ -65,17 +62,28 @@ import {
 } from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
-const STATUS_COLORS: Record<UnifiedStatusKey, string> = {
-  paid: "#10B981",
-  pending: "#F59E0B",
-  expired: "#64748B",
-  cancelled: "#F43F5E",
-  failed: "#EF4444",
-};
 
 export default function SalesReportsPage() {
-  const { orders, products, categories } = useAdminStore();
+  const { orders, products, categories, catalogIndex } = useAdminStore();
   const [dateRange, setDateRange] = useState<DateRange>("30d");
+  const [localCatalogIndex, setLocalCatalogIndex] = useState<CatalogIndexItem[]>([]);
+
+  useEffect(() => {
+    if (catalogIndex && catalogIndex.length > 0) return;
+    let active = true;
+    fetch("/api/products?view=index")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.products) setLocalCatalogIndex(data.products);
+      })
+      .catch((err) => console.error("Failed to load catalog index for reports:", err));
+    return () => {
+      active = false;
+    };
+  }, [catalogIndex]);
+
+  const activeCatalog =
+    catalogIndex && catalogIndex.length > 0 ? catalogIndex : localCatalogIndex;
 
   const rangeOrders = useMemo(
     () => filterOrdersByRange(orders, dateRange),
@@ -163,43 +171,25 @@ export default function SalesReportsPage() {
   const salesByCategory = useMemo(() => {
     return computeCategorySales(
       categories,
-      products,
+      activeCatalog.length > 0 ? activeCatalog : products,
       CATEGORY_COLORS,
       rangeOrders
     );
-  }, [categories, products, rangeOrders]);
-
-  const ordersByStatus = useMemo(() => {
-    const statuses: { key: UnifiedStatusKey; label: string }[] = [
-      { key: "paid", label: "Paid" },
-      { key: "pending", label: "Pending" },
-      { key: "expired", label: "Time Expired" },
-      { key: "cancelled", label: "Cancelled" },
-      { key: "failed", label: "Failed" },
-    ];
-    return statuses
-      .map((s) => ({
-        name: s.label,
-        value: rangeOrders.filter(
-          (o) =>
-            resolveUnifiedOrderStatus(
-              o.orderStatus,
-              o.paymentStatus,
-              o.paymentMethod
-            ) === s.key
-        ).length,
-        color: STATUS_COLORS[s.key],
-      }))
-      .filter((d) => d.value > 0);
-  }, [rangeOrders]);
+  }, [categories, activeCatalog, products, rangeOrders]);
 
   const bestSellers = useMemo(
     () =>
-      deriveTopSellingProducts(rangeOrders, products, {
-        limit: 6,
-        sortBy: "revenue",
-      }),
-    [rangeOrders, products]
+      deriveTopSellingProducts(
+        rangeOrders,
+        activeCatalog.length > 0
+          ? (activeCatalog as unknown as Product[])
+          : products,
+        {
+          limit: 6,
+          sortBy: "revenue",
+        }
+      ),
+    [rangeOrders, activeCatalog, products]
   );
 
   return (
@@ -329,7 +319,7 @@ export default function SalesReportsPage() {
 
       {/* Sales by Category + Orders by Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+        <Card className="rounded-[32px] border-[#F0E1E6]">
           <CardHeader className="pb-2">
             <CardTitle>Sales by Category</CardTitle>
             <CardDescription>Cumulative revenue per beauty category</CardDescription>
@@ -373,52 +363,11 @@ export default function SalesReportsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Orders by Status</CardTitle>
-            <CardDescription>Current active order distribution</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={ordersByStatus}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={52}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {ordersByStatus.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: "12px",
-                      border: "1px solid #F0E1E6",
-                      fontSize: "12px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              {ordersByStatus.map((s) => (
-                <div key={s.name} className="flex items-center gap-1.5 text-xs">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: s.color }}
-                  />
-                  <span className="text-[#806B73] truncate">{s.name}:</span>
-                  <span className="font-semibold text-[#33272C]">{s.value}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <OrderStatusDistributionCard
+          orders={rangeOrders}
+          title="Orders by Status"
+          description="Current active order distribution"
+        />
       </div>
 
       {/* Payment & Customer Segmentation Analytics (PC-SD-007, PC-SD-008) */}

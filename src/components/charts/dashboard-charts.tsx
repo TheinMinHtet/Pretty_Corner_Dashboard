@@ -258,7 +258,17 @@ export function OrdersTrendCard({
   );
 }
 
-export function OrderStatusDistributionCard({ orders }: { orders: Order[] }) {
+export function OrderStatusDistributionCard({
+  orders,
+  title = "Order Status Distribution",
+  description,
+  className,
+}: {
+  orders: Order[];
+  title?: string;
+  description?: string;
+  className?: string;
+}) {
   const distribution = useMemo(() => {
     const categories = [
       "Paid",
@@ -290,10 +300,12 @@ export function OrderStatusDistributionCard({ orders }: { orders: Order[] }) {
   const totalOrders = orders.length;
 
   return (
-    <Card className="rounded-[28px] border-[#F0E1E6] bg-white shadow-xs">
+    <Card className={`rounded-[32px] border-[#F0E1E6] bg-white shadow-xs ${className ?? ""}`}>
       <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-lg font-bold text-[#33272C]">Order Status Distribution</CardTitle>
-        <CardDescription className="text-xs text-[#806B73]">Real-time live breakdown across {totalOrders} orders</CardDescription>
+        <CardTitle className="font-serif text-lg font-bold text-[#33272C]">{title}</CardTitle>
+        <CardDescription className="text-xs text-[#806B73]">
+          {description ?? `Real-time live breakdown across ${totalOrders} orders`}
+        </CardDescription>
       </CardHeader>
       <CardContent className="pt-0">
         {totalOrders === 0 ? (
