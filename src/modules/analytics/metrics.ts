@@ -2,6 +2,7 @@ import {
   Category,
   Customer,
   Order,
+  OrderItem,
   OrderStatus,
   PaymentStatus,
   Product,
@@ -218,7 +219,7 @@ export function computeDashboardMetrics(
 
   const pending = countBy("Pending");
   const processing = countBy("Processing");
-  const completed = countBy("Delivered");
+  const completed = countBy("Shipped");
   const cancelled = countBy("Cancelled");
 
   return {
@@ -241,8 +242,16 @@ export function computeDashboardMetrics(
     failedPayments: current.filter(
       (o) => o.paymentStatus === "Failed" || o.paymentStatus === "Expired"
     ).length,
-    topPayment: topShare(current.map((o) => o.paymentMethod)),
-    topCity: topShare(current.map((o) => o.city)),
+    topPayment: topShare(
+      current
+        .map((o) => o.paymentMethod)
+        .filter((method): method is NonNullable<typeof method> => Boolean(method && method.trim()))
+    ),
+    topCity: topShare(
+      current
+        .map((o) => o.city)
+        .filter((city): city is NonNullable<typeof city> => Boolean(city && city.trim()))
+    ),
   };
 }
 
@@ -266,7 +275,6 @@ export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
   Pending: "#F59E0B",
   Failed: "#EF4444",
   Expired: "#64748B",
-  Refunded: "#8B5CF6",
   Cancelled: "#F43F5E",
 };
 
@@ -295,7 +303,7 @@ export function computePaymentMethodStats(orders: Order[]): PaymentStatItem[] {
 }
 
 export function computePaymentStatusStats(orders: Order[]): PaymentStatItem[] {
-  const statuses: PaymentStatus[] = ["Paid", "Pending", "Failed", "Expired", "Refunded"];
+  const statuses: PaymentStatus[] = ["Paid", "Pending", "Failed", "Expired"];
 
   return statuses.map((s) => {
     const matched = orders.filter((o) => o.paymentStatus === s);
@@ -486,79 +494,93 @@ export function computeInventoryStats(products: Product[]): InventoryStatsResult
   return { total, inStock, lowStock, outOfStock };
 }
 
+export interface TopSellingProduct {
+  product: Product;
+  /** Units actually ordered for this product in the supplied order set. */
+  unitsSold: number;
+  /** Revenue from order line items (quantity × unit price at purchase). */
+  revenue: number;
+}
+
+export interface TopSellingOptions {
+  limit?: number;
+  /** "revenue" ranks by money earned, "units" ranks by unit velocity. */
+  sortBy?: "revenue" | "units";
+}
+
+/** Links an order line item back to a catalog product. */
+function findProductForItem(
+  item: OrderItem,
+  products: Product[]
+): Product | undefined {
+  return products.find((p) => {
+    if (
+      item.productId &&
+      (p.id === item.productId || p.slug === item.productId)
+    ) {
+      return true;
+    }
+    if (item.productName && p.name) {
+      const itemName = item.productName.trim().toLowerCase();
+      const productName = p.name.trim().toLowerCase();
+      if (!itemName) return false;
+      if (itemName === productName) return true;
+      if (productName.includes(itemName) || itemName.includes(productName)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * Ranks products from real order line items. Units and revenue come from what
+ * customers actually ordered (cancellations excluded), never from a catalog
+ * `soldCount` baseline or today's list price.
+ */
 export function deriveTopSellingProducts(
   orders: Order[],
   products: Product[],
-  limit: number = 6
-): Product[] {
+  { limit = 6, sortBy = "units" }: TopSellingOptions = {}
+): TopSellingProduct[] {
   const productMetrics = new Map<string, { unitsSold: number; revenue: number }>();
 
-  const validOrders = orders.filter(
-    (o) => o.paymentStatus === "Paid" || o.orderStatus !== "Cancelled"
-  );
-
-  for (const order of validOrders) {
+  for (const order of revenueOrders(orders)) {
     for (const item of order.items || []) {
       const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unitPrice) || 0;
-      const revenue = quantity * unitPrice;
+      if (quantity <= 0) continue;
 
-      const matchedProduct = products.find((p) => {
-        if (item.productId && p.id === item.productId) {
-          return true;
-        }
-        if (
-          item.productName &&
-          p.name &&
-          p.name.trim().toLowerCase() === item.productName.trim().toLowerCase()
-        ) {
-          return true;
-        }
-        return false;
-      });
+      const matchedProduct = findProductForItem(item, products);
+      if (!matchedProduct) continue;
 
-      if (matchedProduct) {
-        const existing = productMetrics.get(matchedProduct.id) || {
-          unitsSold: 0,
-          revenue: 0,
-        };
-        existing.unitsSold += quantity;
-        existing.revenue += revenue;
-        productMetrics.set(matchedProduct.id, existing);
-      }
+      const existing = productMetrics.get(matchedProduct.id) || {
+        unitsSold: 0,
+        revenue: 0,
+      };
+      existing.unitsSold += quantity;
+      existing.revenue += quantity * (Number(item.unitPrice) || 0);
+      productMetrics.set(matchedProduct.id, existing);
     }
   }
 
-  const augmentedProducts = products.map((p) => {
-    const metrics = productMetrics.get(p.id);
-    const unitsSoldFromOrders = metrics ? metrics.unitsSold : 0;
-    const soldCount = Math.max(p.soldCount ?? 0, unitsSoldFromOrders);
-    if (unitsSoldFromOrders > 0) {
-      p.soldCount = soldCount;
-    }
-    const totalRevenue =
-      metrics && metrics.revenue > 0
-        ? metrics.revenue
-        : soldCount * (p.salePrice ?? p.regularPrice);
+  const ranked: TopSellingProduct[] = [];
+  for (const [productId, metrics] of productMetrics) {
+    const product = products.find((p) => p.id === productId);
+    if (!product) continue;
+    ranked.push({
+      product,
+      unitsSold: metrics.unitsSold,
+      revenue: metrics.revenue,
+    });
+  }
 
-    return {
-      product: {
-        ...p,
-        soldCount,
-      },
-      unitsSold: soldCount,
-      totalRevenue,
-    };
-  });
+  ranked.sort((a, b) =>
+    sortBy === "revenue"
+      ? b.revenue - a.revenue || b.unitsSold - a.unitsSold
+      : b.unitsSold - a.unitsSold || b.revenue - a.revenue
+  );
 
-  augmentedProducts.sort((a, b) => {
-    if (b.unitsSold !== a.unitsSold) {
-      return b.unitsSold - a.unitsSold;
-    }
-    return b.totalRevenue - a.totalRevenue;
-  });
-
-  return augmentedProducts.slice(0, limit).map((entry) => entry.product);
+  return ranked.slice(0, limit);
 }
 
 /**
@@ -575,7 +597,7 @@ export function getDashboardOverview(
   const rangeOrders = filterOrdersByRange(orders, range, now);
   const metrics = computeDashboardMetrics(orders, range, now);
   const series = buildOrderSeries(orders, range, now);
-  const topSelling = deriveTopSellingProducts(orders, products, 6);
+  const topSelling = deriveTopSellingProducts(rangeOrders, products, { limit: 6 });
   const inventory = computeInventoryStats(products);
 
   return {

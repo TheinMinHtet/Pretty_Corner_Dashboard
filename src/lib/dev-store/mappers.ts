@@ -96,20 +96,13 @@ export function toStorefrontProduct(
   const categorySlug = categoryObj?.slug ?? "more";
   const effectivePrice = product.salePrice ?? product.regularPrice;
 
-  const sizes: StorefrontProductSize[] =
-    product.variants && product.variants.length > 0
-      ? product.variants.map((v) => ({
-          name: v.label,
-          price: v.priceOverride ?? effectivePrice,
-          inStock: v.quantity > 0 && product.status === "Active",
-        }))
-      : [
-          {
-            name: "Standard",
-            price: effectivePrice,
-            inStock: product.stock > 0 && product.status === "Active",
-          },
-        ];
+  const sizes: StorefrontProductSize[] = [
+    {
+      name: "Standard",
+      price: effectivePrice,
+      inStock: product.stock > 0 && product.status === "Active",
+    },
+  ];
 
   const gallery =
     product.images && product.images.length > 0
@@ -174,8 +167,6 @@ function mapOrderStatusToStorefront(
       return "processing";
     case "Shipped":
       return "shipped";
-    case "Delivered":
-      return "delivered";
     default:
       return "pending_review";
   }
@@ -194,7 +185,7 @@ export function toStorefrontOrder(order: Order): StorefrontOrder {
       id: item.id,
       productId: item.productId,
       name: item.productName,
-      size: item.variantLabel || "Standard",
+      size: "Standard",
       price: item.unitPrice,
       quantity: item.quantity,
       image: item.productImage,

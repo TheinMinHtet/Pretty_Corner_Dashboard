@@ -1,8 +1,10 @@
 import {
   Category,
   Customer,
+  InventoryStats,
   Order,
   OrderStatus,
+  PaginatedResult,
   PaymentStatus,
   Product,
   Promotion,
@@ -116,8 +118,6 @@ interface SbStockAdjustmentRow {
   product_id: string | null;
   product_name: string;
   sku: string;
-  variant_id: string | null;
-  variant_label: string | null;
   type: "increase" | "decrease";
   quantity: number;
   previous_stock: number;
@@ -166,7 +166,6 @@ function mapCategoryRow(row: SbCategoryRow): Category {
     name: row.name,
     slug: row.slug,
     description: row.description ?? "",
-    image: "/assets/dew-drop-serum.png",
     active: row.is_active ?? true,
     createdAt: row.created_at,
   };
@@ -192,7 +191,6 @@ function mapProductRow(row: SbProductRow): Product {
     stock: Number(row.stock_quantity) || 0,
     lowStockThreshold: 10,
     status: row.is_active ? "Active" : "Archived",
-    variants: [],
     soldCount: Number(row.sold_count) || 0,
     badge: row.badge ?? undefined,
     benefits: Array.isArray(row.benefits) ? row.benefits : [],
@@ -211,7 +209,6 @@ function mapPaymentStatusFromSb(status: string): PaymentStatus {
     case "expired":
       return "Expired";
     case "refunded":
-      return "Refunded";
     case "cancelled":
       return "Cancelled";
     default:
@@ -230,9 +227,10 @@ function mapOrderStatusFromSb(status: string): OrderStatus {
     case "processing":
       return "Processing";
     case "shipped":
-      return "Shipped";
     case "delivered":
-      return "Delivered";
+      return "Shipped";
+    case "expired":
+      return "Expired";
     case "cancelled":
       return "Cancelled";
     default:
@@ -248,8 +246,8 @@ function mapOrderStatusToSb(status: OrderStatus): string {
       return "processing";
     case "Shipped":
       return "shipped";
-    case "Delivered":
-      return "delivered";
+    case "Expired":
+      return "expired";
     case "Cancelled":
       return "cancelled";
     default:
@@ -444,6 +442,304 @@ export class SupabaseStoreRepository implements StoreRepository {
     };
   }
 
+  private async getInventoryStats(): Promise<InventoryStats> {
+    try {
+      const sb = getSupabaseClient();
+      const { data, error } = await sb
+        .from("products")
+        .select("stock_quantity");
+
+      if (error || !data) {
+        return { total: 0, inStock: 0, lowStock: 0, outOfStock: 0 };
+      }
+
+      let inStock = 0;
+      let lowStock = 0;
+      let outOfStock = 0;
+
+      for (const row of data) {
+        const q = Number(row.stock_quantity) || 0;
+        if (q === 0) outOfStock++;
+        else if (q <= 10) lowStock++;
+        else inStock++;
+      }
+
+      return {
+        total: data.length,
+        inStock,
+        lowStock,
+        outOfStock,
+      };
+    } catch {
+      return { total: 0, inStock: 0, lowStock: 0, outOfStock: 0 };
+    }
+  }
+
+  async getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }> {
+    const [local, categories, orders, promotions, stockHistory, inventoryStats] = await Promise.all([
+      this.localFallback.getAllData(),
+      this.listCategories(),
+      this.listOrders(),
+      this.listPromotions(),
+      this.listStockAdjustments(),
+      this.getInventoryStats(),
+    ]);
+
+    const derivedCustomers = deriveCustomersFromOrders(orders);
+    const customers =
+      derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
+    const notifications = deriveNotificationsFromOrdersAndProducts(orders, []);
+
+    return {
+      ...local,
+      categories,
+      products: [], // Exclude full product catalog at startup!
+      orders,
+      promotions,
+      customers,
+      stockHistory: stockHistory.length > 0 ? stockHistory : (local.stockHistory ?? []),
+      notifications,
+      inventoryStats,
+    };
+  }
+
+  async listProductsPaginated(params: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    status?: string;
+    stock?: "all" | "in" | "low" | "out";
+    q?: string;
+    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortDir?: "asc" | "desc";
+  }): Promise<PaginatedResult<Product> & { stats: InventoryStats }> {
+    try {
+      const sb = getSupabaseClient();
+      const page = Math.max(1, params.page || 1);
+      const limit = Math.min(10, Math.max(1, params.limit || 10));
+      const offset = (page - 1) * limit;
+
+      let query = sb.from("products").select("*", { count: "exact" });
+
+      if (params.category && params.category !== "all") {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.category);
+        if (isUuid) {
+          query = query.eq("category_id", params.category);
+        } else {
+          const cats = await this.listCategories();
+          const found = cats.find((c) => c.slug === params.category || c.id === params.category);
+          if (found) {
+            query = query.eq("category_id", found.id);
+          } else {
+            query = query.eq("category_id", params.category);
+          }
+        }
+      }
+
+      if (params.status === "Active") {
+        query = query.eq("is_active", true);
+      } else if (params.status === "Archived") {
+        query = query.eq("is_active", false);
+      }
+
+      if (params.stock === "out") {
+        query = query.eq("stock_quantity", 0);
+      } else if (params.stock === "low") {
+        query = query.gt("stock_quantity", 0).lte("stock_quantity", 10);
+      } else if (params.stock === "in") {
+        query = query.gt("stock_quantity", 10);
+      }
+
+      if (params.q?.trim()) {
+        const q = params.q.trim();
+        query = query.or(`name.ilike.%${q}%,slug.ilike.%${q}%,description.ilike.%${q}%`);
+      }
+
+      const sortDir = params.sortDir === "desc" ? { ascending: false } : { ascending: true };
+      switch (params.sortKey) {
+        case "price":
+          query = query.order("price", sortDir);
+          break;
+        case "stock":
+          query = query.order("stock_quantity", sortDir);
+          break;
+        case "createdAt":
+          query = query.order("created_at", sortDir);
+          break;
+        case "name":
+        default:
+          query = query.order("name", sortDir);
+          break;
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const [{ data, count, error }, stats] = await Promise.all([
+        query,
+        this.getInventoryStats(),
+      ]);
+
+      if (error) {
+        console.error("Supabase listProductsPaginated error:", error);
+        return this.localFallback.listProductsPaginated(params);
+      }
+
+      const total = count ?? (data?.length ?? 0);
+      const items = ((data ?? []) as SbProductRow[]).map(mapProductRow);
+
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+        stats,
+      };
+    } catch (err) {
+      console.error("Supabase listProductsPaginated catch:", err);
+      return this.localFallback.listProductsPaginated(params);
+    }
+  }
+
+  async listCategoriesPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Category & { productCount: number }>> {
+    try {
+      const sb = getSupabaseClient();
+      const page = Math.max(1, params.page || 1);
+      const limit = Math.min(10, Math.max(1, params.limit || 10));
+      const offset = (page - 1) * limit;
+
+      let query = sb.from("categories").select("*", { count: "exact" });
+      if (params.q?.trim()) {
+        const q = params.q.trim();
+        query = query.or(`name.ilike.%${q}%,slug.ilike.%${q}%`);
+      }
+      query = query.order("created_at", { ascending: true });
+      query = query.range(offset, offset + limit - 1);
+
+      const [{ data, count, error }, prodsRes] = await Promise.all([
+        query,
+        sb.from("products").select("category_id"),
+      ]);
+
+      if (error) {
+        console.error("Supabase listCategoriesPaginated error:", error);
+        return this.localFallback.listCategoriesPaginated(params);
+      }
+
+      const counts: Record<string, number> = {};
+      if (prodsRes.data) {
+        for (const p of prodsRes.data) {
+          if (p.category_id) {
+            counts[p.category_id] = (counts[p.category_id] || 0) + 1;
+          }
+        }
+      }
+
+      const total = count ?? (data?.length ?? 0);
+      const items = ((data ?? []) as SbCategoryRow[]).map((row) => ({
+        ...mapCategoryRow(row),
+        productCount: counts[row.id] ?? 0,
+      }));
+
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      };
+    } catch (err) {
+      console.error("Supabase listCategoriesPaginated catch:", err);
+      return this.localFallback.listCategoriesPaginated(params);
+    }
+  }
+
+  async listCustomersPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Customer>> {
+    const allCustomers = await this.listCustomers();
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.min(10, Math.max(1, params.limit || 10));
+
+    let filtered = allCustomers;
+    if (params.q?.trim()) {
+      const q = params.q.trim().toLowerCase();
+      filtered = filtered.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q) ||
+          c.addresses?.some((a) => a.township?.toLowerCase().includes(q))
+      );
+    }
+
+    const total = filtered.length;
+    const offset = (page - 1) * limit;
+    const items = filtered.slice(offset, offset + limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async listStockAdjustmentsPaginated(params: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResult<StockAdjustment>> {
+    try {
+      const sb = getSupabaseClient();
+      const page = Math.max(1, params.page || 1);
+      const limit = Math.min(10, Math.max(1, params.limit || 10));
+      const offset = (page - 1) * limit;
+
+      const { data, count, error } = await sb
+        .from("inventory_adjustments")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        console.error("Supabase listStockAdjustmentsPaginated error:", error);
+        return this.localFallback.listStockAdjustmentsPaginated(params);
+      }
+
+      const total = count ?? (data?.length ?? 0);
+      const items: StockAdjustment[] = ((data ?? []) as SbStockAdjustmentRow[]).map((row) => ({
+        id: row.id,
+        productId: row.product_id || row.id,
+        productName: row.product_name,
+        sku: row.sku,
+        type: (row.type === "decrease" ? "decrease" : "increase") as "increase" | "decrease",
+        quantity: Number(row.quantity),
+        previousStock: Number(row.previous_stock),
+        newStock: Number(row.new_stock),
+        reason: row.reason,
+        performedBy: row.performed_by || "Admin",
+        createdAt: row.created_at,
+      }));
+
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      };
+    } catch (err) {
+      console.error("Supabase listStockAdjustmentsPaginated catch:", err);
+      return this.localFallback.listStockAdjustmentsPaginated(params);
+    }
+  }
+
   async listStockAdjustments(): Promise<StockAdjustment[]> {
     const sb = getSupabaseClient();
     const { data, error } = await sb
@@ -461,8 +757,6 @@ export class SupabaseStoreRepository implements StoreRepository {
       productId: row.product_id || row.id,
       productName: row.product_name,
       sku: row.sku,
-      variantId: row.variant_id ?? undefined,
-      variantLabel: row.variant_label ?? undefined,
       type: row.type === "decrease" ? "decrease" : "increase",
       quantity: Number(row.quantity),
       previousStock: Number(row.previous_stock),
@@ -560,7 +854,7 @@ export class SupabaseStoreRepository implements StoreRepository {
 
     if (filters?.status === "Active") {
       query = query.eq("is_active", true);
-    } else if (filters?.status === "Archived" || filters?.status === "Draft") {
+    } else if (filters?.status === "Archived") {
       query = query.eq("is_active", false);
     }
 
@@ -638,7 +932,7 @@ export class SupabaseStoreRepository implements StoreRepository {
         usage: input.usage || null,
         main_image: images[0],
         gallery: images,
-        is_active: input.status !== "Archived" && input.status !== "Draft",
+        is_active: input.status !== "Archived",
       })
       .select("*")
       .single();
@@ -883,7 +1177,6 @@ export class SupabaseStoreRepository implements StoreRepository {
 
   async adjustStock(input: {
     productId: string;
-    variantId?: string;
     type: "increase" | "decrease";
     quantity: number;
     reason: string;
@@ -910,7 +1203,6 @@ export class SupabaseStoreRepository implements StoreRepository {
           product_id: isProductUuid ? existing.id : null,
           product_name: existing.name,
           sku,
-          variant_id: input.variantId || null,
           type: input.type,
           quantity: input.quantity,
           previous_stock: existing.stock,
@@ -927,7 +1219,6 @@ export class SupabaseStoreRepository implements StoreRepository {
           productId: adjData.product_id || updated.id,
           productName: adjData.product_name,
           sku: adjData.sku,
-          variantId: adjData.variant_id ?? undefined,
           type: adjData.type,
           quantity: Number(adjData.quantity),
           previousStock: Number(adjData.previous_stock),

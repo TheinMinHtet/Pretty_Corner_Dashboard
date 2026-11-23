@@ -12,13 +12,13 @@ import {
   ActivityLogItem,
   Category,
   Customer,
+  InventoryStats,
   NotificationItem,
   Order,
   OrderStatus,
   PaymentStatus,
   Product,
   Promotion,
-  RefundDetails,
   StockAdjustment,
   StoreSettings,
   AdminSession,
@@ -94,6 +94,7 @@ interface PersistedState {
   notifications: NotificationItem[];
   activity: ActivityLogItem[];
   settings: StoreSettings;
+  inventoryStats: InventoryStats;
 }
 
 const EMPTY_INITIAL_STATE: PersistedState = {
@@ -106,6 +107,12 @@ const EMPTY_INITIAL_STATE: PersistedState = {
   notifications: [],
   activity: [],
   settings: INITIAL_SETTINGS,
+  inventoryStats: {
+    total: 0,
+    inStock: 0,
+    lowStock: 0,
+    outOfStock: 0,
+  },
 };
 
 interface AdminContextValue extends PersistedState {
@@ -123,11 +130,12 @@ interface AdminContextValue extends PersistedState {
   // Orders
   updateOrderStatus: (orderId: string, status: OrderStatus, note?: string) => void;
   updatePaymentStatus: (orderId: string, status: PaymentStatus) => void;
-  updatePaymentReference: (orderId: string, reference: string) => void;
-  processOrderRefund: (
+  updateUnifiedStatus: (
     orderId: string,
-    refund: Omit<RefundDetails, "refundedAt" | "processedBy">
+    status: "pending" | "paid" | "failed" | "expired" | "cancelled",
+    note?: string
   ) => void;
+  updatePaymentReference: (orderId: string, reference: string) => void;
 
   // Products
   addProduct: (
@@ -144,13 +152,6 @@ interface AdminContextValue extends PersistedState {
   // Inventory
   adjustStock: (
     productId: string,
-    type: "increase" | "decrease",
-    quantity: number,
-    reason: string
-  ) => void;
-  adjustVariantStock: (
-    productId: string,
-    variantId: string,
     type: "increase" | "decrease",
     quantity: number,
     reason: string
@@ -241,6 +242,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         notifications: data.notifications ?? [],
         activity: data.activity ?? [],
         settings: mergeSettings(data.settings),
+        inventoryStats: data.inventoryStats ?? {
+          total: 0,
+          inStock: 0,
+          lowStock: 0,
+          outOfStock: 0,
+        },
       });
     } catch (error) {
       console.error("Failed to load admin store from API:", error);
@@ -271,6 +278,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           notifications: data.notifications ?? [],
           activity: data.activity ?? [],
           settings: mergeSettings(data.settings),
+          inventoryStats: data.inventoryStats ?? {
+            total: 0,
+            inStock: 0,
+            lowStock: 0,
+            outOfStock: 0,
+          },
         });
       })
       .catch((error) => console.error("Failed to load admin store:", error))
@@ -547,6 +560,84 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     [persistMutation]
   );
 
+  const updateUnifiedStatus = useCallback(
+    (
+      orderId: string,
+      unifiedStatus: "pending" | "paid" | "failed" | "expired" | "cancelled",
+      note?: string
+    ) => {
+      let targetOrderStatus: OrderStatus;
+      let targetPaymentStatus: PaymentStatus;
+
+      switch (unifiedStatus) {
+        case "paid":
+          targetOrderStatus = "Shipped";
+          targetPaymentStatus = "Paid";
+          break;
+        case "pending":
+          targetOrderStatus = "Pending";
+          targetPaymentStatus = "Pending";
+          break;
+        case "failed":
+          targetOrderStatus = "Pending";
+          targetPaymentStatus = "Failed";
+          break;
+        case "expired":
+          targetOrderStatus = "Expired";
+          targetPaymentStatus = "Expired";
+          break;
+        case "cancelled":
+          targetOrderStatus = "Cancelled";
+          targetPaymentStatus = "Cancelled";
+          break;
+      }
+
+      setState((prev) => {
+        const target = prev.orders.find((o) => o.id === orderId);
+        if (!target) return prev;
+
+        const mutation = executeOrderUpdate(
+          target,
+          {
+            orderStatus: targetOrderStatus,
+            paymentStatus: targetPaymentStatus,
+            note: note ?? `Status updated to ${unifiedStatus}`,
+          },
+          prev.products,
+          {
+            actorName: prev.settings.adminProfile.name,
+            lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
+          }
+        );
+
+        let nextNotifications = prev.notifications;
+        for (const notif of mutation.newNotifications) {
+          nextNotifications = appendNotification(nextNotifications, notif);
+        }
+
+        return {
+          ...prev,
+          orders: prev.orders.map((o) =>
+            o.id === orderId ? mutation.updatedOrder : o
+          ),
+          products: mutation.updatedProducts,
+          stockHistory: [...mutation.newAdjustments, ...prev.stockHistory],
+          notifications: nextNotifications,
+          activity: mutation.newActivity
+            ? [mutation.newActivity, ...prev.activity.slice(0, 29)]
+            : prev.activity,
+        };
+      });
+
+      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
+        orderStatus: targetOrderStatus,
+        paymentStatus: targetPaymentStatus,
+        note,
+      });
+    },
+    [persistMutation]
+  );
+
   const updatePaymentReference = useCallback(
     (orderId: string, reference: string) => {
       setState((prev) => {
@@ -570,40 +661,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
         transactionReference: reference,
-      });
-    },
-    [persistMutation]
-  );
-
-  const processOrderRefund = useCallback(
-    (
-      orderId: string,
-      refund: Omit<RefundDetails, "refundedAt" | "processedBy">
-    ) => {
-      setState((prev) => {
-        const target = prev.orders.find((o) => o.id === orderId);
-        if (!target) return prev;
-
-        const mutation = executeOrderUpdate(
-          target,
-          { refund },
-          prev.products,
-          { actorName: prev.settings.adminProfile.name }
-        );
-
-        return {
-          ...prev,
-          orders: prev.orders.map((o) =>
-            o.id === orderId ? mutation.updatedOrder : o
-          ),
-          activity: mutation.newActivity
-            ? [mutation.newActivity, ...prev.activity.slice(0, 29)]
-            : prev.activity,
-        };
-      });
-
-      void persistMutation(`/api/orders/${encodeURIComponent(orderId)}`, "PATCH", {
-        refund,
       });
     },
     [persistMutation]
@@ -762,7 +819,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (!target || quantity <= 0) return prev;
         const { updatedProduct, adjustment } = applyStockAdjustment(
           target,
-          undefined,
           type,
           quantity,
           prev.settings.adminProfile.name,
@@ -779,45 +835,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       void persistMutation("/api/inventory/adjust", "POST", {
         productId,
-        type,
-        quantity,
-        reason,
-      });
-    },
-    [persistMutation]
-  );
-
-  const adjustVariantStock = useCallback(
-    (
-      productId: string,
-      variantId: string,
-      type: "increase" | "decrease",
-      quantity: number,
-      reason: string
-    ) => {
-      setState((prev) => {
-        const targetProduct = prev.products.find((p) => p.id === productId);
-        if (!targetProduct || quantity <= 0) return prev;
-        const { updatedProduct, adjustment } = applyStockAdjustment(
-          targetProduct,
-          variantId,
-          type,
-          quantity,
-          prev.settings.adminProfile.name,
-          reason
-        );
-        return {
-          ...prev,
-          products: prev.products.map((p) =>
-            p.id === productId ? updatedProduct : p
-          ),
-          stockHistory: [adjustment, ...prev.stockHistory],
-        };
-      });
-
-      void persistMutation("/api/inventory/adjust", "POST", {
-        productId,
-        variantId,
         type,
         quantity,
         reason,
@@ -922,8 +939,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       logout,
       updateOrderStatus,
       updatePaymentStatus,
+      updateUnifiedStatus,
       updatePaymentReference,
-      processOrderRefund,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -931,7 +948,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       updateCategory,
       deleteCategory,
       adjustStock,
-      adjustVariantStock,
       addPromotion,
       updatePromotion,
       deletePromotion,
@@ -951,8 +967,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       logout,
       updateOrderStatus,
       updatePaymentStatus,
+      updateUnifiedStatus,
       updatePaymentReference,
-      processOrderRefund,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -960,7 +976,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       updateCategory,
       deleteCategory,
       adjustStock,
-      adjustVariantStock,
       addPromotion,
       updatePromotion,
       deletePromotion,

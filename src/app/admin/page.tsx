@@ -13,11 +13,12 @@ import {
   ArrowRight,
   AlertTriangle,
   Sparkles,
-  Activity,
   Package,
+  Eye,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
+import { Product } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -36,15 +37,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  OrderStatusBadge,
-  PaymentStatusBadge,
+  UnifiedOrderStatusBadge,
 } from "@/components/ui/status-badge";
 import {
   OrderStatusDistributionCard,
   OrdersTrendCard,
   RevenueChartCard,
 } from "@/components/charts/dashboard-charts";
-import { formatDate, formatDateTime, formatMMK } from "@/lib/utils";
+import { formatDate, formatMMK } from "@/lib/utils";
 import {
   DATE_RANGES,
   DateRange,
@@ -54,7 +54,7 @@ import {
 } from "@/modules/analytics/metrics";
 
 export default function AdminDashboardPage() {
-  const { orders, products, categories, activity } = useAdminStore();
+  const { orders, products, categories } = useAdminStore();
   const { t } = useLanguage();
   const [range, setRange] = useState<DateRange>("30d");
 
@@ -82,20 +82,29 @@ export default function AdminDashboardPage() {
   );
 
   const bestSellingProducts = useMemo(
-    () => deriveTopSellingProducts(orders, products, 5),
-    [orders, products]
+    () =>
+      deriveTopSellingProducts(rangeOrders, products, {
+        limit: 5,
+        sortBy: "units",
+      }),
+    [rangeOrders, products]
   );
 
-  const lowStockProducts = useMemo(
-    () =>
-      products
-        .filter(
-          (p) => p.status === "Active" && p.stock <= p.lowStockThreshold
-        )
-        .sort((a, b) => a.stock - b.stock)
-        .slice(0, 5),
-    [products]
-  );
+  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    fetch("/api/products?stock=low&limit=5&status=Active")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        setLowStockProducts(data.products || []);
+      })
+      .catch((err) => console.error("Failed to load dashboard low stock products:", err));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const localizedDateRangeLabels: Record<DateRange, string> = {
     "7d": t.range7d,
@@ -149,7 +158,7 @@ export default function AdminDashboardPage() {
       width: metrics.processingShare,
     },
     {
-      title: t.statusDelivered,
+      title: t.statusShipped,
       value: String(metrics.completed),
       change: `${metrics.completedShare}%`,
       positive: true,
@@ -263,10 +272,17 @@ export default function AdminDashboardPage() {
         </div>
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle>Sales Summary</CardTitle>
-            <CardDescription>
-              {localizedDateRangeLabels[range]}
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Sales Summary</CardTitle>
+                <CardDescription>
+                  {localizedDateRangeLabels[range]}
+                </CardDescription>
+              </div>
+              <span className="text-xs font-semibold text-[#B73D67] bg-[#FCEEF2] px-2.5 py-1 rounded-full">
+                {metrics.totalOrders} Orders
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-xl bg-[#FDF6F8] border border-[#F0E1E6] p-3.5">
@@ -331,62 +347,90 @@ export default function AdminDashboardPage() {
 
       {/* Recent Orders + Best Selling Products */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="xl:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <Card className="xl:col-span-2 rounded-[28px] border-[#EEDFE5] overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
             <div>
-              <CardTitle>{t.recentOrders}</CardTitle>
-              <CardDescription>{t.recentOrdersDesc}</CardDescription>
+              <CardTitle className="text-sm font-semibold text-[#38262E]">{t.recentOrders}</CardTitle>
+              <CardDescription className="text-xs text-[#7A6870]">{t.recentOrdersDesc}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/admin/orders" className="text-[#D96B91]">
+              <Link href="/admin/orders" className="text-[#B73D67] font-semibold hover:underline flex items-center gap-1 text-xs">
                 {t.viewAllOrders} <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-[#FAF7F8]/80">
                 <TableRow>
-                  <TableHead>{t.orderCol}</TableHead>
-                  <TableHead>{t.customerCol}</TableHead>
-                  <TableHead className="hidden sm:table-cell">Date</TableHead>
-                  <TableHead>{t.totalCol}</TableHead>
-                  <TableHead>{t.paymentCol}</TableHead>
-                  <TableHead>{t.statusCol}</TableHead>
+                  <TableHead className="pl-4 font-semibold text-[#38262E]">{t.orderCol}</TableHead>
+                  <TableHead className="font-semibold text-[#38262E]">{t.customerCol}</TableHead>
+                  <TableHead className="hidden md:table-cell font-semibold text-[#38262E]">Phone</TableHead>
+                  <TableHead className="hidden sm:table-cell font-semibold text-[#38262E]">Date</TableHead>
+                  <TableHead className="font-semibold text-[#38262E]">{t.totalCol}</TableHead>
+                  <TableHead className="font-semibold text-[#38262E]">{t.statusCol}</TableHead>
+                  <TableHead className="text-right pr-4 font-semibold text-[#38262E]">{t.actionCol}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentOrders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">
+                  <TableRow key={order.id} className="hover:bg-[#FAF7F8]/60 transition-colors">
+                    <TableCell className="font-semibold pl-4">
                       <Link
                         href={`/admin/orders/${order.id}`}
-                        className="text-[#D96B91] hover:underline"
+                        className="text-[#B73D67] hover:underline"
                       >
                         {order.reference}
                       </Link>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium text-[#33272C] text-sm">
+                        <p className="font-medium text-[#38262E] text-sm">
                           {order.customerName}
                         </p>
-                        <p className="text-xs text-[#806B73]">
+                        <p className="text-xs text-[#7A6870]">
                           {order.township}, {order.city}
                         </p>
+                        {order.nearbyLandmark && (
+                          <p className="text-[10px] text-amber-800 italic">
+                            Near {order.nearbyLandmark}
+                          </p>
+                        )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                    <TableCell className="hidden md:table-cell text-xs text-[#7A6870]">
+                      {order.customerPhone}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs text-[#7A6870]">
                       {formatDate(order.createdAt)}
                     </TableCell>
-                    <TableCell className="font-semibold whitespace-nowrap">
+                    <TableCell className="font-semibold whitespace-nowrap text-[#38262E]">
                       {formatMMK(order.total)}
                     </TableCell>
                     <TableCell>
-                      <PaymentStatusBadge status={order.paymentStatus} />
+                      <div className="flex flex-col gap-0.5">
+                        <UnifiedOrderStatusBadge
+                          orderStatus={order.orderStatus}
+                          paymentStatus={order.paymentStatus}
+                          paymentMethod={order.paymentMethod}
+                        />
+                        <span className="text-[10px] text-[#7A6870] pl-0.5">
+                          {order.paymentMethod}
+                        </span>
+                        {order.transactionReference && (
+                          <span className="text-[10px] font-mono text-[#B73D67] pl-0.5 truncate max-w-[130px]">
+                            {order.transactionReference}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      <OrderStatusBadge status={order.orderStatus} />
+                    <TableCell className="text-right pr-4">
+                      <Button variant="ghost" size="sm" asChild aria-label={`View order ${order.reference}`}>
+                        <Link href={`/admin/orders/${order.id}`}>
+                          <Eye className="h-4 w-4 text-[#B73D67]" />
+                          <span className="hidden sm:inline text-xs text-[#B73D67] font-medium">View</span>
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -396,53 +440,60 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Best-Selling Products */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <Card className="rounded-[28px] border-[#EEDFE5] overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
             <div>
-              <CardTitle className="flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-[#D96B91]" /> {t.topSellingProducts}
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5 text-[#38262E]">
+                <Sparkles className="h-4 w-4 text-[#B73D67]" /> {t.topSellingProducts}
               </CardTitle>
-              <CardDescription>{t.topSellingDesc}</CardDescription>
+              <CardDescription className="text-xs text-[#7A6870]">{t.topSellingDesc}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/admin/products" className="text-[#D96B91]">
+              <Link href="/admin/products" className="text-[#B73D67] font-semibold hover:underline text-xs">
                 {t.navProducts}
               </Link>
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {bestSellingProducts.map((product) => (
-              <Link
-                key={product.id}
-                href={`/admin/products/${product.id}`}
-                className="flex items-center gap-3 rounded-xl border border-[#F0E1E6]/80 p-2.5 hover:bg-[#FCEEF2]/40 transition-colors"
-              >
-                <Image
-                  src={product.images[0]}
-                  alt={product.name}
-                  width={44}
-                  height={44}
-                  className="h-11 w-11 rounded-lg object-cover border border-[#F0E1E6] shrink-0"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-[#33272C] truncate">
-                    {product.name}
-                  </p>
-                  <p className="text-[11px] text-[#806B73]">
-                    {getCategoryName(product.categoryId)} · {product.soldCount} {t.unitsSoldCol}
-                  </p>
-                </div>
-                <span className="text-xs font-semibold text-[#D96B91] whitespace-nowrap">
-                  {formatMMK(product.salePrice ?? product.regularPrice)}
-                </span>
-              </Link>
-            ))}
+          <CardContent className="p-4 space-y-3">
+            {bestSellingProducts.length === 0 ? (
+              <p className="py-4 text-center text-xs text-[#806B73]">
+                No sales in the selected period.
+              </p>
+            ) : (
+              bestSellingProducts.map(({ product, unitsSold }) => (
+                <Link
+                  key={product.id}
+                  href={`/admin/products/${product.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-[#F0E1E6]/80 p-2.5 hover:bg-[#FCEEF2]/40 transition-colors"
+                >
+                  <Image
+                    src={product.images[0]}
+                    alt={product.name}
+                    width={44}
+                    height={44}
+                    className="h-11 w-11 rounded-lg object-cover border border-[#F0E1E6] shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-[#33272C] truncate">
+                      {product.name}
+                    </p>
+                    <p className="text-[11px] text-[#806B73]">
+                      {getCategoryName(product.categoryId)} · {unitsSold}{" "}
+                      {t.unitsSoldCol}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-[#D96B91] whitespace-nowrap">
+                    {formatMMK(product.salePrice ?? product.regularPrice)}
+                  </span>
+                </Link>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Low Stock Products + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Low Stock Products */}
+      <div className="grid grid-cols-1 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
@@ -493,38 +544,6 @@ export default function AdminDashboardPage() {
                 </div>
               ))
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-1.5">
-              <Activity className="h-4 w-4 text-[#D96B91]" /> Recent Activity
-            </CardTitle>
-            <CardDescription>Latest admin & warehouse actions</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {activity.slice(0, 5).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start justify-between gap-3 border-b border-[#F0E1E6]/60 pb-2.5 last:border-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[#33272C]">
-                    {item.action}
-                  </p>
-                  <p className="text-xs text-[#806B73] mt-0.5">{item.detail}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[11px] font-medium text-[#33272C]">
-                    {item.actor}
-                  </p>
-                  <p className="text-[10px] text-[#806B73]">
-                    {formatDateTime(item.timestamp)}
-                  </p>
-                </div>
-              </div>
-            ))}
           </CardContent>
         </Card>
       </div>

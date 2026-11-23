@@ -8,7 +8,7 @@ export async function OPTIONS() {
 export async function GET() {
   try {
     const repo = getStoreRepository();
-    const data = await repo.getAllData();
+    const data = await repo.getBootstrapData();
     return jsonWithCors(data);
   } catch (error) {
     console.error("GET /api/admin/bootstrap error:", error);

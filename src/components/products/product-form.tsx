@@ -4,19 +4,10 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowLeft,
-  Trash2,
-  Upload,
-  Save,
-  X,
-  Plus,
-  Layers,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, Upload, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { Product, ProductStatus, ProductVariant } from "@/types/admin";
+import { Product, ProductStatus } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -28,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -36,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { generateId } from "@/lib/utils";
 
 interface ProductFormProps {
   initialProduct?: Product;
@@ -49,10 +38,7 @@ const DEFAULT_PLACEHOLDER_IMG =
     `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="20" fill="#FCEEF2"/><text x="80" y="88" text-anchor="middle" font-size="36">✨</text></svg>`
   );
 
-import {
-  normalizeProductSpecification,
-  createContactLensPresets,
-} from "@/modules/catalog/catalog-sync";
+import { normalizeProductSpecification } from "@/modules/catalog/catalog-sync";
 
 export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const router = useRouter();
@@ -67,11 +53,10 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   );
   const [brand, setBrand] = useState(initialProduct?.brand ?? "Pretty Corner");
   const [sku, setSku] = useState(initialProduct?.sku ?? "");
-  const [regularPrice, setRegularPrice] = useState(
-    initialProduct?.regularPrice ? String(initialProduct.regularPrice) : ""
-  );
-  const [salePrice, setSalePrice] = useState(
-    initialProduct?.salePrice ? String(initialProduct.salePrice) : ""
+  const [price, setPrice] = useState(
+    initialProduct
+      ? String(initialProduct.salePrice ?? initialProduct.regularPrice)
+      : ""
   );
   const [stock, setStock] = useState(
     initialProduct ? String(initialProduct.stock) : "20"
@@ -84,12 +69,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const [status, setStatus] = useState<ProductStatus>(
     initialProduct?.status ?? "Active"
   );
-  const [isContactLens, setIsContactLens] = useState(
-    initialProduct?.isContactLens ?? (initialProduct?.categoryId === "cat-lenses" || false)
-  );
-  const [variants, setVariants] = useState<ProductVariant[]>(
-    initialProduct?.variants ? [...initialProduct.variants] : []
-  );
   const [images, setImages] = useState<string[]>(
     initialProduct?.images ?? []
   );
@@ -100,12 +79,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const [badge, setBadge] = useState(initialProduct?.badge ?? "");
   const [tagline, setTagline] = useState(initialProduct?.tagline ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Quick Variant Input State
-  const [variantLabelInput, setVariantLabelInput] = useState("");
-  const [variantQtyInput, setVariantQtyInput] = useState("10");
-  const [variantSkuInput, setVariantSkuInput] = useState("");
-  const [variantPriceInput, setVariantPriceInput] = useState("");
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -123,62 +96,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
     e.target.value = "";
   };
 
-  const handleAddVariant = () => {
-    if (!variantLabelInput.trim()) {
-      toast.error("Please enter a variant label (e.g. -1.50 or Coral Rose)");
-      return;
-    }
-    const qty = Math.max(0, parseInt(variantQtyInput, 10) || 0);
-    const priceOver = variantPriceInput.trim() ? Number(variantPriceInput) : undefined;
-    const newVariant: ProductVariant = {
-      id: generateId("var"),
-      label: variantLabelInput.trim(),
-      lensPower: isContactLens ? variantLabelInput.trim() : undefined,
-      color: !isContactLens ? variantLabelInput.trim() : undefined,
-      quantity: qty,
-      skuSuffix: variantSkuInput.trim() || undefined,
-      priceOverride: priceOver,
-    };
-    const nextVariants = [...variants, newVariant];
-    setVariants(nextVariants);
-    setVariantLabelInput("");
-    setVariantSkuInput("");
-    setVariantPriceInput("");
-    setVariantQtyInput("10");
-
-    // Auto-update total stock to sum of variants
-    const totalQty = nextVariants.reduce((sum, v) => sum + v.quantity, 0);
-    setStock(String(totalQty));
-    toast.success(`Added variant "${newVariant.label}"`);
-  };
-
-  const handleRemoveVariant = (variantId: string) => {
-    const nextVariants = variants.filter((v) => v.id !== variantId);
-    setVariants(nextVariants);
-    if (nextVariants.length > 0) {
-      const totalQty = nextVariants.reduce((sum, v) => sum + v.quantity, 0);
-      setStock(String(totalQty));
-    }
-  };
-
-  const handleUpdateVariantQty = (variantId: string, newQtyStr: string) => {
-    const newQty = Math.max(0, parseInt(newQtyStr, 10) || 0);
-    const nextVariants = variants.map((v) =>
-      v.id === variantId ? { ...v, quantity: newQty } : v
-    );
-    setVariants(nextVariants);
-    const totalQty = nextVariants.reduce((sum, v) => sum + v.quantity, 0);
-    setStock(String(totalQty));
-  };
-
-  const handleLoadLensPresets = () => {
-    const presetVariants = createContactLensPresets(10);
-    setVariants(presetVariants);
-    const totalQty = presetVariants.reduce((sum, v) => sum + v.quantity, 0);
-    setStock(String(totalQty));
-    toast.success(`Loaded 13 standard contact lens prescription powers`);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -193,14 +110,11 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
       categoryId,
       brand,
       sku,
-      regularPrice,
-      salePrice: salePrice.trim() ? salePrice : undefined,
+      regularPrice: price,
       images: images.length > 0 ? images : [DEFAULT_PLACEHOLDER_IMG],
       stock,
       lowStockThreshold,
       status,
-      isContactLens,
-      variants,
       benefits: parsedBenefits,
       usage,
       badge,
@@ -218,10 +132,10 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
     if (mode === "create") {
       addProduct(payload);
-      toast.success(`Created "${payload.name}" with ${variants.length} variants`);
+      toast.success(`Created "${payload.name}"`);
     } else if (initialProduct) {
       updateProduct(initialProduct.id, payload);
-      toast.success(`Saved changes to "${payload.name}" (${variants.length} variants preserved)`);
+      toast.success(`Saved changes to "${payload.name}"`);
     }
     router.push("/admin/products");
   };
@@ -240,7 +154,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               {mode === "create" ? "Add New Product" : `Edit ${initialProduct?.name}`}
             </h2>
             <p className="text-xs text-[#806B73]">
-              Configure pricing, stock levels, images, and beauty variants
+              Configure pricing, stock levels, and images
             </p>
           </div>
         </div>
@@ -315,183 +229,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                   />
                 </div>
               </div>
-
-              {/* Contact Lens Classification Toggle */}
-              <div className="flex items-center justify-between p-3.5 rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8]/60 mt-3">
-                <div className="space-y-0.5">
-                  <Label htmlFor="contact-lens-switch" className="text-sm font-semibold text-[#33272C] flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-[#D96B91]" />
-                    Contact Lens Product
-                  </Label>
-                  <p className="text-xs text-[#806B73]">
-                    Enables prescription diopter power management and optical specifications
-                  </p>
-                </div>
-                <Switch
-                  id="contact-lens-switch"
-                  checked={isContactLens}
-                  onCheckedChange={(checked) => {
-                    setIsContactLens(checked);
-                    if (checked && categoryId !== "cat-lenses") {
-                      setCategoryId("cat-lenses");
-                    }
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Product Variants (Shades & Diopter Powers) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                    <Layers className="h-4 w-4 text-[#D96B91]" />
-                    Product Variants ({variants.length})
-                  </CardTitle>
-                  <CardDescription>
-                    Manage shade options, sizes, or prescription powers. Stock automatically sums up variants.
-                  </CardDescription>
-                </div>
-                {isContactLens && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleLoadLensPresets}
-                    className="text-xs border-[#F0E1E6] text-[#33272C] hover:bg-[#FCEEF2] hover:text-[#D96B91]"
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-[#D96B91] mr-1.5" />
-                    Load Power Presets
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Quick Add Variant Inputs */}
-              <div className="p-3.5 rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] space-y-3">
-                <p className="text-xs font-semibold text-[#33272C]">Add New Variant</p>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-[#806B73]">Label / Power *</Label>
-                    <Input
-                      placeholder={isContactLens ? "e.g. -2.50" : "e.g. 01 Velvet Berry"}
-                      value={variantLabelInput}
-                      onChange={(e) => setVariantLabelInput(e.target.value)}
-                      className="h-9 text-xs bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-[#806B73]">SKU Suffix</Label>
-                    <Input
-                      placeholder="e.g. 250 or VB01"
-                      value={variantSkuInput}
-                      onChange={(e) => setVariantSkuInput(e.target.value)}
-                      className="h-9 text-xs bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-[#806B73]">Quantity</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={variantQtyInput}
-                      onChange={(e) => setVariantQtyInput(e.target.value)}
-                      className="h-9 text-xs bg-white"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] text-[#806B73]">Price Override (MMK)</Label>
-                    <div className="flex gap-1.5">
-                      <Input
-                        type="number"
-                        min={0}
-                        placeholder="Optional"
-                        value={variantPriceInput}
-                        onChange={(e) => setVariantPriceInput(e.target.value)}
-                        className="h-9 text-xs bg-white"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleAddVariant}
-                        className="h-9 px-3 bg-[#D96B91] hover:bg-[#c2567c] text-white shrink-0"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Variant List Table */}
-              {variants.length === 0 ? (
-                <div className="py-6 text-center border border-dashed border-[#F0E1E6] rounded-2xl">
-                  <Layers className="h-6 w-6 text-[#806B73]/60 mx-auto mb-1.5" />
-                  <p className="text-xs text-[#806B73]">
-                    No variants added. This product uses a single standard inventory count.
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-[#F0E1E6] overflow-hidden">
-                  <div className="max-h-64 overflow-y-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-[#FAF7F8] border-b border-[#F0E1E6] text-[#806B73] sticky top-0">
-                        <tr>
-                          <th className="py-2 px-3 font-medium">Variant Label</th>
-                          <th className="py-2 px-3 font-medium">SKU Suffix</th>
-                          <th className="py-2 px-3 font-medium">Quantity</th>
-                          <th className="py-2 px-3 font-medium">Price Override</th>
-                          <th className="py-2 px-3 font-medium text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#F0E1E6]/60">
-                        {variants.map((v) => (
-                          <tr key={v.id} className="hover:bg-[#FDF6F8]/60 transition-colors">
-                            <td className="py-2 px-3 font-semibold text-[#33272C]">
-                              {v.label}
-                            </td>
-                            <td className="py-2 px-3 font-mono text-[#806B73]">
-                              {v.skuSuffix || "—"}
-                            </td>
-                            <td className="py-2 px-3">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={v.quantity}
-                                onChange={(e) => handleUpdateVariantQty(v.id, e.target.value)}
-                                className="h-7 w-20 text-xs py-0 px-2"
-                              />
-                            </td>
-                            <td className="py-2 px-3 text-[#33272C]">
-                              {v.priceOverride ? `${v.priceOverride.toLocaleString()} MMK` : "Base price"}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveVariant(v.id)}
-                                className="h-7 w-7 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                                aria-label={`Remove variant ${v.label}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="bg-[#FAF7F8] p-2.5 px-3 border-t border-[#F0E1E6] flex items-center justify-between text-xs">
-                    <span className="text-[#806B73]">Total Variant Units:</span>
-                    <span className="font-semibold text-[#33272C]">
-                      {variants.reduce((sum, v) => sum + v.quantity, 0)} units
-                    </span>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -619,7 +356,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Draft">Draft</SelectItem>
                   <SelectItem value="Archived">Archived</SelectItem>
                 </SelectContent>
               </Select>
@@ -632,31 +368,17 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="reg-price">Regular Price (MMK) *</Label>
+                <Label htmlFor="prod-price">Price (MMK) *</Label>
                 <Input
-                  id="reg-price"
+                  id="prod-price"
                   type="number"
                   min={0}
-                  value={regularPrice}
-                  onChange={(e) => setRegularPrice(e.target.value)}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
                   placeholder="28000"
                 />
                 {errors.regularPrice && (
                   <p className="text-xs text-rose-600">{errors.regularPrice}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="sale-price">Sale Price (MMK)</Label>
-                <Input
-                  id="sale-price"
-                  type="number"
-                  min={0}
-                  value={salePrice}
-                  onChange={(e) => setSalePrice(e.target.value)}
-                  placeholder="Optional discounted price"
-                />
-                {errors.salePrice && (
-                  <p className="text-xs text-rose-600">{errors.salePrice}</p>
                 )}
               </div>
             </CardContent>

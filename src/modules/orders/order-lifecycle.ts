@@ -5,7 +5,6 @@ import {
   OrderStatus,
   PaymentStatus,
   Product,
-  RefundDetails,
   StockAdjustment,
   OrderTimelineEvent,
 } from "@/types/admin";
@@ -30,7 +29,6 @@ export interface OrderMutationResult {
 export interface PaymentSettlementInput {
   status?: PaymentStatus;
   reference?: string;
-  refund?: Omit<RefundDetails, "refundedAt" | "processedBy">;
 }
 
 export interface OrderUpdateExecutionInput {
@@ -38,13 +36,12 @@ export interface OrderUpdateExecutionInput {
   paymentStatus?: PaymentStatus;
   transactionReference?: string;
   note?: string;
-  refund?: Omit<RefundDetails, "refundedAt" | "processedBy">;
 }
 
 /**
  * Transitions an order to a new status.
  * Enforces domain invariants:
- * - Cancelling an order automatically restores inventory for parent and variant quantities.
+ * - Cancelling an order automatically restores inventory for product quantities.
  * - Stock restoration generates immutable StockAdjustment audit entries.
  * - Appends a structured OrderTimelineEvent.
  */
@@ -76,26 +73,15 @@ export function transitionOrderStatus(
       if (itemsForProduct.length === 0) return p;
 
       let stockIncrement = 0;
-      let updatedVariants = p.variants ? [...p.variants] : [];
 
       for (const item of itemsForProduct) {
         stockIncrement += item.quantity;
-
-        if (item.variantLabel && updatedVariants.length > 0) {
-          updatedVariants = updatedVariants.map((v) => {
-            if (v.label === item.variantLabel) {
-              return { ...v, quantity: v.quantity + item.quantity };
-            }
-            return v;
-          });
-        }
 
         newAdjustments.push({
           id: generateId("stk"),
           productId: p.id,
           productName: p.name,
           sku: item.sku || p.sku,
-          variantLabel: item.variantLabel,
           type: "increase",
           quantity: item.quantity,
           previousStock: p.stock,
@@ -109,7 +95,6 @@ export function transitionOrderStatus(
       return {
         ...p,
         stock: p.stock + stockIncrement,
-        variants: updatedVariants,
         updatedAt: now,
       };
     });
@@ -145,12 +130,13 @@ export function transitionOrderStatus(
 }
 
 /**
- * Settles payment updates, gateway transaction references, and refunds.
+ * Settles payment updates and gateway transaction references.
  */
 export function settleOrderPayment(
   order: Order,
   settlement: PaymentSettlementInput,
-  actorName: string
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _actorName?: string
 ): Order {
   const now = new Date().toISOString();
   const updatedOrder: Order = {
@@ -166,45 +152,17 @@ export function settleOrderPayment(
     updatedOrder.transactionReference = settlement.reference.trim() || undefined;
   }
 
-  if (settlement.refund) {
-    const fullRefundDetails: RefundDetails = {
-      ...settlement.refund,
-      refundedAt: now,
-      processedBy: actorName,
-    };
-
-    const refundTimelineNote = `Processed ${
-      settlement.refund.isFullRefund ? "Full Refund" : "Partial Refund"
-    } of ${settlement.refund.amount.toLocaleString()} MMK (Voucher: ${
-      settlement.refund.transactionReference
-    }). Reason: ${settlement.refund.reason}`;
-
-    updatedOrder.paymentStatus = settlement.refund.isFullRefund
-      ? "Refunded"
-      : updatedOrder.paymentStatus;
-    updatedOrder.refundDetails = fullRefundDetails;
-    updatedOrder.timeline = [
-      {
-        status: order.orderStatus,
-        timestamp: now,
-        note: refundTimelineNote,
-        actor: actorName,
-      },
-      ...(order.timeline || []),
-    ];
-  }
-
   return updatedOrder;
 }
 
 /**
  * Deep Domain Orchestrator:
  * Executes order updates with complete invariant enforcement:
- * 1. Status transitions with automatic stock restoration (parent & variant levels).
+ * 1. Status transitions with automatic stock restoration.
  * 2. Sold-count adjustment for delivered orders.
  * 3. Low stock and out-of-stock notification triggers.
  * 4. Audit activity logging and timeline event logging.
- * 5. Payment and refund settlement.
+ * 5. Payment status and transaction reference settlement.
  */
 export function executeOrderUpdate(
   order: Order,
@@ -241,9 +199,9 @@ export function executeOrderUpdate(
     newAdjustments.push(...transition.newAdjustments);
     timelineNote = transition.timelineNote;
 
-    // Invariant: Transitioning to or from Delivered updates soldCount
-    if ((prevStatus === "Delivered") !== (input.orderStatus === "Delivered")) {
-      const delta = input.orderStatus === "Delivered" ? 1 : -1;
+    // Invariant: Transitioning to Shipped increments soldCount
+    if ((prevStatus === "Shipped") !== (input.orderStatus === "Shipped")) {
+      const delta = input.orderStatus === "Shipped" ? 1 : -1;
       workingProducts = workingProducts.map((p) => {
         const qty = workingOrder.items
           .filter((i) => i.productId === p.id)
@@ -316,22 +274,21 @@ export function executeOrderUpdate(
       timestamp: now,
     };
 
-    // Invariant: Cash on Delivery automatically settles to Paid when order is Delivered
+    // Invariant: Cash on Delivery automatically settles to Paid when order is Shipped
     if (
-      input.orderStatus === "Delivered" &&
+      input.orderStatus === "Shipped" &&
       workingOrder.paymentMethod === "Cash on Delivery" &&
       workingOrder.paymentStatus === "Pending" &&
       !input.paymentStatus
     ) {
       workingOrder = settleOrderPayment(
         workingOrder,
-        { status: "Paid" },
-        actor
+        { status: "Paid" }
       );
-      const codSettledNote = "Payment auto-settled: Cash on Delivery collected upon delivery";
+      const codSettledNote = "Payment auto-settled: Cash on Delivery collected upon transit / dispatch";
       workingOrder.timeline = [
         {
-          status: "Delivered",
+          status: "Shipped",
           timestamp: now,
           note: codSettledNote,
           actor,
@@ -381,24 +338,6 @@ export function executeOrderUpdate(
       { reference: input.transactionReference },
       actor
     );
-  }
-
-  // 4. Refund Processing
-  if (input.refund) {
-    workingOrder = settleOrderPayment(
-      workingOrder,
-      { refund: input.refund },
-      actor
-    );
-
-    newActivity = {
-      id: generateId("act"),
-      action: "Order Refunded",
-      detail: `Refunded ${input.refund.amount.toLocaleString()} MMK for ${workingOrder.reference}`,
-      category: "order",
-      actor,
-      timestamp: now,
-    };
   }
 
   return {
