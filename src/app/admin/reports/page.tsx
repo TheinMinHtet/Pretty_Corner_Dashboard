@@ -4,9 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,12 +19,11 @@ import {
   Users,
   Repeat,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
-import { CatalogIndexItem, Order, OrderStatus, Product } from "@/types/admin";
-import {
-  OrderStatusDistributionCard,
-} from "@/components/charts/dashboard-charts";
+import { CatalogIndexItem, Order, Product } from "@/types/admin";
+import { ChartCardSkeleton } from "@/components/charts/dashboard-charts";
 import {
   Card,
   CardContent,
@@ -35,6 +31,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
+const CategorySalesCard = dynamic(
+  () =>
+    import("@/components/charts/category-sales-card").then(
+      (m) => m.CategorySalesCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton className="h-full" height="h-[320px]" />,
+  }
+);
+
+const OrderStatusDistributionCard = dynamic(
+  () =>
+    import("@/components/charts/dashboard-charts").then(
+      (m) => m.OrderStatusDistributionCard
+    ),
+  {
+    ssr: false,
+    loading: () => <ChartCardSkeleton className="h-full" height="h-[320px]" />,
+  }
+);
 import {
   Select,
   SelectContent,
@@ -54,6 +72,7 @@ import { formatCompactMMK, formatMMK } from "@/lib/utils";
 import {
   buildOrderSeries,
   DateRange,
+  DEFAULT_CATEGORY_PALETTE,
   filterOrdersByRange,
   sumRevenue,
   computeCategorySales,
@@ -61,11 +80,10 @@ import {
   computePaymentStatusStats,
   deriveTopSellingProducts,
 } from "@/modules/analytics/metrics";
-
-const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
+import { SalesReportsPageSkeleton } from "@/components/skeletons/reports-skeletons";
 
 export default function SalesReportsPage() {
-  const { orders, products, categories, catalogIndex } = useAdminStore();
+  const { orders, products, categories, catalogIndex, hydrated } = useAdminStore();
   const { t } = useLanguage();
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [localCatalogIndex, setLocalCatalogIndex] = useState<CatalogIndexItem[]>([]);
@@ -101,6 +119,16 @@ export default function SalesReportsPage() {
   const paymentStatusStats = useMemo(
     () => computePaymentStatusStats(rangeOrders),
     [rangeOrders]
+  );
+
+  const totalPaymentOrders = useMemo(
+    () => paymentMethodStats.reduce((sum, pm) => sum + pm.count, 0),
+    [paymentMethodStats]
+  );
+
+  const totalPaymentRevenue = useMemo(
+    () => paymentMethodStats.reduce((sum, pm) => sum + pm.revenue, 0),
+    [paymentMethodStats]
   );
 
   // Customer Segmentation Analytics (PC-SD-007)
@@ -174,7 +202,7 @@ export default function SalesReportsPage() {
     return computeCategorySales(
       categories,
       activeCatalog.length > 0 ? activeCatalog : products,
-      CATEGORY_COLORS,
+      DEFAULT_CATEGORY_PALETTE,
       rangeOrders
     );
   }, [categories, activeCatalog, products, rangeOrders]);
@@ -193,6 +221,10 @@ export default function SalesReportsPage() {
       ),
     [rangeOrders, activeCatalog, products]
   );
+
+  if (!hydrated) {
+    return <SalesReportsPageSkeleton />;
+  }
 
   return (
     <div className="space-y-5">
@@ -320,76 +352,40 @@ export default function SalesReportsPage() {
       </Card>
 
       {/* Sales by Category + Orders by Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="rounded-[32px] border-[#F0E1E6]">
-          <CardHeader className="pb-2">
-            <CardTitle>{t.salesByCategoryTitle}</CardTitle>
-            <CardDescription>{t.salesByCategoryDesc}</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[260px] pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesByCategory} layout="vertical" margin={{ left: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F0E1E6" />
-                <XAxis
-                  type="number"
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) =>
-                    formatCompactMMK(Number(v)).replace(" MMK", "")
-                  }
-                  tick={{ fill: "#806B73", fontSize: 11 }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: "#33272C", fontSize: 12 }}
-                  width={115}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: "12px",
-                    border: "1px solid #F0E1E6",
-                    fontSize: "12px",
-                  }}
-                  formatter={(value) => [formatMMK(Number(value ?? 0)), "Revenue"]}
-                />
-                <Bar dataKey="revenue" radius={[0, 6, 6, 0]} barSize={20}>
-                  {salesByCategory.map((entry, index) => (
-                    <Cell key={`cat-bar-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <CategorySalesCard
+          salesData={salesByCategory}
+          totalRevenue={summary.totalRev}
+          dateRange={dateRange}
+          className="h-full"
+        />
 
         <OrderStatusDistributionCard
           orders={rangeOrders}
           title={t.ordersByStatusTitle}
           description={t.ordersByStatusDesc}
+          className="h-full"
         />
       </div>
 
       {/* Payment & Customer Segmentation Analytics (PC-SD-007, PC-SD-008) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         {/* Payment Methods & Transaction Breakdown */}
-        <Card className="rounded-[32px] border-[#F0E1E6]">
-          <CardHeader className="pb-2">
+        <Card className="rounded-[32px] border-[#F0E1E6] flex flex-col h-full bg-white shadow-2xs overflow-hidden">
+          <CardHeader className="pb-3 border-b border-[#F5EDF0]">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
+                <CardTitle className="text-base font-bold flex items-center gap-2 text-[#38262E]">
                   <CreditCard className="h-4 w-4 text-[#D96B91]" />
                   {t.paymentChannelsTitle}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs text-[#7A6870]">
                   {t.paymentChannelsDesc}
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4 pt-2">
+          <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-4">
             {/* Status overview badges */}
             <div className="grid grid-cols-4 gap-2">
               {paymentStatusStats.map((st) => (
@@ -409,47 +405,78 @@ export default function SalesReportsPage() {
             </div>
 
             {/* Methods breakdown list */}
-            <div className="space-y-2.5 pt-1">
-              {paymentMethodStats.map((pm) => (
-                <div
-                  key={pm.name}
-                  className="flex items-center justify-between p-2.5 rounded-2xl bg-white border border-[#F0E1E6]/80 text-xs"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className="h-3 w-3 rounded-full shrink-0"
-                      style={{ backgroundColor: pm.color }}
-                    />
-                    <div>
-                      <p className="font-semibold text-[#33272C]">{pm.name}</p>
-                      <p className="text-[10px] text-[#806B73]">
-                        {pm.count} {pm.count === 1 ? "order" : "orders"} processed
-                      </p>
+            <div className="space-y-3 pt-1">
+              {paymentMethodStats.map((pm) => {
+                const countShare =
+                  totalPaymentOrders > 0
+                    ? Math.round((pm.count / totalPaymentOrders) * 100)
+                    : 0;
+                const revenueShare =
+                  totalPaymentRevenue > 0
+                    ? Math.round((pm.revenue / totalPaymentRevenue) * 100)
+                    : 0;
+                return (
+                  <div
+                    key={pm.name}
+                    className="p-3.5 rounded-2xl bg-[#FAF7F8]/60 border border-[#F0E1E6]/80 text-xs transition-all hover:bg-white hover:shadow-xs space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className="h-3 w-3 rounded-full shrink-0 shadow-2xs"
+                          style={{ backgroundColor: pm.color }}
+                        />
+                        <div>
+                          <p className="font-bold text-[#38262E] text-sm">{pm.name}</p>
+                          <p className="text-[11px] text-[#7A6870] mt-0.5">
+                            {pm.count} {pm.count === 1 ? "order" : "orders"} processed ({countShare}% volume)
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-extrabold text-sm text-[#38262E]">
+                          {formatMMK(pm.revenue)}
+                        </p>
+                        <p className="text-[10px] text-[#7A6870] mt-0.5 font-medium">
+                          {revenueShare}% revenue share
+                        </p>
+                      </div>
+                    </div>
+                    {/* Share progress track */}
+                    <div className="h-1.5 w-full rounded-full bg-[#EEDFE5]/50 overflow-hidden flex">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${revenueShare}%`,
+                          backgroundColor: pm.color,
+                        }}
+                      />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-[#33272C]">
-                      {formatMMK(pm.revenue)}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* Bottom summary footer for balanced visual weight */}
+            <div className="flex items-center justify-between text-[11px] text-[#7A6870] pt-2 border-t border-[#F0E1E6]/60">
+              <span>Total Processed: <strong className="text-[#38262E] font-bold">{totalPaymentOrders} orders</strong></span>
+              <span>Total Settlements: <strong className="text-[#38262E] font-bold">{formatMMK(totalPaymentRevenue)}</strong></span>
             </div>
           </CardContent>
         </Card>
 
         {/* Customer Segmentation & Retention */}
-        <Card className="rounded-[32px] border-[#F0E1E6]">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
+        <Card className="rounded-[32px] border-[#F0E1E6] flex flex-col h-full bg-white shadow-2xs overflow-hidden">
+          <CardHeader className="pb-3 border-b border-[#F5EDF0]">
+            <CardTitle className="text-base font-bold flex items-center gap-2 text-[#38262E]">
               <Users className="h-4 w-4 text-[#D96B91]" />
               {t.customerRetentionTitle}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs text-[#7A6870]">
               {t.customerRetentionDesc}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 pt-2">
+          <CardContent className="p-6 flex-1 flex flex-col justify-between space-y-4">
             {/* Hero Retention Metric */}
             <div className="rounded-2xl border border-[#F0E1E6] bg-[#FCEEF2]/40 p-4 flex items-center justify-between">
               <div>

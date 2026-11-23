@@ -352,7 +352,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
         address: "No. 7B, Thitsar Rd, Ward 9",
         township: "Yankin",
         city: "Yangon",
-        nearbyLandmark: "Behind Yankin Centre, near KBZ Bank",
+        nearbyLandmark: "Behind Yankin Centre, near Bank",
         isDefault: true,
       },
     ],
@@ -435,9 +435,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 2500,
     discountAmount: 0,
     total: 66000,
-    paymentMethod: "KBZPay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    transactionReference: "KBZ-PAY-98234812",
+    transactionReference: "MB-PAY-98234812",
     orderStatus: "Pending",
     notes: "Please call 15 mins before arriving.",
     timeline: [
@@ -488,9 +488,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 0,
     discountAmount: 10050,
     total: 90450,
-    paymentMethod: "WavePay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    transactionReference: "WAVE-TRX-5510294",
+    transactionReference: "MB-TRX-5510294",
     orderStatus: "Confirmed",
     timeline: [
       {
@@ -546,9 +546,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 4500,
     discountAmount: 0,
     total: 117500,
-    paymentMethod: "CB Pay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    transactionReference: "CBPAY-TRX-882190",
+    transactionReference: "MB-TRX-882190",
     orderStatus: "Processing",
     timeline: [
       {
@@ -560,7 +560,7 @@ export const INITIAL_ORDERS: Order[] = [
       {
         status: "Confirmed",
         timestamp: "2026-11-17T15:00:00Z",
-        note: "Payment confirmed via CB Pay.",
+        note: "Payment confirmed via Mobile Banking.",
         actor: "Aye Chan (Admin)",
       },
       {
@@ -582,7 +582,7 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryAddress: "No. 7B, Thitsar Rd, Ward 9",
     township: "Yankin",
     city: "Yangon",
-    nearbyLandmark: "Behind Yankin Centre, near KBZ Bank",
+    nearbyLandmark: "Behind Yankin Centre, near Bank",
     deliveryMethod: "courier",
     coordinates: { lat: 16.8351, lng: 96.1652 },
     items: [
@@ -679,9 +679,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 2500,
     discountAmount: 0,
     total: 70000,
-    paymentMethod: "KBZPay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    transactionReference: "KBZ-PAY-77610234",
+    transactionReference: "MB-PAY-77610234",
     orderStatus: "Shipped",
     timeline: [
       {
@@ -739,9 +739,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 2500,
     discountAmount: 0,
     total: 47500,
-    paymentMethod: "AYA Pay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    transactionReference: "AYA-PAY-3310928",
+    transactionReference: "MB-PAY-3310928",
     orderStatus: "Shipped",
     timeline: [
       {
@@ -793,9 +793,9 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 2500,
     discountAmount: 0,
     total: 64500,
-    paymentMethod: "WavePay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Cancelled",
-    transactionReference: "WAVE-TRX-4401928",
+    transactionReference: "MB-TRX-4401928",
     orderStatus: "Cancelled",
     notes: "Customer requested cancellation due to duplicate order.",
     timeline: [
@@ -839,7 +839,7 @@ export const INITIAL_ORDERS: Order[] = [
     deliveryFee: 0,
     discountAmount: 0,
     total: 76000,
-    paymentMethod: "KBZPay",
+    paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
     orderStatus: "Shipped",
     timeline: [
@@ -958,7 +958,7 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "notif-1",
     title: "New order PC-2026-1048",
-    message: "Su Myat Noe placed a KBZPay order for 66,000 MMK.",
+    message: "Su Myat Noe placed a Mobile Banking order for 66,000 MMK.",
     type: "order",
     read: false,
     createdAt: "2026-11-18T10:25:00Z",
@@ -1055,10 +1055,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
       "Please present your Order Reference ID (e.g. PC-2026-XXXX) at the front desk for instant collection.",
   },
   paymentMethods: {
-    kbzPay: true,
-    wavePay: true,
-    cbPay: true,
-    ayaPay: true,
+    mobileBanking: true,
     cod: true,
   },
   notifications: {

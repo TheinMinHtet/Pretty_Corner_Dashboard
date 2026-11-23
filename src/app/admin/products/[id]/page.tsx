@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Product } from "@/types/admin";
 import { ProductForm } from "@/components/products/product-form";
+import { ProductFormSkeleton } from "@/components/skeletons/product-form-skeleton";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 
 export default function EditProductPage() {
   const params = useParams<{ id: string }>();
@@ -37,12 +37,7 @@ export default function EditProductPage() {
   }, [params.id]);
 
   if (loading) {
-    return (
-      <Card className="p-12 text-center flex flex-col items-center justify-center gap-3">
-        <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
-        <p className="text-xs text-[#806B73]">Loading product details...</p>
-      </Card>
-    );
+    return <ProductFormSkeleton />;
   }
 
   if (!product) {

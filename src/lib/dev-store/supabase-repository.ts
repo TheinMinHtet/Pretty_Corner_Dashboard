@@ -1,6 +1,7 @@
 import {
   Category,
   Customer,
+  CustomerAddress,
   InventoryStats,
   Order,
   OrderStatus,
@@ -15,11 +16,14 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { generateId } from "@/lib/utils";
 import {
   JsonFileStoreRepository,
+  ListOrdersPaginatedParams,
+  ListOrdersPaginatedResult,
   OrderUpdateInput,
   StorefrontOrderCreateInput,
   StoreRepository,
 } from "./repository";
 import { executeOrderUpdate, OrderMutationResult } from "@/modules/orders/order-lifecycle";
+import { evaluatePromotionStockout } from "@/modules/catalog/catalog-sync";
 import { DevStoreData } from "./seed";
 import {
   slugify,
@@ -257,15 +261,13 @@ function mapOrderStatusToSb(status: OrderStatus): string {
 
 function mapPaymentMethodFromSb(method: string): Order["paymentMethod"] {
   if (
-    method === "KBZPay" ||
-    method === "WavePay" ||
-    method === "CB Pay" ||
-    method === "AYA Pay" ||
-    method === "Cash on Delivery"
+    method === "Cash on Delivery" ||
+    method?.toLowerCase() === "cash on delivery" ||
+    method?.toLowerCase() === "cod"
   ) {
-    return method;
+    return "Cash on Delivery";
   }
-  return "KBZPay";
+  return "Mobile Banking";
 }
 
 function extractTownshipFromAddress(addr: string): string {
@@ -431,6 +433,7 @@ function mapOrderRow(row: SbOrderRow, allProducts?: Product[]): Order {
  */
 export class SupabaseStoreRepository implements StoreRepository {
   private localFallback = new JsonFileStoreRepository();
+  private inMemoryReadNotificationIds = new Set<string>();
 
   async getAllData(): Promise<DevStoreData> {
     const [local, categories, products, orders, promotions, stockHistory] = await Promise.all([
@@ -445,10 +448,16 @@ export class SupabaseStoreRepository implements StoreRepository {
     const derivedCustomers = deriveCustomersFromOrders(orders);
     const customers =
       derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
+    const combinedReadIds = Array.from(
+      new Set([
+        ...(local.readNotificationIds ?? []),
+        ...this.inMemoryReadNotificationIds,
+      ])
+    );
     const notifications = deriveNotificationsFromOrdersAndProducts(
       orders,
       products,
-      local.readNotificationIds ?? []
+      combinedReadIds
     );
 
     return {
@@ -496,13 +505,28 @@ export class SupabaseStoreRepository implements StoreRepository {
     }
   }
 
+  async listRecentOrders(limit = 200): Promise<Order[]> {
+    const sb = getSupabaseClient();
+    const { data, error } = await sb
+      .from("orders")
+      .select("*, order_items(*)")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn("Supabase listRecentOrders failed, falling back to full list:", error.message);
+      return this.listOrders();
+    }
+    return ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row));
+  }
+
   async getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }> {
     const local = await this.localFallback.getAllData();
     try {
       const fetchWithTimeout = async () => {
         const [categories, orders, promotions, stockHistory, inventoryStats, products] = await Promise.all([
           this.listCategories(),
-          this.listOrders(),
+          this.listRecentOrders(200),
           this.listPromotions(),
           this.listStockAdjustments(),
           this.getInventoryStats(),
@@ -512,10 +536,16 @@ export class SupabaseStoreRepository implements StoreRepository {
         const derivedCustomers = deriveCustomersFromOrders(orders);
         const customers =
           derivedCustomers.length > 0 ? derivedCustomers : (local.customers ?? []);
+        const combinedReadIds = Array.from(
+          new Set([
+            ...(local.readNotificationIds ?? []),
+            ...this.inMemoryReadNotificationIds,
+          ])
+        );
         const notifications = deriveNotificationsFromOrdersAndProducts(
           orders,
           [],
-          local.readNotificationIds ?? []
+          combinedReadIds
         );
         const catalogIndex = products.map((p) => ({
           id: p.id,
@@ -573,8 +603,9 @@ export class SupabaseStoreRepository implements StoreRepository {
     category?: string;
     status?: string;
     stock?: "all" | "in" | "low" | "out" | "alert";
+    merchandising?: "all" | "new" | "bestseller" | "promo" | "lowstock";
     q?: string;
-    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortKey?: "name" | "price" | "stock" | "createdAt" | "soldCount";
     sortDir?: "asc" | "desc";
   }): Promise<PaginatedResult<Product> & { stats: InventoryStats }> {
     try {
@@ -616,6 +647,15 @@ export class SupabaseStoreRepository implements StoreRepository {
         query = query.lte("stock_quantity", 10);
       }
 
+      if (params.merchandising === "new") {
+        const since = new Date(Date.now() - 30 * 86400000).toISOString();
+        query = query.gte("created_at", since);
+      } else if (params.merchandising === "bestseller") {
+        query = query.gt("sold_count", 0);
+      } else if (params.merchandising === "lowstock") {
+        query = query.lte("stock_quantity", 10);
+      }
+
       if (params.q?.trim()) {
         const q = params.q.trim();
         query = query.or(`name.ilike.%${q}%,slug.ilike.%${q}%,description.ilike.%${q}%`);
@@ -631,6 +671,9 @@ export class SupabaseStoreRepository implements StoreRepository {
           break;
         case "createdAt":
           query = query.order("created_at", sortDir);
+          break;
+        case "soldCount":
+          query = query.order("sold_count", sortDir);
           break;
         case "name":
         default:
@@ -729,32 +772,60 @@ export class SupabaseStoreRepository implements StoreRepository {
     limit?: number;
     q?: string;
   }): Promise<PaginatedResult<Customer>> {
-    const allCustomers = await this.listCustomers();
-    const page = Math.max(1, params.page || 1);
-    const limit = Math.min(10, Math.max(1, params.limit || 10));
+    try {
+      const sb = getSupabaseClient();
+      const page = Math.max(1, params.page || 1);
+      const limit = Math.min(10, Math.max(1, params.limit || 10));
+      const offset = (page - 1) * limit;
 
-    let filtered = allCustomers;
-    if (params.q?.trim()) {
-      const q = params.q.trim().toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.phone.toLowerCase().includes(q) ||
-          c.addresses?.some((a) => a.township?.toLowerCase().includes(q))
-      );
+      let query = sb
+        .from("customers")
+        .select("*", { count: "exact" })
+        .order("total_spent", { ascending: false });
+
+      if (params.q?.trim()) {
+        const q = params.q.trim();
+        query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%,phone_e164.ilike.%${q}%`);
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, count, error } = await query;
+      if (error || !data || data.length === 0) {
+        return this.localFallback.listCustomersPaginated(params);
+      }
+
+      const total = count ?? data.length;
+      const items: Customer[] = (data as Array<{
+        id: string;
+        name: string;
+        phone: string;
+        email?: string | null;
+        avatar_color?: string | null;
+        addresses?: unknown;
+        joined_at: string;
+        notes?: string | null;
+      }>).map((row) => ({
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email ?? undefined,
+        avatarColor: row.avatar_color ?? undefined,
+        addresses: Array.isArray(row.addresses) ? row.addresses : [],
+        joinedAt: row.joined_at,
+        notes: row.notes ?? undefined,
+      }));
+
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      };
+    } catch {
+      return this.localFallback.listCustomersPaginated(params);
     }
-
-    const total = filtered.length;
-    const offset = (page - 1) * limit;
-    const items = filtered.slice(offset, offset + limit);
-
-    return {
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-    };
   }
 
   async listStockAdjustmentsPaginated(params: {
@@ -834,11 +905,44 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async listCustomers(): Promise<Customer[]> {
-    const orders = await this.listOrders();
-    const derived = deriveCustomersFromOrders(orders);
-    if (derived.length > 0) return derived;
-    const local = await this.localFallback.getAllData();
-    return local.customers ?? [];
+    try {
+      const sb = getSupabaseClient();
+      const { data, error } = await sb
+        .from("customers")
+        .select("*")
+        .order("total_spent", { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        const orders = await this.listRecentOrders(200);
+        const derived = deriveCustomersFromOrders(orders);
+        if (derived.length > 0) return derived;
+        const local = await this.localFallback.getAllData();
+        return local.customers ?? [];
+      }
+
+      return (data as Array<{
+        id: string;
+        name: string;
+        phone: string;
+        email?: string | null;
+        avatar_color?: string | null;
+        addresses?: unknown;
+        joined_at: string;
+        notes?: string | null;
+      }>).map((row) => ({
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email ?? undefined,
+        avatarColor: row.avatar_color ?? undefined,
+        addresses: Array.isArray(row.addresses) ? (row.addresses as CustomerAddress[]) : [],
+        joinedAt: row.joined_at,
+        notes: row.notes ?? undefined,
+      }));
+    } catch {
+      const local = await this.localFallback.getAllData();
+      return local.customers ?? [];
+    }
   }
 
   async resetToSeed(): Promise<DevStoreData> {
@@ -1082,6 +1186,116 @@ export class SupabaseStoreRepository implements StoreRepository {
     return ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row));
   }
 
+  async listOrdersPaginated(
+    params: ListOrdersPaginatedParams
+  ): Promise<ListOrdersPaginatedResult> {
+    try {
+      const sb = getSupabaseClient();
+      const page = Math.max(1, Number(params.page) || 1);
+      const limit = Math.min(50, Math.max(1, Number(params.limit) || 10));
+      const offset = (page - 1) * limit;
+
+      let query = sb
+        .from("orders")
+        .select("*, order_items(*)", { count: "exact" });
+
+      if (params.highValueOnly) {
+        query = query.gte("total_amount", 100000);
+      }
+
+      if (params.dateFilter && params.dateFilter !== "all") {
+        if (params.dateFilter === "today") {
+          const start = new Date();
+          start.setHours(0, 0, 0, 0);
+          query = query.gte("created_at", start.toISOString());
+        } else if (params.dateFilter === "yesterday") {
+          const start = new Date();
+          start.setDate(start.getDate() - 1);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(start);
+          end.setHours(23, 59, 59, 999);
+          query = query.gte("created_at", start.toISOString()).lte("created_at", end.toISOString());
+        } else {
+          const days = params.dateFilter === "7d" ? 7 : 30;
+          const since = new Date(Date.now() - days * 86400000).toISOString();
+          query = query.gte("created_at", since);
+        }
+      }
+
+      if (params.unifiedStatus && params.unifiedStatus !== "All") {
+        const target = params.unifiedStatus.toLowerCase();
+        if (target === "paid") {
+          query = query.or("payment_status.eq.paid,fulfillment_status.eq.shipped,fulfillment_status.eq.delivered");
+        } else if (target === "expired" || target === "time expired") {
+          query = query.or("payment_status.eq.expired,fulfillment_status.eq.expired");
+        } else if (target === "cancelled") {
+          query = query.or("payment_status.eq.cancelled,fulfillment_status.eq.cancelled");
+        } else if (target === "failed") {
+          query = query.eq("payment_status", "failed");
+        } else if (target === "pending") {
+          query = query
+            .eq("payment_status", "pending")
+            .neq("fulfillment_status", "shipped")
+            .neq("fulfillment_status", "delivered")
+            .neq("fulfillment_status", "cancelled")
+            .neq("fulfillment_status", "expired");
+        }
+      }
+
+      if (params.township && params.township !== "All") {
+        query = query.ilike("delivery_address", `%${params.township}%`);
+      }
+
+      if (params.q?.trim()) {
+        const q = params.q.trim();
+        query = query.or(
+          `id.ilike.%${q}%,customer_name.ilike.%${q}%,phone.ilike.%${q}%,delivery_address.ilike.%${q}%,landmark_note.ilike.%${q}%`
+        );
+      }
+
+      const sortDir = params.sortDir === "asc" ? { ascending: true } : { ascending: false };
+      if (params.sortField === "total") {
+        query = query.order("total_amount", sortDir);
+      } else if (params.sortField === "reference") {
+        query = query.order("id", sortDir);
+      } else {
+        query = query.order("created_at", sortDir);
+      }
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, count, error } = await query;
+
+      if (error) {
+        console.error("Supabase listOrdersPaginated database query error:", error);
+        return this.localFallback.listOrdersPaginated(params);
+      }
+
+      const total = count ?? (data?.length ?? 0);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      const items = ((data ?? []) as SbOrderRow[]).map((row) => mapOrderRow(row));
+
+      const allTownships = [
+        "Ahlone", "Bahan", "Botataung", "Dagon", "Dagon Myothit", "Dawbon",
+        "East Dagon", "Hlaing", "Insein", "Kamayut", "Kyauktada", "Lanmadaw",
+        "Mayangone", "North Dagon", "North Okkalapa", "Pabedan", "Sanchaung",
+        "South Dagon", "South Okkalapa", "Tamwe", "Thaketa", "Thingangyun", "Yankin"
+      ];
+
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages,
+        allTownships,
+      };
+    } catch (err) {
+      console.error("Supabase listOrdersPaginated catch:", err);
+      return this.localFallback.listOrdersPaginated(params);
+    }
+  }
+
   async getOrder(idOrRef: string): Promise<Order | null> {
     const sb = getSupabaseClient();
     const { data, error } = await sb
@@ -1108,6 +1322,62 @@ export class SupabaseStoreRepository implements StoreRepository {
       const rand = Math.floor(100000 + Math.random() * 900000);
       orderId = `PC-${dateStr}-${rand}`;
 
+      // Execute via Atomic PostgreSQL Transaction RPC
+      const { error: rpcErr } = await sb.rpc(
+        "create_storefront_order_transaction",
+        {
+          p_payload: {
+            id: orderId,
+            customerName: input.customerName,
+            phone: input.phone,
+            deliveryAddress: input.deliveryAddress,
+            landmarkNote: input.landmarkNote || null,
+            total: input.total,
+            paymentMethod: input.paymentMethod,
+            paymentStatus: input.paymentStatus ?? defaultPaymentStatus,
+            fulfillmentStatus: "pending_review",
+            promoCode: input.promoCode || null,
+            discountAmount: input.discountAmount || 0,
+            items: input.items.map((it) => ({
+              productId: it.productId,
+              name: it.name,
+              price: it.price,
+              quantity: it.quantity,
+              image: sanitizeImageUrl(it.image),
+              discountAmount: it.discountAmount || 0,
+            })),
+          },
+        }
+      );
+
+      if (!rpcErr) {
+        orderCreated = true;
+        break;
+      }
+
+      // If Postgres unique constraint violation, retry with a new random ID
+      if (rpcErr.code === "23505" || rpcErr.message?.includes("unique constraint")) {
+        console.warn(`Order ID collision on ${orderId}, retrying attempt ${attempt + 1}...`);
+        continue;
+      }
+
+      // If insufficient stock or promotion exhausted, throw explicit domain error
+      if (
+        rpcErr.message?.includes("INSUFFICIENT_STOCK") ||
+        rpcErr.message?.includes("PROMOTION_")
+      ) {
+        throw new Error(rpcErr.message);
+      }
+
+      console.warn(
+        "create_storefront_order_transaction RPC failed, falling back to multi-step insert:",
+        rpcErr
+      );
+      break;
+    }
+
+    if (!orderCreated) {
+      // Fallback multi-step execution if stored procedure was bypassed
       const { error: orderErr } = await sb.from("orders").insert({
         id: orderId,
         customer_name: input.customerName,
@@ -1123,65 +1393,50 @@ export class SupabaseStoreRepository implements StoreRepository {
         payment_slip_url: null,
       });
 
-      if (!orderErr) {
-        orderCreated = true;
-        break;
+      if (orderErr) {
+        throw new Error(`Supabase createOrder failed: ${orderErr.message}`);
       }
 
-      // If Postgres unique constraint violation (code 23505), retry with a new random ID
-      if (orderErr.code === "23505" || orderErr.message?.includes("unique constraint")) {
-        console.warn(`Order ID collision on ${orderId}, retrying attempt ${attempt + 1}...`);
-        continue;
+      const allProducts = await this.listProducts();
+      const itemsToInsert = input.items.map((item) => {
+        const matched = allProducts.find(
+          (p) =>
+            p.id === item.productId ||
+            p.slug === item.productId ||
+            p.name === item.name
+        );
+        return {
+          order_id: orderId,
+          product_id: matched?.id ?? null,
+          product_name: item.name,
+          unit_price: item.price,
+          quantity: item.quantity,
+          item_total: item.price * item.quantity,
+          product_image: sanitizeImageUrl(item.image || matched?.images[0]),
+          discount_amount: item.discountAmount || 0,
+        };
+      });
+
+      if (itemsToInsert.length > 0) {
+        await sb.from("order_items").insert(itemsToInsert);
       }
 
-      throw new Error(`Supabase createOrder failed: ${orderErr.message}`);
-    }
-
-    if (!orderCreated) {
-      throw new Error("Failed to generate a unique order ID after 5 attempts.");
-    }
-
-    const allProducts = await this.listProducts();
-    const itemsToInsert = input.items.map((item) => {
-      const matched = allProducts.find(
-        (p) =>
-          p.id === item.productId ||
-          p.slug === item.productId ||
-          p.name === item.name
-      );
-      return {
-        order_id: orderId,
-        product_id: matched?.id ?? null,
-        product_name: item.name,
-        unit_price: item.price,
-        quantity: item.quantity,
-        item_total: item.price * item.quantity,
-        product_image: sanitizeImageUrl(item.image || matched?.images[0]),
-        discount_amount: item.discountAmount || 0,
-      };
-    });
-
-    if (itemsToInsert.length > 0) {
-      await sb.from("order_items").insert(itemsToInsert);
-    }
-
-    // Deduct stock in Supabase for each purchased product
-    for (const item of input.items) {
-      const matched = allProducts.find(
-        (p) =>
-          p.id === item.productId ||
-          p.slug === item.productId ||
-          p.name === item.name
-      );
-      if (matched) {
-        const newStock = Math.max(0, matched.stock - item.quantity);
-        await sb
-          .from("products")
-          .update({
-            stock_quantity: newStock,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", matched.id);
+      // Deduct stock via atomic deduct_product_stock RPC
+      for (const item of input.items) {
+        const matched = allProducts.find(
+          (p) =>
+            p.id === item.productId ||
+            p.slug === item.productId ||
+            p.name === item.name
+        );
+        if (matched && isUuid(matched.id)) {
+          await sb.rpc("deduct_product_stock", {
+            p_product_id: matched.id,
+            p_quantity: item.quantity,
+            p_order_id: orderId,
+            p_performer: input.customerName || "Customer",
+          });
+        }
       }
     }
 
@@ -1201,9 +1456,11 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (!existing) return null;
 
     const allProducts = await this.listProducts();
+    const allPromotions = await this.listPromotions().catch(() => []);
     const mutation = executeOrderUpdate(existing, input, allProducts, {
       actorName: "Staff",
       lowStockAlertEnabled: true,
+      promotions: allPromotions,
     });
 
     const patch: Record<string, unknown> = {
@@ -1240,6 +1497,27 @@ export class SupabaseStoreRepository implements StoreRepository {
       }
     }
 
+    // Persist affected promotion quota & stockout restorations
+    if (mutation.updatedPromotions && mutation.updatedPromotions.length > 0) {
+      for (const promo of mutation.updatedPromotions) {
+        const prev = allPromotions.find((p) => p.id === promo.id);
+        if (
+          prev &&
+          (prev.usageCount !== promo.usageCount ||
+            prev.isOutOfStock !== promo.isOutOfStock)
+        ) {
+          await sb
+            .from("promotions")
+            .update({
+              usage_count: promo.usageCount,
+              is_out_of_stock: promo.isOutOfStock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", promo.id);
+        }
+      }
+    }
+
     // Persist stock adjustment logs
     for (const adj of mutation.newAdjustments) {
       await sb.from("inventory_adjustments").insert({
@@ -1267,6 +1545,58 @@ export class SupabaseStoreRepository implements StoreRepository {
     const sb = getSupabaseClient();
     const existing = await this.getProduct(input.productId);
     if (!existing) return null;
+
+    // Use atomic PostgreSQL RPC with row-level locks
+    if (isUuid(existing.id)) {
+      const rpcName =
+        input.type === "decrease" ? "deduct_product_stock" : "restore_product_stock";
+      const { data: rpcData, error: rpcErr } = await sb.rpc(rpcName, {
+        p_product_id: existing.id,
+        p_quantity: input.quantity,
+        p_order_id: null,
+        p_performer: "Admin",
+      });
+
+      if (!rpcErr && rpcData?.success) {
+        const updated = await this.getProduct(existing.id);
+        if (updated) {
+          const adjustment: StockAdjustment = {
+            id: generateId("stk"),
+            productId: updated.id,
+            productName: updated.name,
+            sku: updated.sku || "PC-SKU",
+            type: input.type,
+            quantity: input.quantity,
+            previousStock: rpcData.previousStock,
+            newStock: rpcData.newStock,
+            reason: input.reason,
+            performedBy: "Admin",
+            createdAt: new Date().toISOString(),
+          };
+
+          // Evaluate and sync promotion stockout state in Supabase
+          try {
+            const allPromotions = await this.listPromotions().catch(() => []);
+            for (const promo of allPromotions) {
+              const isOut = evaluatePromotionStockout(promo, [updated]);
+              if (promo.isOutOfStock !== isOut) {
+                await sb
+                  .from("promotions")
+                  .update({
+                    is_out_of_stock: isOut,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", promo.id);
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to sync promotion stockout state:", e);
+          }
+
+          return { product: updated, adjustment };
+        }
+      }
+    }
 
     const newStock =
       input.type === "increase"
@@ -1328,6 +1658,25 @@ export class SupabaseStoreRepository implements StoreRepository {
       performedBy: "Admin",
       createdAt: new Date().toISOString(),
     };
+
+    // Evaluate and sync promotion stockout state in Supabase
+    try {
+      const allPromotions = await this.listPromotions().catch(() => []);
+      for (const promo of allPromotions) {
+        const isOut = evaluatePromotionStockout(promo, [updated]);
+        if (promo.isOutOfStock !== isOut) {
+          await sb
+            .from("promotions")
+            .update({
+              is_out_of_stock: isOut,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", promo.id);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to sync promotion stockout state:", e);
+    }
 
     return { product: updated, adjustment };
   }
@@ -1472,17 +1821,37 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async markNotificationRead(id: string): Promise<void> {
-    return this.localFallback.markNotificationRead(id);
+    this.inMemoryReadNotificationIds.add(id);
+    try {
+      await this.localFallback.markNotificationRead(id);
+    } catch (e) {
+      console.warn("Local fallback notification read sync suppressed:", e);
+    }
   }
 
   async markAllNotificationsRead(ids?: string[]): Promise<void> {
     if (ids && ids.length > 0) {
-      return this.localFallback.markAllNotificationsRead(ids);
+      for (const id of ids) {
+        this.inMemoryReadNotificationIds.add(id);
+      }
+      try {
+        await this.localFallback.markAllNotificationsRead(ids);
+      } catch (e) {
+        console.warn("Local fallback notifications read sync suppressed:", e);
+      }
+      return;
     }
     const orders = await this.listOrders().catch(() => []);
     const derivedIds = deriveNotificationsFromOrdersAndProducts(orders, []).map(
       (n) => n.id
     );
-    return this.localFallback.markAllNotificationsRead(derivedIds);
+    for (const id of derivedIds) {
+      this.inMemoryReadNotificationIds.add(id);
+    }
+    try {
+      await this.localFallback.markAllNotificationsRead(derivedIds);
+    } catch (e) {
+      console.warn("Local fallback notifications read sync suppressed:", e);
+    }
   }
 }

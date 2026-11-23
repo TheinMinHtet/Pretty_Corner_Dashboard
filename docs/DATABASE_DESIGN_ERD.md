@@ -257,7 +257,7 @@ erDiagram
         uuid store_pickup_location_id FK "Pickup branch if delivery_method is pickup"
         varchar order_status "Pending, Confirmed, Processing, Shipped, Delivered, Cancelled"
         varchar payment_status "Pending, Paid, Failed, Expired, Refunded, Cancelled"
-        varchar payment_method "MyanMyanPay, KBZPay, AYA_Pay, WavePay, CashOnDelivery"
+        varchar payment_method "Mobile Banking, Cash on Delivery"
         varchar delivery_method "courier or pickup"
         decimal subtotal "Total gross item price (MMK)"
         decimal delivery_fee "Calculated delivery fee (MMK)"

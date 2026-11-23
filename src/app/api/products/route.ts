@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
       const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
       const limit = limitParam ? Math.min(10, Math.max(1, parseInt(limitParam, 10) || 10)) : 10;
       const stock = (searchParams.get("stock") as "all" | "in" | "low" | "out" | "alert") || undefined;
-      const sortKey = (searchParams.get("sortKey") as "name" | "price" | "stock" | "createdAt" | null) || undefined;
+      const merchandising = (searchParams.get("merchandising") as "all" | "new" | "bestseller" | "promo" | "lowstock") || undefined;
+      const sortKey = (searchParams.get("sortKey") as "name" | "price" | "stock" | "createdAt" | "soldCount" | null) || undefined;
       const sortDir = (searchParams.get("sortDir") as "asc" | "desc" | null) || undefined;
 
       const [paginated, categories] = await Promise.all([
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
           category,
           status,
           stock,
+          merchandising,
           q,
           sortKey,
           sortDir,

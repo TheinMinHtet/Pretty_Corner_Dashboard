@@ -161,7 +161,7 @@ The **Pretty Corner Design System** powers both the customer-facing mobile shopp
 The visual direction balances **editorial warmth** and **administrative clarity**:
 - **Editorial Elegance:** Evoked through serif display typography (*Cormorant Garamond*), soft rose and petal tints (`#FCEEF2`, `#F1D3DF`), and delicate hairlines (`#EEDFE5`).
 - **Operational Precision:** Grounded in a highly legible sans-serif (*DM Sans*), high-contrast plum text (`#38262E`), distinct semantic status badges (sage green, warm amber, berry rose), and structured 12px rounded cards.
-- **Myanmar Localization:** Form elements, order summaries, and delivery checkout flows are built specifically around Myanmar retail patterns, including MMK currency formatting, township/city address selection, GPS pin capture, nearby landmarks, and local mobile wallet options (KBZPay, WavePay, CB Pay, AYA Pay, COD).
+- **Myanmar Localization:** Form elements, order summaries, and delivery checkout flows are built specifically around Myanmar retail patterns, including MMK currency formatting, township/city address selection, GPS pin capture, nearby landmarks, and accepted payment methods (Mobile Banking, Cash on Delivery).
 
 ---
 

@@ -28,7 +28,7 @@ import {
 import { INITIAL_SETTINGS } from "@/data/mock-data";
 import { generateId } from "@/lib/utils";
 import { executeOrderUpdate } from "@/modules/orders/order-lifecycle";
-import { applyStockAdjustment } from "@/modules/catalog/catalog-sync";
+import { executeStockAdjustment } from "@/modules/catalog/catalog-sync";
 import { deriveCustomersFromOrders } from "@/lib/dev-store/mappers";
 import { toast } from "sonner";
 
@@ -320,7 +320,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let active = true;
     void refreshFromApi(true);
 
     const handleVisibilityChange = () => {
@@ -338,7 +337,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     }, 30000);
 
     return () => {
-      active = false;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(pollInterval);
     };
@@ -355,7 +353,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         if (!res.ok) {
           console.error(`API ${method} ${url} failed:`, await res.text());
         }
-        await refreshFromApi();
+        await refreshFromApi(true);
       } catch (error) {
         console.error(`API ${method} ${url} error:`, error);
       }
@@ -526,6 +524,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           {
             actorName: prev.settings.adminProfile.name,
             lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
+            promotions: prev.promotions,
           }
         );
 
@@ -540,6 +539,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             o.id === orderId ? mutation.updatedOrder : o
           ),
           products: mutation.updatedProducts,
+          promotions: mutation.updatedPromotions ?? prev.promotions,
           stockHistory: [...mutation.newAdjustments, ...prev.stockHistory],
           notifications: nextNotifications,
           activity: mutation.newActivity
@@ -637,6 +637,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           {
             actorName: prev.settings.adminProfile.name,
             lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
+            promotions: prev.promotions,
           }
         );
 
@@ -651,6 +652,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             o.id === orderId ? mutation.updatedOrder : o
           ),
           products: mutation.updatedProducts,
+          promotions: mutation.updatedPromotions ?? prev.promotions,
           stockHistory: [...mutation.newAdjustments, ...prev.stockHistory],
           notifications: nextNotifications,
           activity: mutation.newActivity
@@ -847,19 +849,34 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       setState((prev) => {
         const target = prev.products.find((p) => p.id === productId);
         if (!target || quantity <= 0) return prev;
-        const { updatedProduct, adjustment } = applyStockAdjustment(
+        const deepResult = executeStockAdjustment(
           target,
           type,
           quantity,
-          prev.settings.adminProfile.name,
-          reason
+          {
+            actorName: prev.settings.adminProfile.name,
+            reason,
+            promotions: prev.promotions,
+            lowStockAlertEnabled: prev.settings.notifications.lowStockAlert,
+          }
         );
+
+        let nextNotifications = prev.notifications;
+        if (deepResult.newNotification) {
+          nextNotifications = appendNotification(
+            nextNotifications,
+            deepResult.newNotification
+          );
+        }
+
         return {
           ...prev,
           products: prev.products.map((p) =>
-            p.id === productId ? updatedProduct : p
+            p.id === productId ? deepResult.updatedProduct : p
           ),
-          stockHistory: [adjustment, ...prev.stockHistory],
+          promotions: deepResult.updatedPromotions ?? prev.promotions,
+          stockHistory: [deepResult.adjustment, ...prev.stockHistory],
+          notifications: nextNotifications,
         };
       });
 
@@ -932,9 +949,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     [persistMutation]
   );
 
-  const notificationsRef = useRef<NotificationItem[]>([]);
-  notificationsRef.current = state.notifications;
-
   const markNotificationRead = useCallback(
     (id: string) => {
       addClientReadNotificationIds([id]);
@@ -948,13 +962,15 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   );
 
   const markAllNotificationsRead = useCallback(() => {
-    const ids = notificationsRef.current.map((n) => n.id);
-    addClientReadNotificationIds(ids);
-    setState((prev) => ({
-      ...prev,
-      notifications: [],
-    }));
-    void persistMutation("/api/notifications/read", "POST", { ids });
+    setState((prev) => {
+      const ids = prev.notifications.map((n) => n.id);
+      addClientReadNotificationIds(ids);
+      void persistMutation("/api/notifications/read", "POST", { ids });
+      return {
+        ...prev,
+        notifications: [],
+      };
+    });
   }, [persistMutation]);
 
   const resetDemoData = useCallback(() => {

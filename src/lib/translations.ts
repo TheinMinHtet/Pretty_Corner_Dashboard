@@ -210,6 +210,8 @@ export interface AdminTranslationSchema {
   orderCol: string;
   customerCol: string;
   paymentCol: string;
+  paymentMobileBanking: string;
+  paymentCOD: string;
   totalCol: string;
   statusCol: string;
   actionCol: string;
@@ -406,8 +408,8 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     bestSellingProductsDesc: "Top revenue-generating items in the selected period",
 
     settingsPageTitle: "Store Settings",
-    settingsPageSubtitle: "Configure Pretty Corner store details, payment methods, and alerts.",
-    tabStoreContact: "Store & Contact",
+    settingsPageSubtitle: "Configure Pretty Corner social channels, stock thresholds, and alerts.",
+    tabStoreContact: "Social Channels",
     tabPayments: "Payments",
     tabStockAlerts: "Stock & Alerts",
     tabAdminProfile: "Admin Profile",
@@ -440,6 +442,8 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     orderCol: "Order",
     customerCol: "Customer",
     paymentCol: "Payment",
+    paymentMobileBanking: "Mobile Banking",
+    paymentCOD: "Cash on Delivery",
     totalCol: "Total",
     statusCol: "Status",
     actionCol: "Action",
@@ -632,8 +636,8 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     bestSellingProductsDesc: "ရွေးချယ်ထားသော ကာလအတွင်း ဝင်ငွေအများဆုံး ရရှိသည့် ပစ္စည်းများ",
 
     settingsPageTitle: "ဆိုင် ဆက်တင်များ",
-    settingsPageSubtitle: "Pretty Corner ဆိုင်အချက်အလက်၊ ငွေပေးချေမှုစနစ်နှင့် အသိပေးချက်များကို ပြင်ဆင်ပါ။",
-    tabStoreContact: "ဆိုင်နှင့် ဆက်သွယ်ရန်",
+    settingsPageSubtitle: "Pretty Corner လူမှုကွန်ရက် ချန်နယ်များ၊ ကုန်ပစ္စည်းလက်ကျန် သတ်မှတ်ချက်နှင့် အသိပေးချက်များကို ပြင်ဆင်ပါ။",
+    tabStoreContact: "လူမှုကွန်ရက် စာမျက်နှာများ",
     tabPayments: "ငွေပေးချေမှု",
     tabStockAlerts: "လက်ကျန်နှင့် သတိပေးချက်",
     tabAdminProfile: "စီမံခန့်ခွဲသူ ပရိုဖိုင်",
@@ -666,6 +670,8 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     orderCol: "အော်ဒါ",
     customerCol: "ဝယ်ယူသူ",
     paymentCol: "ငွေပေးချေမှု",
+    paymentMobileBanking: "မိုဘိုင်းဘဏ်စနစ် (Mobile Banking)",
+    paymentCOD: "အိမ်ရောက်ငွေချေ (Cash on Delivery)",
     totalCol: "ကျသင့်ငွေ",
     statusCol: "အခြေအနေ",
     actionCol: "လုပ်ဆောင်ချက်",

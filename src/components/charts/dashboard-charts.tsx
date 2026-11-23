@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Order, OrderStatus } from "@/types/admin";
-import { formatCompactMMK, formatMMK } from "@/lib/utils";
+import { cn, formatCompactMMK, formatMMK } from "@/lib/utils";
 import {
   buildOrderSeries,
   DateRange,
@@ -72,8 +72,8 @@ export function RevenueChartCard({
   );
 
   return (
-    <Card className="col-span-1 lg:col-span-2">
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
+    <Card className="col-span-1 lg:col-span-2 rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 px-5 pt-5">
         <div>
           <div className="flex items-center gap-2">
             <CardTitle>{t.revenueOverviewTitle}</CardTitle>
@@ -167,9 +167,11 @@ export function RevenueChartCard({
 export function OrdersTrendCard({
   orders,
   range,
+  className,
 }: {
   orders: Order[];
   range: DateRange;
+  className?: string;
 }) {
   const { t } = useLanguage();
   const data = useMemo(
@@ -178,84 +180,86 @@ export function OrdersTrendCard({
   );
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className={cn("rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full", className)}>
+      <CardHeader className="pb-3 px-5 pt-5">
         <div className="flex items-center gap-2">
-          <CardTitle>{t.ordersOverTimeTitle}</CardTitle>
+          <CardTitle className="text-base font-bold text-[#38262E]">{t.ordersOverTimeTitle}</CardTitle>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {t.liveBadge}
           </span>
         </div>
-        <CardDescription>
+        <CardDescription className="text-xs text-[#7A6870]">
           Order volume over the {DATE_RANGE_LABELS[range]} (updated live through Today)
         </CardDescription>
       </CardHeader>
-      <CardContent className="h-[240px] pt-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#F0E1E6"
-            />
-            <XAxis
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              minTickGap={16}
-              interval="preserveStartEnd"
-              tick={{ fill: "#806B73", fontSize: 11 }}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tick={{ fill: "#806B73", fontSize: 11 }}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
-                const point = payload[0].payload as (typeof data)[0];
-                return (
-                  <div className="rounded-xl border border-[#F0E1E6] bg-white p-2.5 shadow-md text-xs space-y-1">
-                    <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
-                      <span>{point.shortDate || point.label}</span>
-                      {point.isToday && (
-                        <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          Today · Live
+      <CardContent className="flex-1 min-h-[260px] px-5 pb-5 pt-2 flex flex-col justify-between">
+        <div className="w-full flex-1 min-h-[240px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#F0E1E6"
+              />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                minTickGap={16}
+                interval="preserveStartEnd"
+                tick={{ fill: "#806B73", fontSize: 11 }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: "#806B73", fontSize: 11 }}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  const point = payload[0].payload as (typeof data)[0];
+                  return (
+                    <div className="rounded-xl border border-[#F0E1E6] bg-white p-2.5 shadow-md text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-[#38262E]">
+                        <span>{point.shortDate || point.label}</span>
+                        {point.isToday && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Today · Live
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[#806B73]">
+                        Orders:{" "}
+                        <span className="font-bold text-[#38262E]">
+                          {point.orders}
                         </span>
-                      )}
+                      </p>
+                      <p className="text-[#806B73]">
+                        Revenue:{" "}
+                        <span className="font-bold text-[#B73D67]">
+                          {formatMMK(point.revenue)}
+                        </span>
+                      </p>
                     </div>
-                    <p className="text-[#806B73]">
-                      Orders:{" "}
-                      <span className="font-bold text-[#38262E]">
-                        {point.orders}
-                      </span>
-                    </p>
-                    <p className="text-[#806B73]">
-                      Revenue:{" "}
-                      <span className="font-bold text-[#B73D67]">
-                        {formatMMK(point.revenue)}
-                      </span>
-                    </p>
-                  </div>
-                );
-              }}
-            />
-            <Bar
-              dataKey="orders"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={range === "30d" ? 22 : 36}
-            >
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.isToday ? "#B73D67" : "#E99AB5"}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+                  );
+                }}
+              />
+              <Bar
+                dataKey="orders"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={range === "30d" ? 22 : 36}
+              >
+                {data.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.isToday ? "#B73D67" : "#E99AB5"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
@@ -274,7 +278,7 @@ export function OrderStatusDistributionCard({
 }) {
   const { t } = useLanguage();
   const resolvedTitle = title ?? t.orderStatusDistTitle;
-  const distribution = useMemo(() => {
+  const { pieData, tileData } = useMemo(() => {
     const categories = [
       "Paid",
       "Pending",
@@ -292,56 +296,62 @@ export function OrderStatusDistributionCard({
 
     const total = orders.length;
 
-    return categories
-      .map((name) => ({
-        name,
-        value: counts[name] || 0,
-        percentage: total > 0 ? Math.round(((counts[name] || 0) / total) * 100) : 0,
-        color: UNIFIED_STATUS_COLORS[name],
-      }))
-      .filter((d) => d.value > 0);
+    const all = categories.map((name) => ({
+      name,
+      value: counts[name] || 0,
+      percentage: total > 0 ? Math.round(((counts[name] || 0) / total) * 100) : 0,
+      color: UNIFIED_STATUS_COLORS[name],
+    }));
+
+    return {
+      tileData: all,
+      pieData: all.filter((d) => d.value > 0),
+    };
   }, [orders]);
 
   const totalOrders = orders.length;
 
   return (
-    <Card className={`rounded-[32px] border-[#F0E1E6] bg-white shadow-xs ${className ?? ""}`}>
+    <Card className={`rounded-[28px] border-[#EEDFE5] bg-white shadow-xs flex flex-col h-full ${className ?? ""}`}>
       <CardHeader className="pb-2">
         <CardTitle className="font-serif text-lg font-bold text-[#33272C]">{resolvedTitle}</CardTitle>
         <CardDescription className="text-xs text-[#806B73]">
           {description ?? `Real-time live breakdown across ${totalOrders} orders`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="flex-1 flex flex-col justify-between pt-0 pb-4">
         {totalOrders === 0 ? (
-          <div className="h-[200px] flex flex-col items-center justify-center text-center p-4">
+          <div className="flex-1 min-h-[220px] flex flex-col items-center justify-center text-center p-4">
             <p className="text-sm font-semibold text-[#33272C]">No orders recorded</p>
             <p className="text-xs text-[#806B73]">New orders will automatically distribute here</p>
           </div>
         ) : (
           <>
-            <div className="h-[190px] relative">
-              <ResponsiveContainer width="100%" height="100%">
+            {/* Centered Donut Circle Section */}
+            <div className="flex-1 min-h-[210px] w-full flex items-center justify-center relative my-auto py-2">
+              <ResponsiveContainer width="100%" height={210}>
                 <PieChart>
                   <Pie
-                    data={distribution}
+                    data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={54}
-                    outerRadius={78}
+                    innerRadius={58}
+                    outerRadius={84}
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {distribution.map((entry) => (
+                    {pieData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      borderRadius: "12px",
+                      borderRadius: "16px",
                       border: "1px solid #F0E1E6",
                       fontSize: "12px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                      backdropFilter: "blur(8px)",
+                      backgroundColor: "rgba(255, 255, 255, 0.95)",
                     }}
                     formatter={(val, name, item) => [
                       `${val} orders (${(item as { payload: { percentage: number } }).payload.percentage}%)`,
@@ -352,29 +362,39 @@ export function OrderStatusDistributionCard({
               </ResponsiveContainer>
               {/* Center Donut Total Count */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-black text-[#33272C] leading-none">{totalOrders}</span>
-                <span className="text-[10px] uppercase font-bold text-[#806B73] tracking-wider mt-0.5">Orders</span>
+                <span className="text-2xl sm:text-3xl font-black text-[#33272C] leading-none">
+                  {totalOrders}
+                </span>
+                <span className="text-[10px] uppercase font-bold text-[#806B73] tracking-wider mt-1">
+                  Orders
+                </span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3 pt-3 border-t border-[#F5EBF0]">
-              {distribution.map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="flex items-center gap-1.5 text-[#806B73] truncate">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="truncate">{item.name}</span>
-                  </span>
-                  <div className="flex items-center gap-1 shrink-0 ml-1">
-                    <span className="font-bold text-[#33272C]">{item.value}</span>
-                    <span className="text-[10px] text-[#806B73]">({item.percentage}%)</span>
+
+            {/* Bottom Status Metric Tiles */}
+            <div className="mt-auto pt-3 border-t border-[#F5EBF0]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
+                {tileData.map((item) => (
+                  <div
+                    key={item.name}
+                    className="rounded-2xl border border-[#F0E1E6] bg-[#FDFBFB] hover:bg-[#FAF4F6] p-2.5 transition-colors duration-150 flex flex-col items-center justify-center text-center"
+                  >
+                    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#806B73] truncate max-w-full">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                    <span className="text-base sm:text-lg font-black text-[#33272C] mt-1 leading-tight">
+                      {item.value}
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#806B73] mt-0.5">
+                      ({item.percentage}%)
+                    </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </>
         )}
@@ -382,3 +402,28 @@ export function OrderStatusDistributionCard({
     </Card>
   );
 }
+
+export function ChartCardSkeleton({
+  className = "",
+  height = "h-[320px]",
+}: {
+  className?: string;
+  height?: string;
+}) {
+  return (
+    <Card
+      className={`rounded-[32px] border border-[#F0E1E6] bg-white p-6 shadow-xs animate-pulse flex flex-col justify-between ${className}`}
+    >
+      <div className="space-y-2">
+        <div className="h-5 w-40 bg-[#FAF4F6] rounded-md" />
+        <div className="h-3.5 w-64 bg-[#FAF4F6]/70 rounded-md" />
+      </div>
+      <div
+        className={`w-full ${height} bg-[#FAF4F6]/40 rounded-2xl mt-4 flex items-center justify-center`}
+      />
+    </Card>
+  );
+}
+
+export { CategorySalesCard } from "./category-sales-card";
+

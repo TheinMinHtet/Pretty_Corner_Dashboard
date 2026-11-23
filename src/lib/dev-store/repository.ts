@@ -18,13 +18,31 @@ import {
 import { generateId } from "@/lib/utils";
 import {
   applyStockAdjustment,
+  executeStockAdjustment,
 } from "@/modules/catalog/catalog-sync";
 import {
   executeOrderUpdate,
   OrderMutationResult,
 } from "@/modules/orders/order-lifecycle";
 import { createSeedData, DevStoreData } from "./seed";
-import { slugify, deriveCustomersFromOrders } from "./mappers";
+import { slugify, deriveCustomersFromOrders, resolveUnifiedOrderStatus } from "./mappers";
+
+export interface ListOrdersPaginatedParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  unifiedStatus?: string;
+  township?: string;
+  dateFilter?: "all" | "today" | "yesterday" | "7d" | "30d" | string;
+  deliveryMethod?: "all" | "courier" | "pickup";
+  highValueOnly?: boolean;
+  sortField?: "createdAt" | "total" | "reference";
+  sortDir?: "asc" | "desc";
+}
+
+export interface ListOrdersPaginatedResult extends PaginatedResult<Order> {
+  allTownships: string[];
+}
 
 export interface StorefrontOrderCreateInput {
   customerName: string;
@@ -81,8 +99,9 @@ export interface StoreRepository {
     category?: string;
     status?: string;
     stock?: "all" | "in" | "low" | "out" | "alert";
+    merchandising?: "all" | "new" | "bestseller" | "promo" | "lowstock";
     q?: string;
-    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortKey?: "name" | "price" | "stock" | "createdAt" | "soldCount";
     sortDir?: "asc" | "desc";
   }): Promise<PaginatedResult<Product> & { stats: InventoryStats }>;
   getProduct(idOrSlug: string): Promise<Product | null>;
@@ -121,6 +140,9 @@ export interface StoreRepository {
   }): Promise<PaginatedResult<Customer>>;
 
   listOrders(): Promise<Order[]>;
+  listOrdersPaginated(
+    params: ListOrdersPaginatedParams
+  ): Promise<ListOrdersPaginatedResult>;
   getOrder(idOrRef: string): Promise<Order | null>;
   createStorefrontOrder(input: StorefrontOrderCreateInput): Promise<Order>;
   updateOrder(
@@ -341,8 +363,9 @@ export class JsonFileStoreRepository implements StoreRepository {
     category?: string;
     status?: string;
     stock?: "all" | "in" | "low" | "out" | "alert";
+    merchandising?: "all" | "new" | "bestseller" | "promo" | "lowstock";
     q?: string;
-    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortKey?: "name" | "price" | "stock" | "createdAt" | "soldCount";
     sortDir?: "asc" | "desc";
   }): Promise<PaginatedResult<Product> & { stats: InventoryStats }> {
     const data = await this.ensureInitialized();
@@ -382,6 +405,18 @@ export class JsonFileStoreRepository implements StoreRepository {
         list = list.filter((p) => p.stock <= p.lowStockThreshold).sort((a, b) => a.stock - b.stock);
       }
     }
+    if (params.merchandising && params.merchandising !== "all") {
+      if (params.merchandising === "new") {
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        list = list.filter((p) => new Date(p.createdAt).getTime() >= thirtyDaysAgo);
+      } else if (params.merchandising === "bestseller") {
+        list = list.filter((p) => (p.soldCount ?? 0) > 0);
+      } else if (params.merchandising === "promo") {
+        list = list.filter((p) => p.salePrice !== undefined && p.salePrice < p.regularPrice);
+      } else if (params.merchandising === "lowstock") {
+        list = list.filter((p) => p.stock <= p.lowStockThreshold);
+      }
+    }
     if (params.q?.trim()) {
       const q = params.q.trim().toLowerCase();
       list = list.filter(
@@ -406,6 +441,9 @@ export class JsonFileStoreRepository implements StoreRepository {
       }
       if (sortKey === "createdAt") {
         return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * sortDir;
+      }
+      if (sortKey === "soldCount") {
+        return ((a.soldCount ?? 0) - (b.soldCount ?? 0)) * sortDir;
       }
       return a.name.localeCompare(b.name) * sortDir;
     });
@@ -679,6 +717,124 @@ export class JsonFileStoreRepository implements StoreRepository {
     return data.orders;
   }
 
+  async listOrdersPaginated(
+    params: ListOrdersPaginatedParams
+  ): Promise<ListOrdersPaginatedResult> {
+    const data = await this.ensureInitialized();
+    const allOrders = data.orders ?? [];
+
+    const townshipSet = new Set<string>();
+    for (const o of allOrders) {
+      if (o.township && o.township.trim()) {
+        townshipSet.add(o.township.trim());
+      }
+    }
+    const allTownships = Array.from(townshipSet).sort();
+
+    let list = [...allOrders];
+
+    if (params.unifiedStatus && params.unifiedStatus !== "All") {
+      const target = params.unifiedStatus.toLowerCase();
+      list = list.filter((o) => {
+        const u = resolveUnifiedOrderStatus(o.orderStatus, o.paymentStatus);
+        if (target === "pending") return u === "pending";
+        if (target === "paid") return u === "paid";
+        if (target === "failed") return u === "failed";
+        if (target === "time expired" || target === "expired") return u === "expired";
+        if (target === "cancelled") return u === "cancelled";
+        return true;
+      });
+    }
+
+    if (params.township && params.township !== "All") {
+      list = list.filter((o) => o.township === params.township);
+    }
+
+    if (params.deliveryMethod && params.deliveryMethod !== "all") {
+      list = list.filter((o) => (o.deliveryMethod || "courier") === params.deliveryMethod);
+    }
+
+    if (params.highValueOnly) {
+      list = list.filter((o) => o.total >= 100000);
+    }
+
+    if (params.dateFilter && params.dateFilter !== "all") {
+      const now = new Date();
+      if (params.dateFilter === "today") {
+        list = list.filter((o) => {
+          const d = new Date(o.createdAt);
+          return (
+            d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === now.getDate()
+          );
+        });
+      } else if (params.dateFilter === "yesterday") {
+        const y = new Date(now);
+        y.setDate(y.getDate() - 1);
+        list = list.filter((o) => {
+          const d = new Date(o.createdAt);
+          return (
+            d.getFullYear() === y.getFullYear() &&
+            d.getMonth() === y.getMonth() &&
+            d.getDate() === y.getDate()
+          );
+        });
+      } else {
+        const days = params.dateFilter === "7d" ? 7 : 30;
+        const nowMs = Date.now();
+        list = list.filter((o) => {
+          const diffDays =
+            (nowMs - new Date(o.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+          return diffDays <= days;
+        });
+      }
+    }
+
+    if (params.q?.trim()) {
+      const q = params.q.trim().toLowerCase();
+      list = list.filter(
+        (o) =>
+          o.reference.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          o.customerPhone.toLowerCase().includes(q) ||
+          (o.transactionReference &&
+            o.transactionReference.toLowerCase().includes(q)) ||
+          (o.nearbyLandmark && o.nearbyLandmark.toLowerCase().includes(q))
+      );
+    }
+
+    const sortField = params.sortField || "createdAt";
+    const sortDir = params.sortDir === "asc" ? 1 : -1;
+    list.sort((a, b) => {
+      if (sortField === "total") {
+        return (a.total - b.total) * sortDir;
+      }
+      if (sortField === "reference") {
+        return a.reference.localeCompare(b.reference) * sortDir;
+      }
+      return (
+        (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) *
+        sortDir
+      );
+    });
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(50, Math.max(1, Number(params.limit) || 10));
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = list.slice((page - 1) * limit, page * limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+      allTownships,
+    };
+  }
+
   async getOrder(idOrRef: string): Promise<Order | null> {
     const data = await this.ensureInitialized();
     const normalized = idOrRef.trim().toLowerCase();
@@ -703,14 +859,12 @@ export class JsonFileStoreRepository implements StoreRepository {
       }
 
       const paymentMethodMap: Record<string, Order["paymentMethod"]> = {
-        KBZPay: "KBZPay",
-        WavePay: "WavePay",
-        "CB Pay": "CB Pay",
-        "AYA Pay": "AYA Pay",
         "Cash on Delivery": "Cash on Delivery",
+        "Mobile Banking": "Mobile Banking",
       };
       const mappedPaymentMethod: Order["paymentMethod"] =
-        paymentMethodMap[input.paymentMethod] ?? "KBZPay";
+        paymentMethodMap[input.paymentMethod] ??
+        (input.paymentMethod === "Cash on Delivery" ? "Cash on Delivery" : "Mobile Banking");
 
       const paymentStatusMap: Record<string, PaymentStatus> = {
         paid: "Paid",
@@ -865,6 +1019,7 @@ export class JsonFileStoreRepository implements StoreRepository {
       const mutation = executeOrderUpdate(target, input, data.products, {
         actorName: actor,
         lowStockAlertEnabled: data.settings.notifications.lowStockAlert,
+        promotions: data.promotions,
       });
 
       let nextNotifications = data.notifications;
@@ -883,6 +1038,7 @@ export class JsonFileStoreRepository implements StoreRepository {
           o.id === mutation.updatedOrder.id ? mutation.updatedOrder : o
         ),
         products: mutation.updatedProducts,
+        promotions: mutation.updatedPromotions ?? data.promotions,
         stockHistory: [...mutation.newAdjustments, ...data.stockHistory],
         notifications: nextNotifications,
         activity: nextActivity,
@@ -902,20 +1058,35 @@ export class JsonFileStoreRepository implements StoreRepository {
       const target = data.products.find((p) => p.id === input.productId);
       if (!target) return { next: data, result: null };
 
-      const { updatedProduct, adjustment } = applyStockAdjustment(
+      const deepResult = executeStockAdjustment(
         target,
         input.type,
         input.quantity,
-        data.settings.adminProfile.name,
-        input.reason
+        {
+          actorName: data.settings.adminProfile.name,
+          reason: input.reason,
+          promotions: data.promotions,
+          lowStockAlertEnabled: data.settings.notifications.lowStockAlert,
+        }
       );
+
+      const { updatedProduct, adjustment } = deepResult;
+      let nextNotifications = data.notifications;
+      if (deepResult.newNotification) {
+        nextNotifications = appendNotification(
+          nextNotifications,
+          deepResult.newNotification
+        );
+      }
 
       const next: DevStoreData = {
         ...data,
         products: data.products.map((p) =>
           p.id === target.id ? updatedProduct : p
         ),
+        promotions: deepResult.updatedPromotions ?? data.promotions,
         stockHistory: [adjustment, ...data.stockHistory],
+        notifications: nextNotifications,
         activity: appendActivity(
           data.activity,
           "Stock Adjusted",
