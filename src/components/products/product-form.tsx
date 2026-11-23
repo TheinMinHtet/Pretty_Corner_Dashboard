@@ -158,15 +158,6 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" type="button" asChild>
-            <Link href="/admin/products">Cancel</Link>
-          </Button>
-          <Button type="submit">
-            <Save className="h-4 w-4" />
-            {mode === "create" ? "Create Product" : "Save Changes"}
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -428,6 +419,17 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Action Buttons below Inventory & SKU */}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button variant="outline" type="button" asChild>
+              <Link href="/admin/products">Cancel</Link>
+            </Button>
+            <Button type="submit">
+              <Save className="h-4 w-4" />
+              {mode === "create" ? "Create Product" : "Save Changes"}
+            </Button>
+          </div>
         </div>
       </div>
     </form>

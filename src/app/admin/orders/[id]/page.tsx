@@ -109,7 +109,7 @@ export default function OrderDetailsPage() {
       "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
     );
     if (!confirmed) return;
-    updateOrderStatus(order.id, "Cancelled", "Cancelled by admin");
+    updateUnifiedStatus(order.id, "cancelled", "Cancelled by admin");
     toast.error(`Order ${order.reference} cancelled and stock restored`);
   };
 
@@ -604,7 +604,7 @@ export default function OrderDetailsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={handleCancelOrder}
-                    className="w-full text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50"
+                    className="w-full text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                   >
                     Cancel Order
                   </Button>
