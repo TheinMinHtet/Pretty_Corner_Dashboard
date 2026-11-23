@@ -65,7 +65,6 @@ const ALL_ORDER_STATUSES: OrderStatus[] = [
   "Processing",
   "Shipped",
   "Delivered",
-  "Cancelled",
 ];
 
 const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
@@ -145,15 +144,6 @@ export default function OrderDetailsPage() {
   const handleMarkDelivered = () => {
     updateOrderStatus(order.id, "Delivered");
     toast.success(`Order ${order.reference} marked as Delivered! 🎉`);
-  };
-
-  const handleCancelOrder = () => {
-    const confirmed = window.confirm(
-      "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
-    );
-    if (!confirmed) return;
-    updateOrderStatus(order.id, "Cancelled", "Cancelled by admin");
-    toast.error(`Order ${order.reference} cancelled and stock restored`);
   };
 
   const handleToggleFailedPayment = () => {
@@ -639,7 +629,7 @@ export default function OrderDetailsPage() {
                 )}
               </div>
 
-              {/* Refund Audit Section / Cancel Order */}
+              {/* Refund Audit Section */}
               {order.refundDetails ? (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -656,8 +646,8 @@ export default function OrderDetailsPage() {
                   </p>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 pt-1">
-                  {order.paymentStatus === "Paid" && (
+                order.paymentStatus === "Paid" && (
+                  <div className="flex items-center gap-2 pt-1">
                     <Button
                       type="button"
                       variant="outline"
@@ -671,19 +661,8 @@ export default function OrderDetailsPage() {
                       <RotateCcw className="h-3.5 w-3.5 mr-1 text-[#D96B91]" />
                       Process Refund
                     </Button>
-                  )}
-                  {order.orderStatus !== "Cancelled" && order.orderStatus !== "Delivered" && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelOrder}
-                      className="text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50"
-                    >
-                      Cancel Order
-                    </Button>
-                  )}
-                </div>
+                  </div>
+                )
               )}
             </CardContent>
           </Card>
@@ -711,83 +690,6 @@ export default function OrderDetailsPage() {
                 <div className="rounded-lg bg-[#FDF6F8] border border-[#F0E1E6] p-2.5 text-xs text-[#33272C] mt-2">
                   <span className="font-semibold">Customer Note:</span>{" "}
                   {order.notes}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Delivery Address, Landmark & Rider Dispatch (PC-OM-006) */}
-          <Card className="rounded-[32px] border-[#F0E1E6] overflow-hidden">
-            <CardHeader className="pb-3 border-b border-[#F0E1E6]/60">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MapPin className="h-4 w-4 text-[#D96B91]" />
-                  Delivery & Rider Dispatch
-                </CardTitle>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
-                    order.deliveryMethod === "pickup"
-                      ? "bg-amber-50 text-amber-700 border border-amber-200"
-                      : "bg-[#FCEEF2] text-[#D96B91]"
-                  )}
-                >
-                  {order.deliveryMethod === "pickup" ? (
-                    <>
-                      <Store className="h-3.5 w-3.5" />
-                      In-Store Pickup
-                    </>
-                  ) : (
-                    <>
-                      <Truck className="h-3.5 w-3.5" />
-                      Courier Dispatch
-                    </>
-                  )}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3.5 text-xs pt-4">
-              <div>
-                <p className="text-sm text-[#33272C] font-semibold">
-                  {order.deliveryAddress}
-                </p>
-                <p className="text-[#806B73] mt-0.5">
-                  {order.township}, {order.city}
-                </p>
-              </div>
-
-              {/* Nearby Landmark for Myanmar Riders */}
-              {order.nearbyLandmark && (
-                <div className="rounded-2xl border border-[#F0E1E6] bg-[#FDF6F8] p-3 flex items-start gap-2.5">
-                  <Navigation className="h-4 w-4 text-[#D96B91] shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-[#33272C] text-xs">
-                      Delivery Landmark / Dispatch Note
-                    </p>
-                    <p className="text-[#806B73] text-xs mt-0.5">
-                      {order.nearbyLandmark}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Building / apartment + delivery instructions (Section 6.2) */}
-              {(order.building || order.deliveryInstructions) && (
-                <div className="rounded-2xl border border-[#F0E1E6] bg-white p-3 space-y-1.5">
-                  {order.building && (
-                    <p className="text-xs text-[#33272C]">
-                      <span className="font-semibold">Building / Apartment:</span>{" "}
-                      {order.building}
-                    </p>
-                  )}
-                  {order.deliveryInstructions && (
-                    <p className="text-xs text-[#33272C]">
-                      <span className="font-semibold">
-                        Delivery instructions:
-                      </span>{" "}
-                      {order.deliveryInstructions}
-                    </p>
-                  )}
                 </div>
               )}
             </CardContent>
