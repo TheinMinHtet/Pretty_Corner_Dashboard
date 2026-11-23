@@ -261,15 +261,13 @@ function mapOrderStatusToSb(status: OrderStatus): string {
 
 function mapPaymentMethodFromSb(method: string): Order["paymentMethod"] {
   if (
-    method === "KBZPay" ||
-    method === "WavePay" ||
-    method === "CB Pay" ||
-    method === "AYA Pay" ||
-    method === "Cash on Delivery"
+    method === "Cash on Delivery" ||
+    method?.toLowerCase() === "cash on delivery" ||
+    method?.toLowerCase() === "cod"
   ) {
-    return method;
+    return "Cash on Delivery";
   }
-  return "KBZPay";
+  return "Mobile Banking";
 }
 
 function extractTownshipFromAddress(addr: string): string {

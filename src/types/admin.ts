@@ -79,6 +79,8 @@ export interface OrderTimelineEvent {
   actor: string;
 }
 
+export type PaymentMethod = "Mobile Banking" | "Cash on Delivery";
+
 export interface Order {
   id: string;
   reference: string;
@@ -104,7 +106,7 @@ export interface Order {
   promoCode?: string;
   appliedPromotionId?: string;
   total: number;
-  paymentMethod: "KBZPay" | "WavePay" | "CB Pay" | "AYA Pay" | "Cash on Delivery";
+  paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   transactionReference?: string;
   orderStatus: OrderStatus;
@@ -239,10 +241,7 @@ export interface StoreSettings {
     tiktok: string;
   };
   paymentMethods: {
-    kbzPay: boolean;
-    wavePay: boolean;
-    cbPay: boolean;
-    ayaPay: boolean;
+    mobileBanking: boolean;
     cod: boolean;
   };
   notifications: {

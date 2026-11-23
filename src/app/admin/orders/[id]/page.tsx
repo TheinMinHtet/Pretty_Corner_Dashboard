@@ -514,7 +514,7 @@ export default function OrderDetailsPage() {
                   <Input
                     value={trxInput}
                     onChange={(e) => setTrxInput(e.target.value)}
-                    placeholder="e.g. KBZ-TRX-12345678"
+                    placeholder="e.g. MB-TRX-12345678"
                     className="h-8 text-xs rounded-xl border-[#EEDFE5]"
                   />
                   <Button

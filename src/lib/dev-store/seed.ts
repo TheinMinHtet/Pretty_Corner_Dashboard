@@ -572,9 +572,9 @@ export function createSeedData(): DevStoreData {
       deliveryFee: 3000,
       discountAmount: 0,
       total: 63000,
-      paymentMethod: "KBZPay",
+      paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
-      transactionReference: "KBZ-261117-9942",
+      transactionReference: "MB-261117-9942",
       orderStatus: "Confirmed",
       timeline: [
         {
@@ -586,7 +586,7 @@ export function createSeedData(): DevStoreData {
         {
           status: "Confirmed",
           timestamp: "2026-11-17T12:45:00Z",
-          note: "Payment verified via KBZPay",
+          note: "Payment verified via Mobile Banking",
           actor: "Admin",
         },
       ],
@@ -629,9 +629,9 @@ export function createSeedData(): DevStoreData {
       deliveryFee: 0,
       discountAmount: 0,
       total: 58000,
-      paymentMethod: "WavePay",
+      paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
-      transactionReference: "WAVE-261118-4421",
+      transactionReference: "MB-261118-4421",
       orderStatus: "Shipped",
       timeline: [
         {
@@ -686,9 +686,9 @@ export function createSeedData(): DevStoreData {
       deliveryFee: 2500,
       discountAmount: 0,
       total: 54500,
-      paymentMethod: "KBZPay",
+      paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
-      transactionReference: "KBZ-261119-8812",
+      transactionReference: "MB-261119-8812",
       orderStatus: "Processing",
       timeline: [
         {
@@ -737,9 +737,9 @@ export function createSeedData(): DevStoreData {
       deliveryFee: 3000,
       discountAmount: 7400,
       total: 69600,
-      paymentMethod: "KBZPay",
+      paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
-      transactionReference: "KBZ-261120-3301",
+      transactionReference: "MB-261120-3301",
       orderStatus: "Shipped",
       timeline: [
         {

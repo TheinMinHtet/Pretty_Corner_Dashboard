@@ -180,7 +180,7 @@ While the UI is well-designed with high-quality components for managing products
 ---
 
 ### Gap 7: Payment Gateway Transaction ID Missing (Section 5)
-* **Problem:** The `Order` interface only has `paymentMethod` and `paymentStatus`. It does not record `gatewayTransactionId` or `providerReference` (e.g., MyanMyanPay Transaction Reference / KBZPay Transaction ID).
+* **Problem:** The `Order` interface only has `paymentMethod` and `paymentStatus`. It does not record `gatewayTransactionId` or `providerReference` (e.g., Mobile Banking Transaction Reference / Provider Reference ID).
 * **Resolution:** Add `transactionReference?: string` to `Order` so staff can audit and cross-check payment settlements against provider statements.
 
 ---

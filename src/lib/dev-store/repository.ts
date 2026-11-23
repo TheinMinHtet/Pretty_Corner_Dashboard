@@ -859,14 +859,12 @@ export class JsonFileStoreRepository implements StoreRepository {
       }
 
       const paymentMethodMap: Record<string, Order["paymentMethod"]> = {
-        KBZPay: "KBZPay",
-        WavePay: "WavePay",
-        "CB Pay": "CB Pay",
-        "AYA Pay": "AYA Pay",
         "Cash on Delivery": "Cash on Delivery",
+        "Mobile Banking": "Mobile Banking",
       };
       const mappedPaymentMethod: Order["paymentMethod"] =
-        paymentMethodMap[input.paymentMethod] ?? "KBZPay";
+        paymentMethodMap[input.paymentMethod] ??
+        (input.paymentMethod === "Cash on Delivery" ? "Cash on Delivery" : "Mobile Banking");
 
       const paymentStatusMap: Record<string, PaymentStatus> = {
         paid: "Paid",

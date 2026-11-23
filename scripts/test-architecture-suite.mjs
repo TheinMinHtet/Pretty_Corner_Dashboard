@@ -311,7 +311,7 @@ test("computeDashboardMetrics returns calculated KPIs without NaN", () => {
       total: 50000,
       orderStatus: "Shipped",
       paymentStatus: "Paid",
-      paymentMethod: "KBZPay",
+      paymentMethod: "Mobile Banking",
       city: "Yangon",
       createdAt: new Date().toISOString(),
     },
@@ -322,7 +322,7 @@ test("computeDashboardMetrics returns calculated KPIs without NaN", () => {
   assert.equal(metrics.totalOrders, 1);
   assert.equal(metrics.completed, 1);
   assert.equal(metrics.paidPayments, 1);
-  assert.equal(metrics.topPayment?.value, "KBZPay");
+  assert.equal(metrics.topPayment?.value, "Mobile Banking");
 });
 
 test("computeDashboardMetrics accounts for all active payment categories correctly", () => {

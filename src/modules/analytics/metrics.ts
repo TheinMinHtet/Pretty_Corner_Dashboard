@@ -282,10 +282,7 @@ export interface PaymentStatItem {
 }
 
 export const PAYMENT_METHOD_COLORS: Record<string, string> = {
-  KBZPay: "#38BDF8",
-  WavePay: "#F59E0B",
-  "CB Pay": "#EC4899",
-  "AYA Pay": "#EF4444",
+  "Mobile Banking": "#38BDF8",
   "Cash on Delivery": "#10B981",
 };
 
@@ -299,10 +296,7 @@ export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
 
 export function computePaymentMethodStats(orders: Order[]): PaymentStatItem[] {
   const methods = [
-    "KBZPay",
-    "WavePay",
-    "CB Pay",
-    "AYA Pay",
+    "Mobile Banking",
     "Cash on Delivery",
   ] as const;
 
