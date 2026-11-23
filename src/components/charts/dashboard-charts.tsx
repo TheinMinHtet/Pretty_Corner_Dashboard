@@ -269,7 +269,7 @@ export function OrderStatusDistributionCard({
   description?: string;
   className?: string;
 }) {
-  const distribution = useMemo(() => {
+  const { pieData, tileData } = useMemo(() => {
     const categories = [
       "Paid",
       "Pending",
@@ -287,14 +287,17 @@ export function OrderStatusDistributionCard({
 
     const total = orders.length;
 
-    return categories
-      .map((name) => ({
-        name,
-        value: counts[name] || 0,
-        percentage: total > 0 ? Math.round(((counts[name] || 0) / total) * 100) : 0,
-        color: UNIFIED_STATUS_COLORS[name],
-      }))
-      .filter((d) => d.value > 0);
+    const all = categories.map((name) => ({
+      name,
+      value: counts[name] || 0,
+      percentage: total > 0 ? Math.round(((counts[name] || 0) / total) * 100) : 0,
+      color: UNIFIED_STATUS_COLORS[name],
+    }));
+
+    return {
+      tileData: all,
+      pieData: all.filter((d) => d.value > 0),
+    };
   }, [orders]);
 
   const totalOrders = orders.length;
@@ -320,7 +323,7 @@ export function OrderStatusDistributionCard({
               <ResponsiveContainer width="100%" height={210}>
                 <PieChart>
                   <Pie
-                    data={distribution}
+                    data={pieData}
                     cx="50%"
                     cy="50%"
                     innerRadius={58}
@@ -328,7 +331,7 @@ export function OrderStatusDistributionCard({
                     paddingAngle={3}
                     dataKey="value"
                   >
-                    {distribution.map((entry) => (
+                    {pieData.map((entry) => (
                       <Cell key={entry.name} fill={entry.color} />
                     ))}
                   </Pie>
@@ -362,7 +365,7 @@ export function OrderStatusDistributionCard({
             {/* Bottom Status Metric Tiles */}
             <div className="mt-auto pt-3 border-t border-[#F5EBF0]">
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2">
-                {distribution.map((item) => (
+                {tileData.map((item) => (
                   <div
                     key={item.name}
                     className="rounded-2xl border border-[#F0E1E6] bg-[#FDFBFB] hover:bg-[#FAF4F6] p-2.5 transition-colors duration-150 flex flex-col items-center justify-center text-center"

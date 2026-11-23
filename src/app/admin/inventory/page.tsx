@@ -238,6 +238,34 @@ export default function InventoryPage() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  const handleQuickStep = (product: Product, delta: number) => {
+    if (delta < 0 && product.stock <= 0) return;
+    const type: "increase" | "decrease" = delta > 0 ? "increase" : "decrease";
+    const qty = 1;
+    const newStock = Math.max(0, product.stock + delta);
+
+    adjustStock(
+      product.id,
+      type,
+      qty,
+      delta > 0
+        ? "Quick shelf count increment (+1)"
+        : "Quick shelf count decrement (-1)"
+    );
+
+    // Optimistically update the product in local state
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, stock: newStock } : p))
+    );
+
+    toast.success(
+      `${product.name} stock ${delta > 0 ? "+1" : "-1"} (${newStock} units)`
+    );
+
+    // Trigger sync with server repository
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -484,13 +512,37 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell className="py-4 px-4 align-middle">
                             <div className="flex flex-col">
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-base font-black text-[#38262E] tabular-nums">
-                                  {p.stock}
-                                </span>
-                                <span className="text-xs text-[#7A6870] font-medium">units</span>
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex items-baseline gap-1 min-w-[54px]">
+                                  <span className="text-base font-black text-[#38262E] tabular-nums">
+                                    {p.stock}
+                                  </span>
+                                  <span className="text-xs text-[#7A6870] font-medium">units</span>
+                                </div>
+                                <div className="inline-flex items-center rounded-lg border border-[#EEDFE5] bg-white p-0.5 shadow-2xs">
+                                  <button
+                                    type="button"
+                                    disabled={p.stock <= 0}
+                                    onClick={() => handleQuickStep(p, -1)}
+                                    aria-label={`Decrease ${p.name} stock by 1`}
+                                    title="Decrease stock by 1"
+                                    className="h-6 w-6 flex items-center justify-center rounded-md text-[#7A6870] hover:text-[#B73D67] hover:bg-[#FCEEF2] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </button>
+                                  <div className="h-3 w-px bg-[#EEDFE5]" />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickStep(p, 1)}
+                                    aria-label={`Increase ${p.name} stock by 1`}
+                                    title="Increase stock by 1"
+                                    className="h-6 w-6 flex items-center justify-center rounded-md text-[#7A6870] hover:text-[#B73D67] hover:bg-[#FCEEF2] transition-colors cursor-pointer"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </button>
+                                </div>
                               </div>
-                              <span className="text-[11px] text-[#7A6870] mt-0.5 font-normal">
+                              <span className="text-[11px] text-[#7A6870] mt-1 font-normal">
                                 Threshold: <span className="font-medium text-[#38262E]">{p.lowStockThreshold}</span>
                               </span>
                             </div>

@@ -8,14 +8,12 @@ import {
   Banknote,
   ShoppingBag,
   Clock,
-  CheckCircle2,
   TrendingUp,
   TrendingDown,
   ArrowRight,
   AlertTriangle,
   Sparkles,
   Eye,
-  AlertCircle,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
@@ -156,8 +154,7 @@ export default function AdminDashboardPage() {
       comparison: `vs ${formatMMK(metrics.previousRevenue)}`,
       icon: Banknote,
       accentBg: "bg-[#FCEEF2]",
-      accentText: "text-[#D96B91]",
-      width: 100,
+      accentText: "text-[#B73D67]",
     },
     {
       title: t.totalOrders,
@@ -168,40 +165,26 @@ export default function AdminDashboardPage() {
       icon: ShoppingBag,
       accentBg: "bg-sky-50",
       accentText: "text-sky-600",
-      width: 100,
     },
     {
       title: t.pendingOrders,
-      value: String(metrics.pending),
-      change: `${metrics.pending}`,
-      positive: metrics.pendingShare <= 20,
-      comparison: `${metrics.pendingShare}% (${t.totalOrders})`,
+      value: `${metrics.pending} Pending`,
+      change: `${metrics.pendingShare}% of orders`,
+      positive: metrics.pending === 0,
+      comparison: `${metrics.paid} Paid · ${metrics.expired} Expired`,
       icon: Clock,
       accentBg: "bg-amber-50",
       accentText: "text-amber-600",
-      width: metrics.pendingShare,
     },
     {
-      title: t.statusShipped,
-      value: String(metrics.paid),
-      change: `${metrics.paid}`,
-      positive: true,
-      comparison: `${metrics.paidShare}% (${t.totalOrders})`,
-      icon: CheckCircle2,
-      accentBg: "bg-emerald-50",
-      accentText: "text-emerald-600",
-      width: metrics.paidShare,
-    },
-    {
-      title: t.statusExpired,
-      value: String(metrics.expired),
-      change: `${metrics.expired}`,
-      positive: metrics.expiredShare <= 15,
-      comparison: `${metrics.expiredShare}% (${t.totalOrders})`,
-      icon: AlertCircle,
-      accentBg: "bg-slate-100",
-      accentText: "text-slate-600",
-      width: metrics.expiredShare,
+      title: t.navInventory,
+      value: `${inventoryStats?.lowStock ?? 0} Low Stock`,
+      change: (inventoryStats?.outOfStock ?? 0) > 0 ? `${inventoryStats?.outOfStock} out` : "Healthy",
+      positive: (inventoryStats?.outOfStock ?? 0) === 0 && (inventoryStats?.lowStock ?? 0) === 0,
+      comparison: `${inventoryStats?.outOfStock ?? 0} out of stock · ${inventoryStats?.inStock ?? 0} healthy`,
+      icon: AlertTriangle,
+      accentBg: (inventoryStats?.outOfStock ?? 0) > 0 ? "bg-rose-50" : "bg-amber-50",
+      accentText: (inventoryStats?.outOfStock ?? 0) > 0 ? "text-rose-600" : "text-amber-600",
     },
   ];
 
@@ -247,48 +230,46 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      {/* KPI Cards (Consolidated 4-card operational layout) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
-            <Card key={kpi.title} className="overflow-hidden">
+            <Card key={kpi.title} className="overflow-hidden rounded-[24px] border-[#EEDFE5] bg-white transition-all hover:border-[#D96B91]/40 hover:shadow-xs">
               <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1.5 min-w-0">
-                    <p className="text-xs font-medium text-[#806B73]">
-                      {kpi.title}
-                    </p>
-                    <p className="text-xl sm:text-2xl font-bold tracking-tight text-[#33272C] truncate">
-                      {kpi.value}
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#7A6870] truncate">
+                    {kpi.title}
+                  </p>
                   <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${kpi.accentBg}`}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${kpi.accentBg}`}
                   >
-                    <Icon className={`h-5 w-5 ${kpi.accentText}`} />
+                    <Icon className={`h-4.5 w-4.5 ${kpi.accentText}`} />
                   </div>
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-xs">
+                <div className="mt-2 min-w-0">
+                  <p className="text-xl sm:text-2xl font-black tracking-tight text-[#38262E] tabular-nums whitespace-normal break-words leading-tight">
+                    {kpi.value}
+                  </p>
+                </div>
+                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-[#F0E1E6]/60 pt-3 text-xs">
                   <span
-                    className={`inline-flex items-center gap-0.5 font-semibold ${
-                      kpi.positive ? "text-emerald-600" : "text-amber-600"
+                    className={`inline-flex items-center gap-0.5 font-semibold text-[11px] px-2 py-0.5 rounded-full shrink-0 ${
+                      kpi.positive
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-700"
                     }`}
                   >
                     {kpi.positive ? (
-                      <TrendingUp className="h-3.5 w-3.5" />
+                      <TrendingUp className="h-3 w-3" />
                     ) : (
-                      <TrendingDown className="h-3.5 w-3.5" />
+                      <TrendingDown className="h-3 w-3" />
                     )}
                     {kpi.change}
                   </span>
-                  <span className="text-[#806B73] truncate">{kpi.comparison}</span>
-                </div>
-                <div className="mt-3 h-1 w-full rounded-full bg-[#FDF6F8] overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-[#E99AB5] transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, kpi.width))}%` }}
-                  />
+                  <span className="text-[11px] text-[#7A6870] font-medium text-right break-words flex-1 min-w-[80px]" title={kpi.comparison}>
+                    {kpi.comparison}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -382,152 +363,152 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Orders + Best Selling Products */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="xl:col-span-2 rounded-[28px] border-[#EEDFE5] overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
-            <div>
-              <CardTitle className="text-sm font-semibold text-[#38262E]">{t.recentOrders}</CardTitle>
-              <CardDescription className="text-xs text-[#7A6870]">{t.recentOrdersDesc}</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/admin/orders" className="text-[#B73D67] font-semibold hover:underline flex items-center gap-1 text-xs">
-                {t.viewAllOrders} <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-[#FAF7F8]/80">
-                <TableRow>
-                  <TableHead className="pl-4 font-semibold text-[#38262E]">{t.orderCol}</TableHead>
-                  <TableHead className="font-semibold text-[#38262E]">{t.customerCol}</TableHead>
-                  <TableHead className="hidden md:table-cell font-semibold text-[#38262E]">Phone</TableHead>
-                  <TableHead className="hidden sm:table-cell font-semibold text-[#38262E]">Date</TableHead>
-                  <TableHead className="font-semibold text-[#38262E]">{t.totalCol}</TableHead>
-                  <TableHead className="font-semibold text-[#38262E]">{t.statusCol}</TableHead>
-                  <TableHead className="text-right pr-4 font-semibold text-[#38262E]">{t.actionCol}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentOrders.map((order) => (
-                  <TableRow key={order.id} className="hover:bg-[#FAF7F8]/60 transition-colors">
-                    <TableCell className="font-semibold pl-4">
-                      <Link
-                        href={`/admin/orders/${order.id}`}
-                        className="text-[#B73D67] hover:underline"
-                      >
-                        {order.reference}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-[#38262E] text-sm">
-                          {order.customerName}
+      {/* Recent Orders (100% Full Width) */}
+      <Card className="w-full rounded-[28px] border-[#EEDFE5] overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
+          <div>
+            <CardTitle className="text-sm font-semibold text-[#38262E]">{t.recentOrders}</CardTitle>
+            <CardDescription className="text-xs text-[#7A6870]">{t.recentOrdersDesc}</CardDescription>
+          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/orders" className="text-[#B73D67] font-semibold hover:underline flex items-center gap-1 text-xs">
+              {t.viewAllOrders} <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-[#FAF7F8]/80">
+              <TableRow>
+                <TableHead className="pl-4 font-semibold text-[#38262E]">{t.orderCol}</TableHead>
+                <TableHead className="font-semibold text-[#38262E]">{t.customerCol}</TableHead>
+                <TableHead className="hidden md:table-cell font-semibold text-[#38262E]">Phone</TableHead>
+                <TableHead className="hidden sm:table-cell font-semibold text-[#38262E]">Date</TableHead>
+                <TableHead className="font-semibold text-[#38262E]">{t.totalCol}</TableHead>
+                <TableHead className="font-semibold text-[#38262E]">{t.statusCol}</TableHead>
+                <TableHead className="text-right pr-4 font-semibold text-[#38262E]">{t.actionCol}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentOrders.map((order) => (
+                <TableRow key={order.id} className="hover:bg-[#FAF7F8]/60 transition-colors">
+                  <TableCell className="font-semibold pl-4">
+                    <Link
+                      href={`/admin/orders/${order.id}`}
+                      className="text-[#B73D67] hover:underline"
+                    >
+                      {order.reference}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-medium text-[#38262E] text-sm">
+                        {order.customerName}
+                      </p>
+                      <p className="text-xs text-[#7A6870]">
+                        {order.township}, {order.city}
+                      </p>
+                      {order.nearbyLandmark && (
+                        <p className="text-[10px] text-amber-800 italic">
+                          Near {order.nearbyLandmark}
                         </p>
-                        <p className="text-xs text-[#7A6870]">
-                          {order.township}, {order.city}
-                        </p>
-                        {order.nearbyLandmark && (
-                          <p className="text-[10px] text-amber-800 italic">
-                            Near {order.nearbyLandmark}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-xs text-[#7A6870]">
-                      {order.customerPhone}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell text-xs text-[#7A6870]">
-                      {formatDate(order.createdAt)}
-                    </TableCell>
-                    <TableCell className="font-semibold whitespace-nowrap text-[#38262E]">
-                      {formatMMK(order.total)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <UnifiedOrderStatusBadge
-                          orderStatus={order.orderStatus}
-                          paymentStatus={order.paymentStatus}
-                          paymentMethod={order.paymentMethod}
-                        />
-                        <span className="text-[10px] text-[#7A6870] pl-0.5">
-                          {order.paymentMethod}
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-xs text-[#7A6870]">
+                    {order.customerPhone}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-xs text-[#7A6870]">
+                    {formatDate(order.createdAt)}
+                  </TableCell>
+                  <TableCell className="font-semibold whitespace-nowrap text-[#38262E]">
+                    {formatMMK(order.total)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-0.5">
+                      <UnifiedOrderStatusBadge
+                        orderStatus={order.orderStatus}
+                        paymentStatus={order.paymentStatus}
+                        paymentMethod={order.paymentMethod}
+                      />
+                      <span className="text-[10px] text-[#7A6870] pl-0.5">
+                        {order.paymentMethod}
+                      </span>
+                      {order.transactionReference && (
+                        <span className="text-[10px] font-mono text-[#B73D67] pl-0.5 truncate max-w-[130px]">
+                          {order.transactionReference}
                         </span>
-                        {order.transactionReference && (
-                          <span className="text-[10px] font-mono text-[#B73D67] pl-0.5 truncate max-w-[130px]">
-                            {order.transactionReference}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right pr-4">
-                      <Button variant="ghost" size="sm" asChild aria-label={`View order ${order.reference}`}>
-                        <Link href={`/admin/orders/${order.id}`}>
-                          <Eye className="h-4 w-4 text-[#B73D67]" />
-                          <span className="hidden sm:inline text-xs text-[#B73D67] font-medium">View</span>
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right pr-4">
+                    <Button variant="ghost" size="sm" asChild aria-label={`View order ${order.reference}`}>
+                      <Link href={`/admin/orders/${order.id}`}>
+                        <Eye className="h-4 w-4 text-[#B73D67]" />
+                        <span className="hidden sm:inline text-xs text-[#B73D67] font-medium">View</span>
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-        {/* Best-Selling Products */}
-        <Card className="rounded-[28px] border-[#EEDFE5] overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
-            <div>
-              <CardTitle className="text-sm font-semibold flex items-center gap-1.5 text-[#38262E]">
-                <Sparkles className="h-4 w-4 text-[#B73D67]" /> {t.topSellingProducts}
-              </CardTitle>
-              <CardDescription className="text-xs text-[#7A6870]">{t.topSellingDesc}</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/admin/products" className="text-[#B73D67] font-semibold hover:underline text-xs">
-                {t.navProducts}
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            {bestSellingProducts.length === 0 ? (
-              <p className="py-4 text-center text-xs text-[#806B73]">
-                No sales in the selected period.
-              </p>
-            ) : (
-              bestSellingProducts.map(({ product, unitsSold }) => (
+      {/* Best-Selling Products (100% Full Width) */}
+      <Card className="w-full rounded-[28px] border-[#EEDFE5] overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between pb-3 px-5 border-b border-[#EEDFE5]/60 bg-[#FAF7F8]">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-1.5 text-[#38262E]">
+              <Sparkles className="h-4 w-4 text-[#B73D67]" /> {t.topSellingProducts}
+            </CardTitle>
+            <CardDescription className="text-xs text-[#7A6870]">{t.topSellingDesc}</CardDescription>
+          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/products" className="text-[#B73D67] font-semibold hover:underline text-xs">
+              {t.navProducts}
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-5">
+          {bestSellingProducts.length === 0 ? (
+            <p className="py-4 text-center text-xs text-[#806B73]">
+              No sales in the selected period.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {bestSellingProducts.map(({ product, unitsSold }) => (
                 <Link
                   key={product.id}
                   href={`/admin/products/${product.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-[#F0E1E6]/80 p-2.5 hover:bg-[#FCEEF2]/40 transition-colors"
+                  className="flex items-center gap-3 rounded-2xl border border-[#F0E1E6]/80 bg-[#FAF7F8]/40 p-3 hover:bg-[#FCEEF2]/50 hover:border-[#D96B91]/40 transition-all group"
                 >
                   <Image
                     src={product.images[0]}
                     alt={product.name}
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 rounded-lg object-cover border border-[#F0E1E6] shrink-0"
+                    width={48}
+                    height={48}
+                    className="h-12 w-12 rounded-xl object-cover border border-[#F0E1E6] shrink-0 group-hover:scale-105 transition-transform"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-[#33272C] truncate">
+                    <p className="text-xs font-semibold text-[#33272C] truncate group-hover:text-[#B73D67] transition-colors">
                       {product.name}
                     </p>
-                    <p className="text-[11px] text-[#806B73]">
+                    <p className="text-[11px] text-[#806B73] mt-0.5">
                       {getCategoryName(product.categoryId)} · {unitsSold}{" "}
                       {t.unitsSoldCol}
                     </p>
+                    <p className="text-xs font-bold text-[#D96B91] mt-0.5">
+                      {formatMMK(product.salePrice ?? product.regularPrice)}
+                    </p>
                   </div>
-                  <span className="text-xs font-semibold text-[#D96B91] whitespace-nowrap">
-                    {formatMMK(product.salePrice ?? product.regularPrice)}
-                  </span>
                 </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Low Stock Products */}
       <div className="grid grid-cols-1 gap-4">

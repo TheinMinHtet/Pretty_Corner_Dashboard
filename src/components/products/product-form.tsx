@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Upload, Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +38,7 @@ const DEFAULT_PLACEHOLDER_IMG =
   );
 
 import { normalizeProductSpecification } from "@/modules/catalog/catalog-sync";
+import { formatMMK } from "@/lib/utils";
 
 export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const router = useRouter();
@@ -79,6 +79,39 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const [badge, setBadge] = useState(initialProduct?.badge ?? "");
   const [tagline, setTagline] = useState(initialProduct?.tagline ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const isDirty = React.useMemo(() => {
+    if (mode === "create") {
+      return Boolean(name || description || sku || price || images.length > 0);
+    }
+    return (
+      name !== (initialProduct?.name ?? "") ||
+      description !== (initialProduct?.description ?? "") ||
+      price !== String(initialProduct?.salePrice ?? initialProduct?.regularPrice ?? "") ||
+      stock !== String(initialProduct?.stock ?? "") ||
+      images.length !== (initialProduct?.images?.length ?? 0)
+    );
+  }, [mode, name, description, sku, price, images, stock, initialProduct]);
+
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  const handleCancel = () => {
+    if (
+      isDirty &&
+      !window.confirm("You have unsaved changes. Are you sure you want to discard them?")
+    ) {
+      return;
+    }
+    router.push("/admin/products");
+  };
 
   const compressImage = (file: File, maxDim = 600, quality = 0.75): Promise<string> => {
     return new Promise((resolve) => {
@@ -188,10 +221,15 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" asChild>
-            <Link href="/admin/products" aria-label="Back to products">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+          <Button
+            variant="outline"
+            size="icon"
+            type="button"
+            onClick={handleCancel}
+            aria-label="Back to products"
+            className="cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
@@ -403,7 +441,15 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="prod-price">Price (MMK) *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="prod-price">Price (MMK) *</Label>
+                  {Number(price) > 0 && !isNaN(Number(price)) && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[#FAF7F8] border border-[#EEDFE5] px-2 py-0.5 text-xs text-[#38262E] font-medium">
+                      <span className="text-[#7A6870]">Preview:</span>
+                      <span className="font-bold text-[#B73D67]">{formatMMK(Number(price))}</span>
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="prod-price"
                   type="number"
@@ -466,8 +512,8 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
 
           {/* Action Buttons below Inventory & SKU */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <Button variant="outline" type="button" asChild>
-              <Link href="/admin/products">Cancel</Link>
+            <Button variant="outline" type="button" onClick={handleCancel} className="cursor-pointer">
+              Cancel
             </Button>
             <Button type="submit">
               <Save className="h-4 w-4" />
