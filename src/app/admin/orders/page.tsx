@@ -15,10 +15,11 @@ import {
   Square,
   CheckCircle,
   Package,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { OrderStatus, PaymentStatus } from "@/types/admin";
+import { OrderStatus } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -51,34 +52,40 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  OrderStatusBadge,
-  PaymentStatusBadge,
+  UnifiedOrderStatusBadge,
 } from "@/components/ui/status-badge";
 import { formatDate, formatMMK } from "@/lib/utils";
 
-const ORDER_STATUSES: ("All" | OrderStatus)[] = [
+const UNIFIED_STATUS_OPTIONS = [
   "All",
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Delivered",
-];
-
-const PAYMENT_STATUSES: ("All" | PaymentStatus)[] = [
-  "All",
-  "Pending",
-  "Paid",
+  "Pending COD",
+  "Paid (Upfront)",
+  "Delivered & Paid",
   "Failed",
-  "Expired",
-];
+  "Cancelled",
+] as const;
+
+type UnifiedStatusOption = (typeof UNIFIED_STATUS_OPTIONS)[number];
 
 type SortField = "createdAt" | "total" | "reference";
 type SortDir = "asc" | "desc";
 
 export default function OrdersPage() {
-  const { orders, updateOrderStatus, globalSearch, setGlobalSearch } = useAdminStore();
+  const { orders, updateOrderStatus, globalSearch, setGlobalSearch, refreshData } = useAdminStore();
   const [search, setSearch] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      toast.success("Orders revalidated from database");
+    } catch {
+      toast.error("Failed to refresh orders");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Pick up the header global search (PC-AD shell) once, then clear it.
   useEffect(() => {
@@ -88,8 +95,7 @@ export default function OrdersPage() {
       setGlobalSearch("");
     }
   }, [globalSearch, setGlobalSearch]);
-  const [statusFilter, setStatusFilter] = useState<"All" | OrderStatus>("All");
-  const [paymentFilter, setPaymentFilter] = useState<"All" | PaymentStatus>("All");
+  const [unifiedFilter, setUnifiedFilter] = useState<UnifiedStatusOption>("All");
   const [townshipFilter, setTownshipFilter] = useState<string>("All");
   const [dateFilter, setDateFilter] = useState<"all" | "7d" | "30d">("all");
   const [sortField, setSortField] = useState<SortField>("createdAt");
@@ -127,8 +133,31 @@ export default function OrdersPage() {
 
     return orders
       .filter((o) => {
-        if (statusFilter !== "All" && o.orderStatus !== statusFilter) return false;
-        if (paymentFilter !== "All" && o.paymentStatus !== paymentFilter) return false;
+        if (unifiedFilter !== "All") {
+          if (unifiedFilter === "Pending COD") {
+            if (
+              o.paymentMethod !== "Cash on Delivery" ||
+              o.orderStatus === "Delivered" ||
+              o.orderStatus === "Cancelled" ||
+              o.paymentStatus === "Failed"
+            )
+              return false;
+          } else if (unifiedFilter === "Paid (Upfront)") {
+            if (
+              o.paymentMethod === "Cash on Delivery" ||
+              o.orderStatus === "Delivered" ||
+              o.orderStatus === "Cancelled" ||
+              o.paymentStatus !== "Paid"
+            )
+              return false;
+          } else if (unifiedFilter === "Delivered & Paid") {
+            if (o.orderStatus !== "Delivered") return false;
+          } else if (unifiedFilter === "Failed") {
+            if (o.paymentStatus !== "Failed") return false;
+          } else if (unifiedFilter === "Cancelled") {
+            if (o.orderStatus !== "Cancelled") return false;
+          }
+        }
         if (townshipFilter !== "All" && o.township !== townshipFilter) return false;
         if (dateFilter !== "all" && clientNow !== null) {
           const days = dateFilter === "7d" ? 7 : 30;
@@ -159,7 +188,7 @@ export default function OrdersPage() {
         }
         return sortDir === "asc" ? cmp : -cmp;
       });
-  }, [orders, search, statusFilter, paymentFilter, townshipFilter, dateFilter, sortField, sortDir, clientNow]);
+  }, [orders, search, unifiedFilter, townshipFilter, dateFilter, sortField, sortDir, clientNow]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const paginatedOrders = filteredOrders.slice(
@@ -216,6 +245,16 @@ export default function OrdersPage() {
           <span className="rounded-lg border border-[#F0E1E6] bg-white px-3 py-1.5 font-medium text-[#33272C]">
             {filteredOrders.length} orders found
           </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="h-8 px-3 rounded-lg border-[#F0E1E6] bg-white text-[#33272C] hover:bg-[#FDF2F5] hover:text-[#B73D67] text-xs font-medium cursor-pointer transition-colors shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
         </div>
       </div>
 
@@ -257,38 +296,19 @@ export default function OrdersPage() {
             </Select>
 
             <Select
-              value={statusFilter}
+              value={unifiedFilter}
               onValueChange={(v) => {
-                setStatusFilter(v as "All" | OrderStatus);
+                setUnifiedFilter(v as UnifiedStatusOption);
                 setPage(1);
               }}
             >
               <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Order status" />
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                {ORDER_STATUSES.map((s) => (
+                {UNIFIED_STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s} value={s}>
-                    Order: {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={paymentFilter}
-              onValueChange={(v) => {
-                setPaymentFilter(v as "All" | PaymentStatus);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue placeholder="Payment status" />
-              </SelectTrigger>
-              <SelectContent>
-                {PAYMENT_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    Payment: {s}
+                    Status: {s}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -343,8 +363,7 @@ export default function OrdersPage() {
                 onClick={() => {
                   setSearch("");
                   setTownshipFilter("All");
-                  setStatusFilter("All");
-                  setPaymentFilter("All");
+                  setUnifiedFilter("All");
                   setDateFilter("all");
                 }}
               >
@@ -398,8 +417,7 @@ export default function OrdersPage() {
                       Total <ArrowUpDown className="h-3 w-3" />
                     </button>
                   </TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Order Status</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right pr-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -456,19 +474,20 @@ export default function OrdersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <PaymentStatusBadge status={order.paymentStatus} />
-                          <span className="text-[10px] text-[#7A6870] pl-1">
+                          <UnifiedOrderStatusBadge
+                            orderStatus={order.orderStatus}
+                            paymentStatus={order.paymentStatus}
+                            paymentMethod={order.paymentMethod}
+                          />
+                          <span className="text-[10px] text-[#7A6870] pl-0.5">
                             {order.paymentMethod}
                           </span>
                           {order.transactionReference && (
-                            <span className="text-[10px] font-mono text-[#B73D67] pl-1 truncate max-w-[130px]">
+                            <span className="text-[10px] font-mono text-[#B73D67] pl-0.5 truncate max-w-[130px]">
                               {order.transactionReference}
                             </span>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <OrderStatusBadge status={order.orderStatus} />
                       </TableCell>
                       <TableCell className="text-right pr-4">
                         <Button variant="ghost" size="sm" asChild aria-label={`View order ${order.reference}`}>

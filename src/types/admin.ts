@@ -76,6 +76,7 @@ export interface OrderItem {
   variantLabel?: string;
   quantity: number;
   unitPrice: number;
+  discountAmount?: number;
 }
 
 export interface OrderTimelineEvent {
@@ -117,6 +118,8 @@ export interface Order {
   subtotal: number;
   deliveryFee: number;
   discountAmount: number;
+  promoCode?: string;
+  appliedPromotionId?: string;
   total: number;
   paymentMethod: "KBZPay" | "WavePay" | "CB Pay" | "AYA Pay" | "Cash on Delivery";
   paymentStatus: PaymentStatus;
@@ -166,19 +169,37 @@ export interface StockAdjustment {
   createdAt: string;
 }
 
+export type PromotionTargetType =
+  | "SINGLE_PRODUCT"
+  | "SELECTED_PRODUCTS"
+  | "CATEGORY"
+  | "ENTIRE_STORE";
+
+export type RedemptionMethod = "CODE" | "AUTOMATIC";
+
 export interface Promotion {
   id: string;
+  slug?: string | null;
   title: string;
-  subtitle: string;
+  subtitle?: string | null;
   code: string;
   discountPercentage: number;
   startDate: string;
   endDate: string;
   active: boolean;
-  bannerColor: string;
-  bannerImage?: string;
-  featuredProductIds: string[];
+  targetType: PromotionTargetType;
+  targetSlug?: string | null;
+  redemptionMethod: RedemptionMethod;
+  usageLimit?: number | null;
   usageCount: number;
+  minimumOrderAmount?: number | null;
+  bannerColor: string;
+  bannerImage?: string | null;
+  bannerBadge?: string | null;
+  ctaText?: string | null;
+  ctaLink?: string | null;
+  featuredProductIds: string[];
+  isOutOfStock: boolean;
 }
 
 export interface NotificationItem {

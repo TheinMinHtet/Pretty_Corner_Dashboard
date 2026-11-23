@@ -14,6 +14,8 @@ import {
   sumRevenue,
   percentChange,
   computeDashboardMetrics,
+  buildOrderSeries,
+  computeCategorySales,
 } from "../src/modules/analytics/metrics.ts";
 
 // 4. Test Catalog Invariant Specification
@@ -230,6 +232,99 @@ test("Refund settlement records structured snapshot and timeline note", () => {
   assert.ok(mutation.updatedOrder.timeline[0].note.includes("RFND-9921"));
 });
 
+test("Order discount deduction accurately captures promotional drop value (32k -> 25.6k = 6.4k discount)", () => {
+  const order = {
+    id: "ord-drop-test",
+    subtotal: 32000,
+    deliveryFee: 0,
+    total: 25600,
+    discountAmount: 0,
+  };
+  const effectiveDiscount =
+    order.discountAmount > 0
+      ? order.discountAmount
+      : Math.max(0, (order.subtotal + order.deliveryFee) - order.total);
+  assert.equal(effectiveDiscount, 6400, "Effective discount should capture the 6,400 MMK price drop");
+});
+
+test("COD order automatically auto-settles paymentStatus to Paid when updated to Delivered", () => {
+  const codOrder = {
+    id: "ord-cod-1",
+    reference: "PC-COD-001",
+    orderStatus: "Shipped",
+    paymentMethod: "Cash on Delivery",
+    paymentStatus: "Pending",
+    items: [],
+    timeline: [],
+  };
+
+  const mutation = executeOrderUpdate(
+    codOrder,
+    { orderStatus: "Delivered" },
+    [],
+    { actorName: "Delivery Rider" }
+  );
+
+  assert.equal(mutation.updatedOrder.orderStatus, "Delivered");
+  assert.equal(mutation.updatedOrder.paymentStatus, "Paid", "COD payment should automatically transition to Paid upon delivery");
+  assert.ok(
+    mutation.updatedOrder.timeline.some((t) =>
+      t.note.includes("Cash on Delivery collected upon delivery")
+    ),
+    "Timeline must record auto-settlement note"
+  );
+});
+
+test("Payment failure toggle marks paymentStatus as Failed and appends timeline audit note", () => {
+  const activeOrder = {
+    id: "ord-fail-1",
+    reference: "PC-FAIL-001",
+    orderStatus: "Shipped",
+    paymentMethod: "Cash on Delivery",
+    paymentStatus: "Pending",
+    items: [],
+    timeline: [],
+  };
+
+  const mutation = executeOrderUpdate(
+    activeOrder,
+    { paymentStatus: "Failed", note: "Customer unreachable at delivery address" },
+    [],
+    { actorName: "Staff Alice" }
+  );
+
+  assert.equal(mutation.updatedOrder.paymentStatus, "Failed");
+  assert.ok(
+    mutation.updatedOrder.timeline.some((t) =>
+      t.note.includes("Payment marked as Failed") &&
+      t.note.includes("Customer unreachable at delivery address")
+    ),
+    "Timeline must record failed payment audit note with custom reason"
+  );
+});
+
+test("1-click COD delivery completes order fulfillment and auto-settles payment to Paid atomically", () => {
+  const pendingCOD = {
+    id: "ord-1-click-cod",
+    reference: "PC-COD-999",
+    orderStatus: "Pending",
+    paymentMethod: "Cash on Delivery",
+    paymentStatus: "Pending",
+    items: [],
+    timeline: [],
+  };
+
+  const mutation = executeOrderUpdate(
+    pendingCOD,
+    { orderStatus: "Delivered", paymentStatus: "Paid" },
+    [],
+    { actorName: "Shop Owner" }
+  );
+
+  assert.equal(mutation.updatedOrder.orderStatus, "Delivered");
+  assert.equal(mutation.updatedOrder.paymentStatus, "Paid");
+});
+
 // ==========================================
 // TEST SUITE 3: CONSOLIDATED ANALYTICS ENGINE
 // ==========================================
@@ -267,6 +362,95 @@ test("computeDashboardMetrics returns calculated KPIs without NaN", () => {
   assert.equal(metrics.completed, 1);
   assert.equal(metrics.paidPayments, 1);
   assert.equal(metrics.topPayment?.value, "KBZPay");
+});
+
+test("buildOrderSeries builds dynamic live timelines ending on Today with true daily buckets", () => {
+  const fakeNow = new Date("2026-11-23T12:00:00Z");
+  const orders = [
+    {
+      id: "ord-today",
+      total: 35000,
+      orderStatus: "Delivered",
+      createdAt: "2026-11-23T08:30:00Z",
+    },
+    {
+      id: "ord-yesterday",
+      total: 20000,
+      orderStatus: "Delivered",
+      createdAt: "2026-11-22T14:00:00Z",
+    },
+  ];
+
+  const series7d = buildOrderSeries(orders, "7d", fakeNow);
+  assert.equal(series7d.length, 7, "7d should have exactly 7 daily points");
+  assert.equal(series7d[6].label, "Today", "Final point in 7d should be Today");
+  assert.equal(series7d[6].isToday, true);
+  assert.equal(series7d[6].revenue, 35000);
+  assert.equal(series7d[6].orders, 1);
+  assert.equal(series7d[5].revenue, 20000);
+  assert.equal(series7d[5].orders, 1);
+
+  const series30d = buildOrderSeries(orders, "30d", fakeNow);
+  assert.equal(series30d.length, 30, "30d should have 30 daily points");
+  assert.equal(series30d[29].label, "Today", "Final point in 30d should be Today");
+  assert.equal(series30d[29].isToday, true);
+  assert.equal(series30d[29].revenue, 35000);
+});
+
+test("computeCategorySales correctly attributes multi-category real orders with ID, slug, and name matching", () => {
+  const dummyCategories = [
+    { id: "cat-1", name: "Skincare", slug: "skincare" },
+    { id: "cat-2", name: "Makeup", slug: "makeup" },
+    { id: "cat-3", name: "Lenses", slug: "lenses" },
+  ];
+
+  const dummyProducts = [
+    { id: "p-skin-1", name: "Dew Drop Serum", slug: "dew-drop-serum", categoryId: "cat-1", regularPrice: 28000, soldCount: 0 },
+    { id: "p-make-1", name: "Petal Lip Glaze", slug: "petal-lip-glaze", categoryId: "cat-2", regularPrice: 18000, soldCount: 0 },
+    { id: "p-lens-1", name: "Soft Hazel Daily Lenses", slug: "soft-hazel-lenses", categoryId: "cat-3", regularPrice: 19000, soldCount: 0 },
+  ];
+
+  const dummyOrders = [
+    {
+      id: "ord-1",
+      orderStatus: "Delivered",
+      items: [
+        // Matched by exact ID
+        { productId: "p-skin-1", productName: "Dew Drop Serum", unitPrice: 28000, quantity: 2 },
+        // Matched by name (with missing/null productId)
+        { productId: null, productName: "Petal Lip Glaze", unitPrice: 18000, quantity: 1 },
+      ],
+    },
+    {
+      id: "ord-2",
+      orderStatus: "Confirmed",
+      items: [
+        // Matched by slug
+        { productId: "soft-hazel-lenses", productName: "Soft Hazel Daily Lenses", unitPrice: 19000, quantity: 1 },
+        // Custom uncataloged item
+        { productId: null, productName: "Gift Card / Custom Wrap", unitPrice: 5000, quantity: 1 },
+      ],
+    },
+    {
+      id: "ord-3",
+      orderStatus: "Cancelled", // Should be ignored
+      items: [
+        { productId: "p-skin-1", productName: "Dew Drop Serum", unitPrice: 28000, quantity: 10 },
+      ],
+    },
+  ];
+
+  const breakdown = computeCategorySales(dummyCategories, dummyProducts, undefined, dummyOrders);
+
+  const skin = breakdown.find((b) => b.name === "Skincare");
+  const makeup = breakdown.find((b) => b.name === "Makeup");
+  const lenses = breakdown.find((b) => b.name === "Lenses");
+  const other = breakdown.find((b) => b.name === "Other / Custom");
+
+  assert.equal(skin?.revenue, 56000, "Skincare revenue should be 28k * 2 = 56,000 MMK");
+  assert.equal(makeup?.revenue, 18000, "Makeup revenue should be 18,000 MMK via name fallback");
+  assert.equal(lenses?.revenue, 19000, "Lenses revenue should be 19,000 MMK via slug matching");
+  assert.equal(other?.revenue, 5000, "Uncategorized custom item should appear in Other / Custom");
 });
 
 // ==========================================

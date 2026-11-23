@@ -54,6 +54,7 @@ import {
   DateRange,
   filterOrdersByRange,
   sumRevenue,
+  computeCategorySales,
   computePaymentMethodStats,
   computePaymentStatusStats,
   deriveTopSellingProducts,
@@ -145,23 +146,12 @@ export default function SalesReportsPage() {
   }, [rangeOrders]);
 
   const salesByCategory = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const order of rangeOrders) {
-      if (order.orderStatus === "Cancelled") continue;
-      for (const item of order.items) {
-        const product = products.find((p) => p.id === item.productId);
-        if (!product) continue;
-        totals.set(
-          product.categoryId,
-          (totals.get(product.categoryId) ?? 0) + item.quantity * item.unitPrice
-        );
-      }
-    }
-    return categories.map((cat, idx) => ({
-      name: cat.name,
-      revenue: totals.get(cat.id) ?? 0,
-      color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
-    }));
+    return computeCategorySales(
+      categories,
+      products,
+      CATEGORY_COLORS,
+      rangeOrders
+    );
   }, [categories, products, rangeOrders]);
 
   const ordersByStatus = useMemo(() => {
@@ -279,7 +269,9 @@ export default function SalesReportsPage() {
                 dataKey="label"
                 tickLine={false}
                 axisLine={false}
-                tick={{ fill: "#806B73", fontSize: 12 }}
+                minTickGap={24}
+                interval="preserveStartEnd"
+                tick={{ fill: "#806B73", fontSize: 11 }}
               />
               <YAxis
                 tickLine={false}
@@ -346,7 +338,11 @@ export default function SalesReportsPage() {
                   }}
                   formatter={(value) => [formatMMK(Number(value ?? 0)), "Revenue"]}
                 />
-                <Bar dataKey="revenue" fill="#E99AB5" radius={[0, 6, 6, 0]} barSize={22} />
+                <Bar dataKey="revenue" radius={[0, 6, 6, 0]} barSize={20}>
+                  {salesByCategory.map((entry, index) => (
+                    <Cell key={`cat-bar-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

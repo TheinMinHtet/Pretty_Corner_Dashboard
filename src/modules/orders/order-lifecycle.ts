@@ -315,6 +315,30 @@ export function executeOrderUpdate(
       actor,
       timestamp: now,
     };
+
+    // Invariant: Cash on Delivery automatically settles to Paid when order is Delivered
+    if (
+      input.orderStatus === "Delivered" &&
+      workingOrder.paymentMethod === "Cash on Delivery" &&
+      workingOrder.paymentStatus === "Pending" &&
+      !input.paymentStatus
+    ) {
+      workingOrder = settleOrderPayment(
+        workingOrder,
+        { status: "Paid" },
+        actor
+      );
+      const codSettledNote = "Payment auto-settled: Cash on Delivery collected upon delivery";
+      workingOrder.timeline = [
+        {
+          status: "Delivered",
+          timestamp: now,
+          note: codSettledNote,
+          actor,
+        },
+        ...(workingOrder.timeline || []),
+      ];
+    }
   }
 
   // 2. Payment Status Settlement
@@ -324,6 +348,21 @@ export function executeOrderUpdate(
       { status: input.paymentStatus },
       actor
     );
+
+    if (input.paymentStatus === "Failed") {
+      const failNote = input.note?.trim()
+        ? `Payment marked as Failed: ${input.note.trim()}`
+        : "Payment marked as Failed";
+      workingOrder.timeline = [
+        {
+          status: workingOrder.orderStatus,
+          timestamp: now,
+          note: failNote,
+          actor,
+        },
+        ...(workingOrder.timeline || []),
+      ];
+    }
 
     newActivity = {
       id: generateId("act"),

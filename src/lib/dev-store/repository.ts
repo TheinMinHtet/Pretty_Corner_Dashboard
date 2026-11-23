@@ -40,9 +40,14 @@ export interface StorefrontOrderCreateInput {
     price: number;
     quantity: number;
     image: string;
+    discountAmount?: number;
   }>;
   subtotal: number;
   deliveryFee: number;
+  discount?: number;
+  discountAmount?: number;
+  promoCode?: string;
+  appliedPromotionId?: string;
   total: number;
   paymentMethod: string;
   paymentStatus?: "paid" | "pending" | "failed" | "expired";
@@ -486,8 +491,16 @@ export class JsonFileStoreRepository implements StoreRepository {
         expired: "Expired",
         pending: "Pending",
       };
-      const mappedPaymentStatus: PaymentStatus =
-        paymentStatusMap[input.paymentStatus ?? "pending"] ?? "Pending";
+      const defaultStatus: PaymentStatus =
+        mappedPaymentMethod === "Cash on Delivery" ? "Pending" : "Paid";
+      const mappedPaymentStatus: PaymentStatus = input.paymentStatus
+        ? paymentStatusMap[input.paymentStatus] ?? defaultStatus
+        : defaultStatus;
+
+      const computedDiscount =
+        input.discountAmount ??
+        input.discount ??
+        Math.max(0, (input.subtotal + input.deliveryFee) - input.total);
 
       const newOrder: Order = {
         id: ref,
@@ -516,7 +529,9 @@ export class JsonFileStoreRepository implements StoreRepository {
         }),
         subtotal: input.subtotal,
         deliveryFee: input.deliveryFee,
-        discountAmount: 0,
+        discountAmount: computedDiscount,
+        promoCode: input.promoCode,
+        appliedPromotionId: input.appliedPromotionId,
         total: input.total,
         paymentMethod: mappedPaymentMethod,
         paymentStatus: mappedPaymentStatus,

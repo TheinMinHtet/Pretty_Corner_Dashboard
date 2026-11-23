@@ -68,12 +68,14 @@ const NOTIFICATION_TONES = {
   system: "bg-slate-100 text-slate-600",
 } as const;
 
+const emptySubscribe = () => () => {};
+
 function useIsMounted() {
-  const [mounted, setMounted] = useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-  return mounted;
+  return React.useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

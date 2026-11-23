@@ -1,4 +1,4 @@
-import { Product, ProductVariant, StockAdjustment } from "@/types/admin";
+import { Product, ProductVariant, StockAdjustment, Promotion } from "@/types/admin";
 import { generateId } from "@/lib/utils";
 
 export const COMMON_LENS_POWERS = [
@@ -260,4 +260,27 @@ export function applyStockAdjustment(
   };
 
   return { updatedProduct, adjustment };
+}
+
+/**
+ * Evaluates whether a promotion should be flagged as out-of-stock based on current catalog products stock.
+ */
+export function evaluatePromotionStockout(promo: Promotion, products: Product[]): boolean {
+  if (promo.targetType === "SINGLE_PRODUCT") {
+    const target = promo.targetSlug || promo.featuredProductIds?.[0];
+    if (!target) return false;
+    const matched = products.find((p) => p.id === target || p.slug === target);
+    if (!matched) return false;
+    return (matched.stock || 0) <= 0;
+  }
+
+  if (promo.targetType === "SELECTED_PRODUCTS") {
+    const ids = promo.featuredProductIds || [];
+    if (ids.length === 0) return false;
+    const featuredItems = products.filter((p) => ids.includes(p.id) || ids.includes(p.slug || ""));
+    // If all featured items are out of stock (stock <= 0), mark promotion out of stock
+    return featuredItems.length > 0 && featuredItems.every((p) => (p.stock || 0) <= 0);
+  }
+
+  return false;
 }
