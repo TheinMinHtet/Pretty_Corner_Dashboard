@@ -177,7 +177,9 @@ export function getCustomerDossiers(
     const validOrders = sortedOrders.filter((o) => o.orderStatus !== "Cancelled");
     const totalSpent = validOrders.reduce((sum, o) => sum + (o.total || 0), 0);
     const orderCount = sortedOrders.length;
-    const completedOrdersCount = sortedOrders.filter((o) => o.orderStatus === "Delivered").length;
+    const completedOrdersCount = sortedOrders.filter(
+      (o) => o.orderStatus === "Shipped" || o.paymentStatus === "Paid"
+    ).length;
     const cancelledOrdersCount = sortedOrders.filter((o) => o.orderStatus === "Cancelled").length;
     const activeOrdersCount = orderCount - completedOrdersCount - cancelledOrdersCount;
     const averageOrderValue = validOrders.length > 0 ? Math.round(totalSpent / validOrders.length) : 0;

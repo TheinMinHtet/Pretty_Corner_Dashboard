@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Calendar,
   Navigation,
+  Loader2,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
 import { Customer } from "@/types/admin";
@@ -26,11 +27,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "sonner";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { OrderStatusBadge } from "@/components/ui/status-badge";
+import { PaginationControl } from "@/components/ui/pagination";
 import { formatDate, formatMMK } from "@/lib/utils";
 import {
-  getCustomerDossiers,
+  CustomerDossier,
   getCustomerDossierByPhoneOrId,
 } from "@/modules/customers/customer-dossier";
 
@@ -39,16 +42,41 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  const enrichedCustomers = useMemo(() => {
-    return getCustomerDossiers(orders, storeCustomers || [], { query: search }).map(
-      (d) => ({
-        ...d,
-        custOrders: d.orders,
-        totalOrders: d.orderCount,
-        lastOrder: d.lastOrderDate,
-      })
-    );
-  }, [orders, storeCustomers, search]);
+  // Server-side customer pagination (strictly max 10 per page)
+  const [page, setPage] = useState(1);
+  const [customers, setCustomers] = useState<CustomerDossier[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchCustomers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const sp = new URLSearchParams({
+        page: String(page),
+        limit: "10",
+      });
+      if (search.trim()) sp.set("q", search.trim());
+
+      const res = await fetch(`/api/customers?${sp.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomers(data.customers || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Failed to load customers:", err);
+      toast.error("Failed to load customers");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, search]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on query change
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   const activeDetails = useMemo(() => {
     if (!selectedCustomer) return null;
@@ -78,7 +106,7 @@ export default function CustomersPage() {
           </p>
         </div>
         <span className="rounded-lg border border-[#F0E1E6] bg-white px-3 py-1.5 text-xs font-medium text-[#33272C] self-start">
-          {enrichedCustomers.length} customers
+          {total} customers
         </span>
       </div>
 
@@ -88,7 +116,10 @@ export default function CustomersPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#806B73]" />
             <Input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search customer by name, phone, or email..."
               className="pl-9"
             />
@@ -110,91 +141,125 @@ export default function CustomersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {enrichedCustomers.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FCEEF2] text-xs font-semibold text-[#D96B91]">
-                        {c.name
-                          .split(" ")
-                          .map((w) => w[0])
-                          .slice(0, 2)
-                          .join("")}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#33272C]">{c.name}</p>
-                        {c.email && (
-                          <p className="text-xs text-[#806B73]">{c.email}</p>
-                        )}
-                      </div>
+              {isLoading && customers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
+                      <span className="text-xs">Fetching customer dossiers...</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-[#33272C]">
-                    {c.phone}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="default">{c.totalOrders} orders</Badge>
-                  </TableCell>
-                  <TableCell className="font-semibold whitespace-nowrap">
-                    {formatMMK(c.totalSpent)}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                    {c.lastOrder ? formatDate(c.lastOrder) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedCustomer(c)}
-                    >
-                      <Eye className="h-4 w-4" /> Details
-                    </Button>
+                </TableRow>
+              ) : customers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
+                    <p className="text-sm font-medium text-[#33272C]">
+                      No customers found
+                    </p>
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                customers.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FCEEF2] text-xs font-semibold text-[#D96B91]">
+                          {c.name
+                            .split(" ")
+                            .map((w) => w[0])
+                            .slice(0, 2)
+                            .join("")}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-[#33272C]">{c.name}</p>
+                          {c.email && (
+                            <p className="text-xs text-[#806B73]">{c.email}</p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-[#33272C]">
+                      {c.phone}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="default">{c.orderCount} orders</Badge>
+                    </TableCell>
+                    <TableCell className="font-semibold whitespace-nowrap">
+                      {formatMMK(c.totalSpent)}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                      {c.lastOrderDate ? formatDate(c.lastOrderDate) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedCustomer(c)}
+                        className="h-8 text-xs font-medium"
+                      >
+                        <Eye className="h-4 w-4 mr-1.5" />
+                        View Dossier
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
+
+          {/* Customer Pagination (Max 10 per page, server-fetched) */}
+          <PaginationControl
+            page={page}
+            totalPages={totalPages}
+            totalItems={total}
+            limit={10}
+            isLoading={isLoading}
+            onPageChange={setPage}
+            itemLabel="customers"
+          />
         </CardContent>
       </Card>
 
-      {/* Customer Details Drawer */}
+      {/* Customer Detail Drawer */}
       <Sheet
-        open={Boolean(activeDetails)}
+        open={Boolean(selectedCustomer)}
         onOpenChange={(open) => !open && setSelectedCustomer(null)}
       >
-        <SheetContent side="right" className="p-6 overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           {activeDetails && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 pr-6">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#FCEEF2] text-base font-bold text-[#D96B91]">
+            <div className="space-y-6 pt-6">
+              {/* Profile Header */}
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#FCEEF2] text-xl font-bold text-[#D96B91]">
                   {activeDetails.name
                     .split(" ")
                     .map((w) => w[0])
                     .slice(0, 2)
                     .join("")}
                 </div>
-                <div>
-                  <h3 className="font-serif text-xl font-semibold text-[#33272C]">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-serif text-lg font-bold text-[#33272C] truncate">
                     {activeDetails.name}
                   </h3>
-                  <p className="text-xs text-[#806B73] flex items-center gap-1 mt-0.5">
-                    <Calendar className="h-3 w-3" /> Joined{" "}
-                    {formatDate(activeDetails.joinedAt)}
-                  </p>
+                  <div className="mt-1 space-y-1 text-xs text-[#806B73]">
+                    <p className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-[#D96B91]" />
+                      <span>{activeDetails.phone}</span>
+                    </p>
+                    {activeDetails.email && (
+                      <p className="flex items-center gap-1.5 truncate">
+                        <Mail className="h-3.5 w-3.5 text-[#D96B91]" />
+                        <span className="truncate">{activeDetails.email}</span>
+                      </p>
+                    )}
+                    <p className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-[#D96B91]" />
+                      <span>
+                        Customer since {formatDate(activeDetails.joinedAt)}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-
-              <div className="space-y-1.5 text-xs text-[#806B73]">
-                <p className="flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-[#D96B91]" />
-                  {activeDetails.phone}
-                </p>
-                {activeDetails.email && (
-                  <p className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5 text-[#D96B91]" />
-                    {activeDetails.email}
-                  </p>
-                )}
               </div>
 
               {/* Purchase Stats */}

@@ -53,17 +53,16 @@ export interface AdminTranslationSchema {
   statusProcessing: string;
   statusShipped: string;
   statusDelivered: string;
+  statusExpired: string;
   statusCancelled: string;
 
   payPending: string;
   payPaid: string;
   payFailed: string;
   payExpired: string;
-  payRefunded: string;
   payCancelled: string;
 
   prodActive: string;
-  prodDraft: string;
   prodArchived: string;
 
   inStock: string;
@@ -161,19 +160,18 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     statusPending: "Pending",
     statusConfirmed: "Confirmed",
     statusProcessing: "Processing",
-    statusShipped: "Shipped",
+    statusShipped: "Paid",
     statusDelivered: "Delivered",
+    statusExpired: "Time Expired",
     statusCancelled: "Cancelled",
 
-    payPending: "Pending",
-    payPaid: "Paid",
-    payFailed: "Failed",
-    payExpired: "Expired",
-    payRefunded: "Refunded",
-    payCancelled: "Cancelled",
+    payPending: "Awaiting Payment",
+    payPaid: "Payment Verified / Success",
+    payFailed: "Payment Failed",
+    payExpired: "Time Expired",
+    payCancelled: "Order / Transaction Cancelled",
 
     prodActive: "Active",
-    prodDraft: "Draft",
     prodArchived: "Archived",
 
     inStock: "In Stock",
@@ -263,22 +261,21 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
     sessionExpiredToast: "အချိန်ကြာမြင့်စွာ အသုံးမပြုသဖြင့် လုံခြုံရေးအရ ပြန်လည်ဝင်ရောက်ပေးပါ",
     signedInAs: "အသုံးပြုသူ",
 
-    statusPending: "ဆိုင်းငံ့ထားဆဲ",
+    statusPending: "ငွေပေးချေရန်ကျန် (Pending)",
     statusConfirmed: "အတည်ပြုပြီး",
     statusProcessing: "ပြင်ဆင်နေသည်",
-    statusShipped: "ပို့ဆောင်ဆဲ",
+    statusShipped: "ငွေပေးချေပြီး (Paid)",
     statusDelivered: "ပို့ဆောင်ပြီး",
+    statusExpired: "အချိန်ပြည့် သက်တမ်းကုန်ဆုံး",
     statusCancelled: "ပယ်ဖျက်ပြီး",
 
-    payPending: "ငွေပေးချေရန်ကျန်",
-    payPaid: "ငွေပေးချေပြီး",
-    payFailed: "မအောင်မြင်ပါ",
-    payExpired: "သက်တမ်းကုန်ဆုံး",
-    payRefunded: "ငွေပြန်အမ်းပြီး",
-    payCancelled: "ပယ်ဖျက်ပြီး",
+    payPending: "ငွေပေးချေရန်ကျန် (Awaiting Payment)",
+    payPaid: "ငွေပေးချေပြီး (Payment Verified / Success)",
+    payFailed: "ငွေပေးချေမှု မအောင်မြင်ပါ (Payment Failed)",
+    payExpired: "အချိန်ပြည့် သက်တမ်းကုန်ဆုံး (Time Expired)",
+    payCancelled: "ပယ်ဖျက်ပြီး (Order / Transaction Cancelled)",
 
     prodActive: "ရောင်းချနေသည်",
-    prodDraft: "မူကြမ်း",
     prodArchived: "သိမ်းဆည်းထားသည်",
 
     inStock: "လက်ကျန်ရှိသည်",

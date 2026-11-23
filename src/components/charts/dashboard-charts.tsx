@@ -30,14 +30,32 @@ import {
   DATE_RANGE_LABELS,
 } from "@/modules/analytics/metrics";
 
-const STATUS_COLORS: Record<OrderStatus, string> = {
+import {
+  resolveUnifiedOrderStatus,
+  UNIFIED_STATUS_CONFIG,
+} from "@/components/ui/status-badge";
+
+export const STATUS_COLORS: Record<OrderStatus, string> = {
   Pending: "#F59E0B",
   Confirmed: "#38BDF8",
   Processing: "#A78BFA",
-  Shipped: "#E99AB5",
-  Delivered: "#10B981",
+  Shipped: "#10B981",
+  Expired: "#64748B",
   Cancelled: "#F43F5E",
 };
+
+const UNIFIED_STATUS_COLORS: Record<string, string> = {
+  Paid: "#10B981",
+  Pending: "#F59E0B",
+  Cancelled: "#F43F5E",
+  "Time Expired": "#64748B",
+  Failed: "#EF4444",
+};
+
+function getOrderUnifiedCategory(o: Order): string {
+  const key = resolveUnifiedOrderStatus(o.orderStatus, o.paymentStatus, o.paymentMethod);
+  return UNIFIED_STATUS_CONFIG[key].label;
+}
 
 export function RevenueChartCard({
   orders,
@@ -242,72 +260,107 @@ export function OrdersTrendCard({
 
 export function OrderStatusDistributionCard({ orders }: { orders: Order[] }) {
   const distribution = useMemo(() => {
-    const statuses: OrderStatus[] = [
+    const categories = [
+      "Paid",
       "Pending",
-      "Confirmed",
-      "Processing",
-      "Shipped",
-      "Delivered",
+      "Cancelled",
+      "Time Expired",
+      "Failed",
     ];
-    return statuses
-      .map((status) => ({
-        name: status,
-        value: orders.filter((o) => o.orderStatus === status).length,
-        color: STATUS_COLORS[status],
+    const counts: Record<string, number> = {};
+    categories.forEach((c) => (counts[c] = 0));
+
+    orders.forEach((o) => {
+      const cat = getOrderUnifiedCategory(o);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    const total = orders.length;
+
+    return categories
+      .map((name) => ({
+        name,
+        value: counts[name] || 0,
+        percentage: total > 0 ? Math.round(((counts[name] || 0) / total) * 100) : 0,
+        color: UNIFIED_STATUS_COLORS[name],
       }))
       .filter((d) => d.value > 0);
   }, [orders]);
 
+  const totalOrders = orders.length;
+
   return (
-    <Card>
+    <Card className="rounded-[28px] border-[#F0E1E6] bg-white shadow-xs">
       <CardHeader className="pb-2">
-        <CardTitle>Order Status Distribution</CardTitle>
-        <CardDescription>Current breakdown across {orders.length} orders</CardDescription>
+        <CardTitle className="font-serif text-lg font-bold text-[#33272C]">Order Status Distribution</CardTitle>
+        <CardDescription className="text-xs text-[#806B73]">Real-time live breakdown across {totalOrders} orders</CardDescription>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[190px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={distribution}
-                cx="50%"
-                cy="50%"
-                innerRadius={52}
-                outerRadius={76}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {distribution.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: "12px",
-                  border: "1px solid #F0E1E6",
-                  fontSize: "12px",
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2">
-          {distribution.map((item) => (
-            <div
-              key={item.name}
-              className="flex items-center justify-between text-xs"
-            >
-              <span className="flex items-center gap-1.5 text-[#806B73]">
-                <span
-                  className="h-2.5 w-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
-                {item.name}
-              </span>
-              <span className="font-semibold text-[#33272C]">{item.value}</span>
+        {totalOrders === 0 ? (
+          <div className="h-[200px] flex flex-col items-center justify-center text-center p-4">
+            <p className="text-sm font-semibold text-[#33272C]">No orders recorded</p>
+            <p className="text-xs text-[#806B73]">New orders will automatically distribute here</p>
+          </div>
+        ) : (
+          <>
+            <div className="h-[190px] relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={distribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={54}
+                    outerRadius={78}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {distribution.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: "12px",
+                      border: "1px solid #F0E1E6",
+                      fontSize: "12px",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                    }}
+                    formatter={(val, name, item) => [
+                      `${val} orders (${(item as { payload: { percentage: number } }).payload.percentage}%)`,
+                      name,
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center Donut Total Count */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-2xl font-black text-[#33272C] leading-none">{totalOrders}</span>
+                <span className="text-[10px] uppercase font-bold text-[#806B73] tracking-wider mt-0.5">Orders</span>
+              </div>
             </div>
-          ))}
-        </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3 pt-3 border-t border-[#F5EBF0]">
+              {distribution.map((item) => (
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between text-xs"
+                >
+                  <span className="flex items-center gap-1.5 text-[#806B73] truncate">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="truncate">{item.name}</span>
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <span className="font-bold text-[#33272C]">{item.value}</span>
+                    <span className="text-[10px] text-[#806B73]">({item.percentage}%)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

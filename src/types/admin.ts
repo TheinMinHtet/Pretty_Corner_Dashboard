@@ -3,7 +3,7 @@ export type OrderStatus =
   | "Confirmed"
   | "Processing"
   | "Shipped"
-  | "Delivered"
+  | "Expired"
   | "Cancelled";
 
 export type PaymentStatus =
@@ -11,20 +11,9 @@ export type PaymentStatus =
   | "Paid"
   | "Failed"
   | "Expired"
-  | "Refunded"
   | "Cancelled";
 
-export type ProductStatus = "Active" | "Draft" | "Archived";
-
-export interface ProductVariant {
-  id: string;
-  label: string;
-  color?: string;
-  lensPower?: string;
-  quantity: number;
-  priceOverride?: number;
-  skuSuffix?: string;
-}
+export type ProductStatus = "Active" | "Archived";
 
 export interface Product {
   id: string;
@@ -41,8 +30,6 @@ export interface Product {
   stock: number;
   lowStockThreshold: number;
   status: ProductStatus;
-  isContactLens?: boolean;
-  variants: ProductVariant[];
   soldCount: number;
   badge?: string;
   tagline?: string;
@@ -62,7 +49,6 @@ export interface Category {
   name: string;
   slug: string;
   description: string;
-  image: string;
   active: boolean;
   createdAt: string;
 }
@@ -73,7 +59,6 @@ export interface OrderItem {
   productName: string;
   productImage: string;
   sku: string;
-  variantLabel?: string;
   quantity: number;
   unitPrice: number;
   discountAmount?: number;
@@ -84,16 +69,6 @@ export interface OrderTimelineEvent {
   timestamp: string;
   note: string;
   actor: string;
-}
-
-export interface RefundDetails {
-  amount: number;
-  isFullRefund: boolean;
-  reason: string;
-  transactionReference: string;
-  refundedAt: string;
-  processedBy: string;
-  notes?: string;
 }
 
 export interface Order {
@@ -124,7 +99,6 @@ export interface Order {
   paymentMethod: "KBZPay" | "WavePay" | "CB Pay" | "AYA Pay" | "Cash on Delivery";
   paymentStatus: PaymentStatus;
   transactionReference?: string;
-  refundDetails?: RefundDetails;
   orderStatus: OrderStatus;
   notes?: string;
   timeline: OrderTimelineEvent[];
@@ -158,8 +132,6 @@ export interface StockAdjustment {
   productId: string;
   productName: string;
   sku: string;
-  variantId?: string;
-  variantLabel?: string;
   type: "increase" | "decrease";
   quantity: number;
   previousStock: number;
@@ -292,4 +264,19 @@ export interface AdminSession {
   expiresAt: number;
   lastActiveAt: number;
   rememberMe: boolean;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface InventoryStats {
+  total: number;
+  inStock: number;
+  lowStock: number;
+  outOfStock: number;
 }

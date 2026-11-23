@@ -25,7 +25,11 @@ import {
   Repeat,
 } from "lucide-react";
 import { useAdminStore } from "@/context/admin-store";
-import { OrderStatus } from "@/types/admin";
+import { Order, OrderStatus } from "@/types/admin";
+import {
+  resolveUnifiedOrderStatus,
+  UnifiedStatusKey,
+} from "@/components/ui/status-badge";
 import {
   Card,
   CardContent,
@@ -61,17 +65,16 @@ import {
 } from "@/modules/analytics/metrics";
 
 const CATEGORY_COLORS = ["#D96B91", "#E99AB5", "#F2B6CA", "#F8DDE5", "#806B73"];
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  Pending: "#F59E0B",
-  Confirmed: "#38BDF8",
-  Processing: "#A78BFA",
-  Shipped: "#E99AB5",
-  Delivered: "#10B981",
-  Cancelled: "#F43F5E",
+const STATUS_COLORS: Record<UnifiedStatusKey, string> = {
+  paid: "#10B981",
+  pending: "#F59E0B",
+  expired: "#64748B",
+  cancelled: "#F43F5E",
+  failed: "#EF4444",
 };
 
 export default function SalesReportsPage() {
-  const { orders, products, categories, customers } = useAdminStore();
+  const { orders, products, categories } = useAdminStore();
   const [dateRange, setDateRange] = useState<DateRange>("30d");
 
   const rangeOrders = useMemo(
@@ -91,17 +94,30 @@ export default function SalesReportsPage() {
   );
 
   // Customer Segmentation Analytics (PC-SD-007)
+  // Classification uses each customer's LIFETIME purchase history, so a loyal
+  // shopper who happens to order once inside the selected window is still a
+  // returning buyer. Revenue is attributed to the selected window.
   const customerRetentionStats = useMemo(() => {
-    const customerOrderCounts: Record<string, { count: number; spend: number }> =
-      {};
+    const isCompletedPurchase = (o: Order) =>
+      o.orderStatus !== "Cancelled" &&
+      (o.orderStatus === "Shipped" || o.paymentStatus === "Paid");
+
+    const lifetimePurchases = new Map<string, number>();
+    for (const o of orders) {
+      if (!isCompletedPurchase(o)) continue;
+      lifetimePurchases.set(
+        o.customerId,
+        (lifetimePurchases.get(o.customerId) ?? 0) + 1
+      );
+    }
+
+    const windowSpend = new Map<string, number>();
     for (const o of rangeOrders) {
-      if (!customerOrderCounts[o.customerId]) {
-        customerOrderCounts[o.customerId] = { count: 0, spend: 0 };
-      }
-      customerOrderCounts[o.customerId].count += 1;
-      if (o.orderStatus !== "Cancelled") {
-        customerOrderCounts[o.customerId].spend += o.total;
-      }
+      if (o.orderStatus === "Cancelled") continue;
+      windowSpend.set(
+        o.customerId,
+        (windowSpend.get(o.customerId) ?? 0) + o.total
+      );
     }
 
     let newCustCount = 0;
@@ -109,15 +125,14 @@ export default function SalesReportsPage() {
     let newCustSpend = 0;
     let returningCustSpend = 0;
 
-    for (const c of customers) {
-      const stats = customerOrderCounts[c.id] || { count: 0, spend: 0 };
-      if (stats.count === 0) continue;
-      if (stats.count > 1) {
+    for (const [customerId, spend] of windowSpend) {
+      const completedPurchases = lifetimePurchases.get(customerId) ?? 0;
+      if (completedPurchases >= 2) {
         returningCustCount += 1;
-        returningCustSpend += stats.spend;
+        returningCustSpend += spend;
       } else {
         newCustCount += 1;
-        newCustSpend += stats.spend;
+        newCustSpend += spend;
       }
     }
 
@@ -131,7 +146,7 @@ export default function SalesReportsPage() {
       returningCustSpend,
       repeatRate,
     };
-  }, [customers, rangeOrders]);
+  }, [orders, rangeOrders]);
 
   const trendData = useMemo(
     () => buildOrderSeries(rangeOrders, dateRange),
@@ -155,26 +170,36 @@ export default function SalesReportsPage() {
   }, [categories, products, rangeOrders]);
 
   const ordersByStatus = useMemo(() => {
-    const statuses: OrderStatus[] = [
-      "Pending",
-      "Confirmed",
-      "Processing",
-      "Shipped",
-      "Delivered",
-      "Cancelled",
+    const statuses: { key: UnifiedStatusKey; label: string }[] = [
+      { key: "paid", label: "Paid" },
+      { key: "pending", label: "Pending" },
+      { key: "expired", label: "Time Expired" },
+      { key: "cancelled", label: "Cancelled" },
+      { key: "failed", label: "Failed" },
     ];
     return statuses
       .map((s) => ({
-        name: s,
-        value: rangeOrders.filter((o) => o.orderStatus === s).length,
-        color: STATUS_COLORS[s],
+        name: s.label,
+        value: rangeOrders.filter(
+          (o) =>
+            resolveUnifiedOrderStatus(
+              o.orderStatus,
+              o.paymentStatus,
+              o.paymentMethod
+            ) === s.key
+        ).length,
+        color: STATUS_COLORS[s.key],
       }))
       .filter((d) => d.value > 0);
   }, [rangeOrders]);
 
   const bestSellers = useMemo(
-    () => deriveTopSellingProducts(orders, products),
-    [orders, products]
+    () =>
+      deriveTopSellingProducts(rangeOrders, products, {
+        limit: 6,
+        sortBy: "revenue",
+      }),
+    [rangeOrders, products]
   );
 
   return (
@@ -485,7 +510,7 @@ export default function SalesReportsPage() {
                   {customerRetentionStats.repeatRate}%
                 </p>
                 <p className="text-[11px] text-[#806B73] mt-0.5">
-                  Proportion of customers with 2+ completed purchases
+                  Active shoppers with 2+ completed purchases (all time)
                 </p>
               </div>
               <div className="h-14 w-14 rounded-full bg-white border border-[#F0E1E6] flex items-center justify-center font-serif text-lg font-bold text-[#D96B91] shadow-xs">
@@ -505,7 +530,8 @@ export default function SalesReportsPage() {
                   {customerRetentionStats.newCustCount}
                 </p>
                 <p className="text-[11px] text-[#806B73]">
-                  Revenue: {formatCompactMMK(customerRetentionStats.newCustSpend)}
+                  Period revenue:{" "}
+                  {formatCompactMMK(customerRetentionStats.newCustSpend)}
                 </p>
               </div>
 
@@ -517,7 +543,7 @@ export default function SalesReportsPage() {
                   {customerRetentionStats.returningCustCount}
                 </p>
                 <p className="text-[11px] text-[#806B73]">
-                  Revenue:{" "}
+                  Period revenue:{" "}
                   {formatCompactMMK(customerRetentionStats.returningCustSpend)}
                 </p>
               </div>
@@ -548,7 +574,9 @@ export default function SalesReportsPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Best-Selling Products</CardTitle>
-          <CardDescription>Top revenue-generating items</CardDescription>
+          <CardDescription>
+            Top revenue-generating items in the selected period
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -557,29 +585,39 @@ export default function SalesReportsPage() {
                 <TableHead>Product</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Units Sold</TableHead>
-                <TableHead>Unit Price</TableHead>
-                <TableHead className="text-right">Est. Revenue</TableHead>
+                <TableHead>Avg. Unit Price</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bestSellers.map((p) => {
-                const price = p.salePrice ?? p.regularPrice;
-                return (
-                  <TableRow key={p.id}>
+              {bestSellers.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="py-6 text-center text-xs text-[#806B73]"
+                  >
+                    No sales in the selected period.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                bestSellers.map(({ product, unitsSold, revenue }) => (
+                  <TableRow key={product.id}>
                     <TableCell className="font-medium text-[#33272C]">
-                      {p.name}
+                      {product.name}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-[#806B73]">
-                      {p.sku}
+                      {product.sku}
                     </TableCell>
-                    <TableCell>{p.soldCount}</TableCell>
-                    <TableCell>{formatMMK(price)}</TableCell>
+                    <TableCell>{unitsSold}</TableCell>
+                    <TableCell>
+                      {formatMMK(unitsSold > 0 ? revenue / unitsSold : 0)}
+                    </TableCell>
                     <TableCell className="text-right font-semibold text-[#D96B91]">
-                      {formatMMK(p.soldCount * price)}
+                      {formatMMK(revenue)}
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

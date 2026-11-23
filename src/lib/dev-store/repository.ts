@@ -4,20 +4,20 @@ import {
   ActivityLogItem,
   Category,
   Customer,
+  InventoryStats,
   NotificationItem,
   Order,
   OrderStatus,
+  PaginatedResult,
   PaymentStatus,
   Product,
   Promotion,
-  RefundDetails,
   StockAdjustment,
   StoreSettings,
 } from "@/types/admin";
 import { generateId } from "@/lib/utils";
 import {
   applyStockAdjustment,
-  reconcileProductStock,
 } from "@/modules/catalog/catalog-sync";
 import {
   executeOrderUpdate,
@@ -58,7 +58,6 @@ export interface OrderUpdateInput {
   paymentStatus?: PaymentStatus;
   transactionReference?: string;
   note?: string;
-  refund?: Omit<RefundDetails, "refundedAt" | "processedBy">;
 }
 
 /**
@@ -68,6 +67,7 @@ export interface OrderUpdateInput {
  */
 export interface StoreRepository {
   getAllData(): Promise<DevStoreData>;
+  getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }>;
   resetToSeed(): Promise<DevStoreData>;
 
   listProducts(filters?: {
@@ -75,6 +75,16 @@ export interface StoreRepository {
     status?: string;
     q?: string;
   }): Promise<Product[]>;
+  listProductsPaginated(params: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    status?: string;
+    stock?: "all" | "in" | "low" | "out" | "alert";
+    q?: string;
+    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortDir?: "asc" | "desc";
+  }): Promise<PaginatedResult<Product> & { stats: InventoryStats }>;
   getProduct(idOrSlug: string): Promise<Product | null>;
   createProduct(
     input: Omit<Product, "id" | "createdAt" | "updatedAt" | "soldCount"> & {
@@ -89,6 +99,11 @@ export interface StoreRepository {
   deleteProduct(id: string): Promise<boolean>;
 
   listCategories(): Promise<Category[]>;
+  listCategoriesPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Category & { productCount: number }>>;
   createCategory(
     input: Omit<Category, "id" | "createdAt">
   ): Promise<Category>;
@@ -99,6 +114,11 @@ export interface StoreRepository {
   deleteCategory(id: string): Promise<boolean>;
 
   listCustomers(): Promise<Customer[]>;
+  listCustomersPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Customer>>;
 
   listOrders(): Promise<Order[]>;
   getOrder(idOrRef: string): Promise<Order | null>;
@@ -110,13 +130,16 @@ export interface StoreRepository {
 
   adjustStock(input: {
     productId: string;
-    variantId?: string;
     type: "increase" | "decrease";
     quantity: number;
     reason: string;
   }): Promise<{ product: Product; adjustment: StockAdjustment } | null>;
 
   listStockAdjustments(): Promise<StockAdjustment[]>;
+  listStockAdjustmentsPaginated(params: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResult<StockAdjustment>>;
 
   createPromotion(
     input: Omit<Promotion, "id" | "usageCount">
@@ -239,6 +262,25 @@ export class JsonFileStoreRepository implements StoreRepository {
     };
   }
 
+  async getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }> {
+    const data = await this.ensureInitialized();
+    const derived = deriveCustomersFromOrders(data.orders ?? []);
+    const inventoryStats: InventoryStats = {
+      total: data.products.length,
+      outOfStock: data.products.filter((p) => p.stock === 0).length,
+      lowStock: data.products.filter(
+        (p) => p.stock > 0 && p.stock <= p.lowStockThreshold
+      ).length,
+      inStock: data.products.filter((p) => p.stock > p.lowStockThreshold).length,
+    };
+    return {
+      ...data,
+      products: [], // Do NOT load all products at the start of the project!
+      customers: derived.length > 0 ? derived : data.customers,
+      inventoryStats,
+    };
+  }
+
   async resetToSeed(): Promise<DevStoreData> {
     return this.withWriteLock(() => {
       const seed = createSeedData();
@@ -280,6 +322,97 @@ export class JsonFileStoreRepository implements StoreRepository {
     return list;
   }
 
+  async listProductsPaginated(params: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    status?: string;
+    stock?: "all" | "in" | "low" | "out" | "alert";
+    q?: string;
+    sortKey?: "name" | "price" | "stock" | "createdAt";
+    sortDir?: "asc" | "desc";
+  }): Promise<PaginatedResult<Product> & { stats: InventoryStats }> {
+    const data = await this.ensureInitialized();
+    let list = [...data.products];
+
+    // Compute global inventory stats before filtering
+    const stats: InventoryStats = {
+      total: list.length,
+      outOfStock: list.filter((p) => p.stock === 0).length,
+      lowStock: list.filter(
+        (p) => p.stock > 0 && p.stock <= p.lowStockThreshold
+      ).length,
+      inStock: list.filter((p) => p.stock > p.lowStockThreshold).length,
+    };
+
+    if (params.status && params.status !== "All") {
+      list = list.filter((p) => p.status === params.status);
+    }
+    if (params.category && params.category !== "all") {
+      const cat = data.categories.find(
+        (c) => c.id === params.category || c.slug === params.category
+      );
+      if (cat) {
+        list = list.filter((p) => p.categoryId === cat.id);
+      } else {
+        list = list.filter((p) => p.categoryId === params.category);
+      }
+    }
+    if (params.stock && params.stock !== "all") {
+      if (params.stock === "out") {
+        list = list.filter((p) => p.stock === 0);
+      } else if (params.stock === "low") {
+        list = list.filter((p) => p.stock > 0 && p.stock <= p.lowStockThreshold);
+      } else if (params.stock === "in") {
+        list = list.filter((p) => p.stock > p.lowStockThreshold);
+      } else if (params.stock === "alert") {
+        list = list.filter((p) => p.stock <= p.lowStockThreshold).sort((a, b) => a.stock - b.stock);
+      }
+    }
+    if (params.q?.trim()) {
+      const q = params.q.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q) ||
+          p.brand.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q)
+      );
+    }
+
+    const sortKey = params.sortKey || "name";
+    const sortDir = params.sortDir === "desc" ? -1 : 1;
+    list.sort((a, b) => {
+      if (sortKey === "price") {
+        const priceA = a.salePrice ?? a.regularPrice;
+        const priceB = b.salePrice ?? b.regularPrice;
+        return (priceA - priceB) * sortDir;
+      }
+      if (sortKey === "stock") {
+        return (a.stock - b.stock) * sortDir;
+      }
+      if (sortKey === "createdAt") {
+        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * sortDir;
+      }
+      return a.name.localeCompare(b.name) * sortDir;
+    });
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(10, Math.max(1, Number(params.limit) || 10));
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = list.slice((page - 1) * limit, page * limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+      stats,
+    };
+  }
+
   async getProduct(idOrSlug: string): Promise<Product | null> {
     const data = await this.ensureInitialized();
     return (
@@ -306,7 +439,7 @@ export class JsonFileStoreRepository implements StoreRepository {
         ...input,
         id: uniqueId,
         slug: input.slug || uniqueId,
-        stock: reconcileProductStock(input as Product),
+        stock: input.stock ?? 0,
         soldCount: input.soldCount ?? 0,
         createdAt: now,
         updatedAt: now,
@@ -345,9 +478,6 @@ export class JsonFileStoreRepository implements StoreRepository {
         id: existing.id,
         updatedAt: now,
       };
-      if (updates.variants !== undefined) {
-        merged.stock = reconcileProductStock(merged);
-      }
 
       const next: DevStoreData = {
         ...data,
@@ -391,6 +521,51 @@ export class JsonFileStoreRepository implements StoreRepository {
   async listCategories(): Promise<Category[]> {
     const data = await this.ensureInitialized();
     return data.categories;
+  }
+
+  async listCategoriesPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Category & { productCount: number }>> {
+    const data = await this.ensureInitialized();
+    let list = [...data.categories];
+
+    if (params.q?.trim()) {
+      const q = params.q.trim().toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q) ||
+          c.slug.toLowerCase().includes(q)
+      );
+    }
+
+    const countMap = new Map<string, number>();
+    for (const p of data.products) {
+      if (p.categoryId) {
+        countMap.set(p.categoryId, (countMap.get(p.categoryId) ?? 0) + 1);
+      }
+    }
+
+    const categoriesWithCount = list.map((c) => ({
+      ...c,
+      productCount: countMap.get(c.id) ?? 0,
+    }));
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(10, Math.max(1, Number(params.limit) || 10));
+    const total = categoriesWithCount.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = categoriesWithCount.slice((page - 1) * limit, page * limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   async createCategory(
@@ -450,6 +625,40 @@ export class JsonFileStoreRepository implements StoreRepository {
     const derived = deriveCustomersFromOrders(data.orders ?? []);
     if (derived.length > 0) return derived;
     return data.customers ?? [];
+  }
+
+  async listCustomersPaginated(params: {
+    page?: number;
+    limit?: number;
+    q?: string;
+  }): Promise<PaginatedResult<Customer>> {
+    const data = await this.ensureInitialized();
+    const derived = deriveCustomersFromOrders(data.orders ?? []);
+    let list = derived.length > 0 ? derived : (data.customers ?? []);
+
+    if (params.q?.trim()) {
+      const q = params.q.trim().toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q) ||
+          (c.email?.toLowerCase().includes(q) ?? false)
+      );
+    }
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(10, Math.max(1, Number(params.limit) || 10));
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = list.slice((page - 1) * limit, page * limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   async listOrders(): Promise<Order[]> {
@@ -522,7 +731,6 @@ export class JsonFileStoreRepository implements StoreRepository {
             productName: item.name,
             productImage: item.image || prod?.images[0] || "/assets/dew-drop-serum.png",
             sku: prod?.sku || item.productId.toUpperCase(),
-            variantLabel: item.size || undefined,
             quantity: item.quantity,
             unitPrice: item.price,
           };
@@ -548,7 +756,7 @@ export class JsonFileStoreRepository implements StoreRepository {
         updatedAt: now,
       };
 
-      // Deduct stock from purchased products and matching variants
+      // Deduct stock from purchased products
       const updatedProducts = [...data.products];
       const newAdjustments: StockAdjustment[] = [];
       let notifications = appendNotification(data.notifications, {
@@ -565,18 +773,9 @@ export class JsonFileStoreRepository implements StoreRepository {
         if (productIndex === -1) continue;
 
         const product = updatedProducts[productIndex];
-        let matchedVariantId: string | undefined;
-
-        if (product.variants && product.variants.length > 0) {
-          const matchedVariant = orderItem.variantLabel
-            ? product.variants.find((v) => v.label === orderItem.variantLabel)
-            : product.variants[0];
-          matchedVariantId = matchedVariant?.id ?? product.variants[0].id;
-        }
 
         const { updatedProduct, adjustment } = applyStockAdjustment(
           product,
-          matchedVariantId,
           "decrease",
           orderItem.quantity,
           input.customerName,
@@ -672,7 +871,6 @@ export class JsonFileStoreRepository implements StoreRepository {
 
   async adjustStock(input: {
     productId: string;
-    variantId?: string;
     type: "increase" | "decrease";
     quantity: number;
     reason: string;
@@ -683,7 +881,6 @@ export class JsonFileStoreRepository implements StoreRepository {
 
       const { updatedProduct, adjustment } = applyStockAdjustment(
         target,
-        input.variantId,
         input.type,
         input.quantity,
         data.settings.adminProfile.name,
@@ -712,6 +909,30 @@ export class JsonFileStoreRepository implements StoreRepository {
   async listStockAdjustments(): Promise<StockAdjustment[]> {
     const data = await this.ensureInitialized();
     return data.stockHistory;
+  }
+
+  async listStockAdjustmentsPaginated(params: {
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedResult<StockAdjustment>> {
+    const data = await this.ensureInitialized();
+    const list = [...(data.stockHistory || [])].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(10, Math.max(1, Number(params.limit) || 10));
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const items = list.slice((page - 1) * limit, page * limit);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   async createPromotion(

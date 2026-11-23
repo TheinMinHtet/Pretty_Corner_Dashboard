@@ -6,7 +6,6 @@ import Image from "next/image";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
-  MapPin,
   Phone,
   Mail,
   CreditCard,
@@ -16,12 +15,8 @@ import {
   Copy,
   Check,
   ReceiptText,
-  Store,
   Truck,
-  Navigation,
-  RotateCcw,
   AlertCircle,
-  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -35,16 +30,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -56,24 +41,10 @@ import {
   OrderStatusBadge,
   PaymentStatusBadge,
   UnifiedOrderStatusBadge,
+  UnifiedStatusSelector,
+  UNIFIED_STATUS_CONFIG,
 } from "@/components/ui/status-badge";
-import { formatDateTime, formatMMK, cn } from "@/lib/utils";
-
-const ALL_ORDER_STATUSES: OrderStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Delivered",
-];
-
-const ALL_PAYMENT_STATUSES: PaymentStatus[] = [
-  "Pending",
-  "Paid",
-  "Failed",
-  "Expired",
-  "Refunded",
-];
+import { formatDateTime, formatMMK } from "@/lib/utils";
 
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -81,32 +52,15 @@ export default function OrderDetailsPage() {
     orders,
     updateOrderStatus,
     updatePaymentStatus,
+    updateUnifiedStatus,
     updatePaymentReference,
-    processOrderRefund,
   } = useAdminStore();
   const order = orders.find((o) => o.id === params.id);
-
-  const [selectedStatus, setSelectedStatus] = useState<OrderStatus>(
-    order?.orderStatus ?? "Pending"
-  );
-  const [statusNote, setStatusNote] = useState("");
 
   // Payment Reference Editing state
   const [isEditingTrx, setIsEditingTrx] = useState(false);
   const [trxInput, setTrxInput] = useState(order?.transactionReference ?? "");
   const [copiedTrx, setCopiedTrx] = useState(false);
-
-  // Refund Modal state
-  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
-  const [refundAmount, setRefundAmount] = useState(
-    order ? String(order.total) : "0"
-  );
-  const [isFullRefund, setIsFullRefund] = useState(true);
-  const [refundReason, setRefundReason] = useState(
-    "Customer requested cancellation"
-  );
-  const [refundTrxRef, setRefundTrxRef] = useState("");
-  const [refundNotes, setRefundNotes] = useState("");
 
   if (!order) {
     return (
@@ -135,15 +89,19 @@ export default function OrderDetailsPage() {
       ? order.discountAmount
       : Math.max(0, (displaySubtotal + displayDeliveryFee) - order.total);
 
-  const handleMarkDeliveredAndPaid = () => {
-    updateOrderStatus(order.id, "Delivered");
+  const handleMarkPaidInTransit = () => {
+    updateOrderStatus(order.id, "Shipped");
     updatePaymentStatus(order.id, "Paid");
-    toast.success(`Order ${order.reference} marked as Delivered & Paid! 🎉`);
+    toast.success(`Order ${order.reference} marked as Paid! 🚚`);
   };
 
-  const handleMarkDelivered = () => {
-    updateOrderStatus(order.id, "Delivered");
-    toast.success(`Order ${order.reference} marked as Delivered! 🎉`);
+  const handleCancelOrder = () => {
+    const confirmed = window.confirm(
+      "Cancelling this order will automatically restore all item quantities back to active inventory and log an audit adjustment. Proceed?"
+    );
+    if (!confirmed) return;
+    updateUnifiedStatus(order.id, "cancelled", "Cancelled by admin");
+    toast.error(`Order ${order.reference} cancelled and stock restored`);
   };
 
   const handleToggleFailedPayment = () => {
@@ -161,7 +119,7 @@ export default function OrderDetailsPage() {
       toast.error(`Order ${order.reference} payment marked as Failed`);
     } else {
       const restoredStatus: PaymentStatus =
-        order.orderStatus === "Delivered" || order.paymentMethod !== "Cash on Delivery"
+        order.paymentMethod !== "Cash on Delivery"
           ? "Paid"
           : "Pending";
       updatePaymentStatus(order.id, restoredStatus);
@@ -169,28 +127,6 @@ export default function OrderDetailsPage() {
         `Payment reactivated and restored to ${restoredStatus}`
       );
     }
-  };
-
-  const handleProcessRefund = () => {
-    const amt = Number(refundAmount);
-    if (isNaN(amt) || amt <= 0) {
-      toast.error("Please enter a valid refund amount");
-      return;
-    }
-    if (!refundReason.trim()) {
-      toast.error("Please provide a refund reason");
-      return;
-    }
-    processOrderRefund(order.id, {
-      amount: amt,
-      isFullRefund,
-      reason: refundReason.trim(),
-      transactionReference:
-        refundTrxRef.trim() || order.transactionReference || "REFUND-VOUCHER",
-      notes: refundNotes.trim() || undefined,
-    });
-    setIsRefundModalOpen(false);
-    toast.success(`Refund of ${formatMMK(amt)} processed successfully`);
   };
 
   return (
@@ -208,8 +144,11 @@ export default function OrderDetailsPage() {
               <h2 className="font-serif text-2xl font-semibold text-[#33272C]">
                 {order.reference}
               </h2>
-              <OrderStatusBadge status={order.orderStatus} />
-              <PaymentStatusBadge status={order.paymentStatus} />
+              <UnifiedOrderStatusBadge
+                orderStatus={order.orderStatus}
+                paymentStatus={order.paymentStatus}
+                paymentMethod={order.paymentMethod}
+              />
             </div>
             <p className="text-xs text-[#806B73] mt-0.5">
               Placed on {formatDateTime(order.createdAt)}
@@ -255,11 +194,6 @@ export default function OrderDetailsPage() {
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-[#806B73]">
                             <span>SKU: {item.sku}</span>
-                            {item.variantLabel && (
-                              <span className="rounded-md bg-[#FCEEF2] px-2 py-0.5 text-[11px] font-medium text-[#D96B91]">
-                                {item.variantLabel}
-                              </span>
-                            )}
                             {hasDiscount ? (
                               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                                 ✨ Promo Applied {order.promoCode ? `(${order.promoCode})` : ""} (-{formatMMK(item.discountAmount!)})
@@ -427,6 +361,26 @@ export default function OrderDetailsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
+              {/* Admin Unified Status Changer */}
+              <div className="space-y-1.5 pb-1">
+                <label className="text-xs font-semibold text-[#806B73] flex items-center justify-between">
+                  <span>Change Order Status</span>
+                  <span className="text-[10px] text-[#B73D67] font-normal">Real-time sync</span>
+                </label>
+                <div className="pt-0.5">
+                  <UnifiedStatusSelector
+                    orderStatus={order.orderStatus}
+                    paymentStatus={order.paymentStatus}
+                    paymentMethod={order.paymentMethod}
+                    onStatusChange={(newKey) => {
+                      updateUnifiedStatus(order.id, newKey);
+                      const label = UNIFIED_STATUS_CONFIG[newKey].label;
+                      toast.success(`Order ${order.reference} status updated to ${label}`);
+                    }}
+                  />
+                </div>
+              </div>
+
               {/* Dynamic Status Banner */}
               {order.paymentStatus === "Failed" ? (
                 <div className="rounded-2xl border border-rose-300 bg-rose-50 p-3.5 space-y-1">
@@ -448,21 +402,36 @@ export default function OrderDetailsPage() {
                     All items have been restored to inventory.
                   </p>
                 </div>
-              ) : order.orderStatus === "Delivered" ? (
+              ) : order.paymentStatus === "Paid" ? (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 space-y-1">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      Delivered & Paid
+                      Paid
                     </p>
                     <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-                      Completed
+                      Verified
                     </span>
                   </div>
                   <p className="text-[11px] text-emerald-700">
                     {order.paymentMethod === "Cash on Delivery"
-                      ? "Cash collected upon delivery"
-                      : "Delivered to customer · Paid upfront"}
+                      ? "Cash collected upon transit"
+                      : "Paid upfront · In transit to customer"}
+                  </p>
+                </div>
+              ) : order.orderStatus === "Expired" || order.paymentStatus === "Expired" ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-slate-600" />
+                      Time Expired
+                    </p>
+                    <span className="text-[10px] font-semibold text-slate-700 bg-slate-200/90 px-2 py-0.5 rounded-full">
+                      Expired
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600">
+                    5-minute payment window elapsed without customer completion.
                   </p>
                 </div>
               ) : order.paymentMethod === "Cash on Delivery" ? (
@@ -470,7 +439,7 @@ export default function OrderDetailsPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                       <Clock className="h-4 w-4 text-amber-600" />
-                      Pending Delivery (COD)
+                      Pending
                     </p>
                     <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full">
                       {formatMMK(order.total)}
@@ -488,7 +457,7 @@ export default function OrderDetailsPage() {
                       Paid upfront ({order.paymentMethod})
                     </p>
                     <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-                      In Transit
+                      Verified
                     </span>
                   </div>
                   <p className="text-[11px] text-emerald-700">
@@ -497,25 +466,15 @@ export default function OrderDetailsPage() {
                 </div>
               )}
 
-              {/* THE ONE BUTTON */}
-              {order.orderStatus !== "Delivered" && order.orderStatus !== "Cancelled" && (
-                order.paymentMethod === "Cash on Delivery" ? (
-                  <Button
-                    onClick={handleMarkDeliveredAndPaid}
-                    className="w-full h-12 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
-                  >
-                    <CheckCircle2 className="h-5 w-5" />
-                    <span>Mark Delivered & Paid</span>
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleMarkDelivered}
-                    className="w-full h-12 text-sm font-bold bg-[#D96B91] hover:bg-[#c2567c] text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
-                  >
-                    <CheckCircle2 className="h-5 w-5" />
-                    <span>Mark as Delivered</span>
-                  </Button>
-                )
+              {/* Status Action Button */}
+              {order.orderStatus !== "Cancelled" && order.orderStatus !== "Expired" && order.paymentStatus !== "Paid" && (
+                <Button
+                  onClick={handleMarkPaidInTransit}
+                  className="w-full h-12 text-sm font-bold bg-[#B73D67] hover:bg-[#a33259] text-white rounded-2xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                >
+                  <Truck className="h-5 w-5" />
+                  <span>Mark as Paid</span>
+                </Button>
               )}
 
               {/* 1-Click Failed Toggle */}
@@ -539,7 +498,7 @@ export default function OrderDetailsPage() {
                   className="w-full h-9 text-xs rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer font-semibold shadow-xs"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  Re-activate Order (Restore to {order.orderStatus === "Delivered" || order.paymentMethod !== "Cash on Delivery" ? "Paid" : "Pending"})
+                  Re-activate Order (Restore to {order.paymentMethod !== "Cash on Delivery" ? "Paid" : "Pending"})
                 </Button>
               )}
 
@@ -629,40 +588,18 @@ export default function OrderDetailsPage() {
                 )}
               </div>
 
-              {/* Refund Audit Section */}
-              {order.refundDetails ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-rose-800 flex items-center gap-1.5">
-                      <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
-                      Refund Processed ({order.refundDetails.isFullRefund ? "Full" : "Partial"})
-                    </span>
-                    <span className="font-semibold text-rose-900 text-xs">
-                      {formatMMK(order.refundDetails.amount)}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-[#806B73]">
-                    Reason: {order.refundDetails.reason} · Trx: {order.refundDetails.transactionReference}
-                  </p>
+              {order.orderStatus !== "Cancelled" && (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelOrder}
+                    className="w-full text-xs h-8 text-[#806B73] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                  >
+                    Cancel Order
+                  </Button>
                 </div>
-              ) : (
-                order.paymentStatus === "Paid" && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setRefundAmount(String(order.total));
-                        setIsRefundModalOpen(true);
-                      }}
-                      className="flex-1 text-xs h-8 rounded-xl border-[#F0E1E6] text-[#806B73] hover:text-[#D96B91] hover:bg-[#FCEEF2]"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5 mr-1 text-[#D96B91]" />
-                      Process Refund
-                    </Button>
-                  </div>
-                )
               )}
             </CardContent>
           </Card>
@@ -696,124 +633,6 @@ export default function OrderDetailsPage() {
           </Card>
         </div>
       </div>
-
-      {/* Process Refund Dialog Modal */}
-      <Dialog open={isRefundModalOpen} onOpenChange={setIsRefundModalOpen}>
-        <DialogContent className="sm:max-w-[480px] rounded-[24px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-[#33272C]">
-              <RotateCcw className="h-4 w-4 text-[#D96B91]" />
-              Process Refund — {order.reference}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-[#806B73]">
-              Record refund details, bank/wallet transaction reference, and update financial reporting.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 text-xs">
-            <div className="p-3 rounded-2xl bg-[#FDF6F8] border border-[#F0E1E6] flex items-center justify-between">
-              <div>
-                <p className="text-[#806B73]">Original Order Total</p>
-                <p className="text-sm font-semibold text-[#33272C]">{formatMMK(order.total)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[#806B73]">Payment Provider</p>
-                <p className="text-sm font-semibold text-[#33272C]">{order.paymentMethod}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="refund-amt">Refund Amount (MMK) *</Label>
-                <Input
-                  id="refund-amt"
-                  type="number"
-                  min={1}
-                  max={order.total}
-                  value={refundAmount}
-                  onChange={(e) => {
-                    setRefundAmount(e.target.value);
-                    setIsFullRefund(Number(e.target.value) >= order.total);
-                  }}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="refund-type">Refund Scope</Label>
-                <Select
-                  value={isFullRefund ? "full" : "partial"}
-                  onValueChange={(val) => {
-                    const full = val === "full";
-                    setIsFullRefund(full);
-                    if (full) setRefundAmount(String(order.total));
-                  }}
-                >
-                  <SelectTrigger id="refund-type" className="h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="full">Full Refund ({formatMMK(order.total)})</SelectItem>
-                    <SelectItem value="partial">Partial Refund</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="refund-reason">Refund Reason *</Label>
-              <Input
-                id="refund-reason"
-                value={refundReason}
-                onChange={(e) => setRefundReason(e.target.value)}
-                placeholder="e.g. Out of stock shade, customer cancellation"
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="refund-trx">Bank / Wallet Refund Reference</Label>
-              <Input
-                id="refund-trx"
-                value={refundTrxRef}
-                onChange={(e) => setRefundTrxRef(e.target.value)}
-                placeholder="e.g. KBZ-RFND-987654321"
-                className="h-9 text-xs font-mono"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="refund-notes">Internal Audit Notes</Label>
-              <Textarea
-                id="refund-notes"
-                rows={2}
-                value={refundNotes}
-                onChange={(e) => setRefundNotes(e.target.value)}
-                placeholder="Optional notes for boutique accounting records..."
-                className="text-xs"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsRefundModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleProcessRefund}
-              className="bg-[#D96B91] hover:bg-[#c2567c] text-white"
-            >
-              Authorize Refund
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

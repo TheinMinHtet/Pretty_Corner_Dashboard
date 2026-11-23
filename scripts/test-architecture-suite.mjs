@@ -21,8 +21,6 @@ import {
 // 4. Test Catalog Invariant Specification
 import {
   normalizeProductSpecification,
-  parseContactLensPowerSuffix,
-  createContactLensPresets,
 } from "../src/modules/catalog/catalog-sync.ts";
 
 console.log("=================================================");
@@ -64,7 +62,7 @@ test("getCustomerDossiers unifies guest orders by normalized phone and computes 
       customerName: "Daw Mya",
       customerPhone: "09791111111",
       total: 35000,
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       deliveryAddress: "No. 12, Strand Rd",
       township: "Kyauktada",
       createdAt: "2026-11-01T10:00:00Z",
@@ -109,7 +107,7 @@ test("getCustomerDossiers unifies guest orders by normalized phone and computes 
 // ==========================================
 console.log("\nSuite 2: Deep Order Lifecycle & Inventory Invariants");
 
-test("Cancellation restores stock at parent and variant levels with audit log", () => {
+test("Cancellation restores stock at product level with audit log", () => {
   const initialProducts = [
     {
       id: "prod-1",
@@ -117,10 +115,6 @@ test("Cancellation restores stock at parent and variant levels with audit log", 
       sku: "PC-SERUM-01",
       stock: 10,
       lowStockThreshold: 5,
-      variants: [
-        { id: "v1", label: "30ml", quantity: 4, skuSuffix: "30ML" },
-        { id: "v2", label: "50ml", quantity: 6, skuSuffix: "50ML" },
-      ],
       soldCount: 15,
     },
   ];
@@ -135,7 +129,6 @@ test("Cancellation restores stock at parent and variant levels with audit log", 
         id: "item-1",
         productId: "prod-1",
         productName: "Dew Drop Serum",
-        variantLabel: "30ml",
         quantity: 2,
         unitPrice: 25000,
       },
@@ -152,9 +145,7 @@ test("Cancellation restores stock at parent and variant levels with audit log", 
 
   assert.equal(mutation.updatedOrder.orderStatus, "Cancelled");
   const updatedProduct = mutation.updatedProducts[0];
-  assert.equal(updatedProduct.stock, 12, "Parent stock should increment from 10 to 12");
-  assert.equal(updatedProduct.variants[0].quantity, 6, "Variant 30ml quantity should increment from 4 to 6");
-  assert.equal(updatedProduct.variants[1].quantity, 6, "Variant 50ml quantity should remain 6");
+  assert.equal(updatedProduct.stock, 12, "Product stock should increment from 10 to 12");
   assert.equal(mutation.newAdjustments.length, 1);
   assert.equal(mutation.newAdjustments[0].type, "increase");
   assert.equal(mutation.newAdjustments[0].quantity, 2);
@@ -163,7 +154,7 @@ test("Cancellation restores stock at parent and variant levels with audit log", 
   assert.equal(mutation.newActivity.action, "Order Cancelled");
 });
 
-test("Delivered transition increments soldCount across ordered products", () => {
+test("Shipped transition increments soldCount across ordered products", () => {
   const initialProducts = [
     {
       id: "prod-2",
@@ -193,43 +184,13 @@ test("Delivered transition increments soldCount across ordered products", () => 
 
   const mutation = executeOrderUpdate(
     pendingOrder,
-    { orderStatus: "Delivered" },
+    { orderStatus: "Shipped" },
     initialProducts,
     { actorName: "Admin" }
   );
 
-  assert.equal(mutation.updatedOrder.orderStatus, "Delivered");
+  assert.equal(mutation.updatedOrder.orderStatus, "Shipped");
   assert.equal(mutation.updatedProducts[0].soldCount, 8, "SoldCount should increment from 5 to 8");
-});
-
-test("Refund settlement records structured snapshot and timeline note", () => {
-  const existingOrder = {
-    id: "ord-102",
-    reference: "PC-ORD-102",
-    orderStatus: "Delivered",
-    paymentStatus: "Paid",
-    timeline: [],
-  };
-
-  const mutation = executeOrderUpdate(
-    existingOrder,
-    {
-      refund: {
-        amount: 15000,
-        isFullRefund: true,
-        reason: "Item arrived damaged",
-        transactionReference: "RFND-9921",
-      },
-    },
-    [],
-    { actorName: "Finance Manager" }
-  );
-
-  assert.equal(mutation.updatedOrder.paymentStatus, "Refunded");
-  assert.ok(mutation.updatedOrder.refundDetails);
-  assert.equal(mutation.updatedOrder.refundDetails.amount, 15000);
-  assert.equal(mutation.updatedOrder.refundDetails.processedBy, "Finance Manager");
-  assert.ok(mutation.updatedOrder.timeline[0].note.includes("RFND-9921"));
 });
 
 test("Order discount deduction accurately captures promotional drop value (32k -> 25.6k = 6.4k discount)", () => {
@@ -247,11 +208,11 @@ test("Order discount deduction accurately captures promotional drop value (32k -
   assert.equal(effectiveDiscount, 6400, "Effective discount should capture the 6,400 MMK price drop");
 });
 
-test("COD order automatically auto-settles paymentStatus to Paid when updated to Delivered", () => {
+test("COD order automatically auto-settles paymentStatus to Paid when updated to Shipped", () => {
   const codOrder = {
     id: "ord-cod-1",
     reference: "PC-COD-001",
-    orderStatus: "Shipped",
+    orderStatus: "Confirmed",
     paymentMethod: "Cash on Delivery",
     paymentStatus: "Pending",
     items: [],
@@ -260,16 +221,16 @@ test("COD order automatically auto-settles paymentStatus to Paid when updated to
 
   const mutation = executeOrderUpdate(
     codOrder,
-    { orderStatus: "Delivered" },
+    { orderStatus: "Shipped" },
     [],
     { actorName: "Delivery Rider" }
   );
 
-  assert.equal(mutation.updatedOrder.orderStatus, "Delivered");
-  assert.equal(mutation.updatedOrder.paymentStatus, "Paid", "COD payment should automatically transition to Paid upon delivery");
+  assert.equal(mutation.updatedOrder.orderStatus, "Shipped");
+  assert.equal(mutation.updatedOrder.paymentStatus, "Paid", "COD payment should automatically transition to Paid upon transit");
   assert.ok(
     mutation.updatedOrder.timeline.some((t) =>
-      t.note.includes("Cash on Delivery collected upon delivery")
+      t.note.includes("Cash on Delivery collected")
     ),
     "Timeline must record auto-settlement note"
   );
@@ -316,12 +277,12 @@ test("1-click COD delivery completes order fulfillment and auto-settles payment 
 
   const mutation = executeOrderUpdate(
     pendingCOD,
-    { orderStatus: "Delivered", paymentStatus: "Paid" },
+    { orderStatus: "Shipped", paymentStatus: "Paid" },
     [],
     { actorName: "Shop Owner" }
   );
 
-  assert.equal(mutation.updatedOrder.orderStatus, "Delivered");
+  assert.equal(mutation.updatedOrder.orderStatus, "Shipped");
   assert.equal(mutation.updatedOrder.paymentStatus, "Paid");
 });
 
@@ -332,7 +293,7 @@ console.log("\nSuite 3: Consolidated Analytics Engine");
 
 test("sumRevenue excludes cancelled orders and percentChange calculates accurate delta", () => {
   const orders = [
-    { id: "1", total: 40000, orderStatus: "Delivered" },
+    { id: "1", total: 40000, orderStatus: "Shipped" },
     { id: "2", total: 20000, orderStatus: "Processing" },
     { id: "3", total: 10000, orderStatus: "Cancelled" },
   ];
@@ -348,7 +309,7 @@ test("computeDashboardMetrics returns calculated KPIs without NaN", () => {
     {
       id: "o1",
       total: 50000,
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       paymentStatus: "Paid",
       paymentMethod: "KBZPay",
       city: "Yangon",
@@ -364,19 +325,35 @@ test("computeDashboardMetrics returns calculated KPIs without NaN", () => {
   assert.equal(metrics.topPayment?.value, "KBZPay");
 });
 
+test("computeDashboardMetrics accounts for all active payment categories correctly", () => {
+  const fakeNow = new Date("2026-11-23T12:00:00Z");
+  const orders = [
+    { id: "1", total: 30000, orderStatus: "Shipped", paymentStatus: "Paid", createdAt: fakeNow.toISOString() },
+    { id: "2", total: 20000, orderStatus: "Pending", paymentStatus: "Pending", createdAt: fakeNow.toISOString() },
+    { id: "3", total: 15000, orderStatus: "Cancelled", paymentStatus: "Cancelled", createdAt: fakeNow.toISOString() },
+    { id: "4", total: 10000, orderStatus: "Pending", paymentStatus: "Failed", createdAt: fakeNow.toISOString() },
+  ];
+
+  const metrics = computeDashboardMetrics(orders, "7d", fakeNow);
+  assert.equal(metrics.totalOrders, 4);
+  assert.equal(metrics.paidPayments, 1);
+  assert.equal(metrics.pendingPayments, 1);
+  assert.equal(metrics.failedPayments, 1);
+});
+
 test("buildOrderSeries builds dynamic live timelines ending on Today with true daily buckets", () => {
   const fakeNow = new Date("2026-11-23T12:00:00Z");
   const orders = [
     {
       id: "ord-today",
       total: 35000,
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       createdAt: "2026-11-23T08:30:00Z",
     },
     {
       id: "ord-yesterday",
       total: 20000,
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       createdAt: "2026-11-22T14:00:00Z",
     },
   ];
@@ -413,7 +390,7 @@ test("computeCategorySales correctly attributes multi-category real orders with 
   const dummyOrders = [
     {
       id: "ord-1",
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       items: [
         // Matched by exact ID
         { productId: "p-skin-1", productName: "Dew Drop Serum", unitPrice: 28000, quantity: 2 },
@@ -458,7 +435,7 @@ test("computeCategorySales correctly attributes multi-category real orders with 
 // ==========================================
 console.log("\nSuite 4: Catalog Invariants & SKU Specification");
 
-test("normalizeProductSpecification canonicalizes SKUs, validates price hierarchy and variants", () => {
+test("normalizeProductSpecification canonicalizes SKUs and validates price hierarchy", () => {
   const invalidResult = normalizeProductSpecification({
     name: "Rose Glow Serum",
     sku: "pc-serum-rg",
@@ -475,26 +452,12 @@ test("normalizeProductSpecification canonicalizes SKUs, validates price hierarch
     sku: "pc-serum-rg",
     regularPrice: 25000,
     salePrice: 20000,
-    variants: [
-      { id: "v1", label: "Bottle A", quantity: 15 },
-      { id: "v2", label: "Bottle B", quantity: 25 },
-    ],
+    stock: 40,
   });
 
   assert.equal(validResult.isValid, true);
   assert.equal(validResult.product.sku, "PC-SERUM-RG", "SKU must be normalized to uppercase");
-  assert.equal(validResult.product.stock, 40, "Parent stock must automatically equal sum of variants (15+25)");
-});
-
-test("parseContactLensPowerSuffix and createContactLensPresets handle standard prescription codes", () => {
-  assert.equal(parseContactLensPowerSuffix("Plano 0.00"), "P00");
-  assert.equal(parseContactLensPowerSuffix("-2.50"), "250");
-  assert.equal(parseContactLensPowerSuffix("-0.50"), "050");
-
-  const presets = createContactLensPresets(5);
-  assert.equal(presets.length, 13);
-  assert.equal(presets[0].skuSuffix, "P00");
-  assert.equal(presets[0].quantity, 5);
+  assert.equal(validResult.product.stock, 40);
 });
 
 // ==========================================

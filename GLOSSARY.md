@@ -29,4 +29,4 @@ The maximum global number of times a promotional code may be redeemed across all
 The dedicated server-side API endpoint (`D:/Pretty_Corner/src/app/api/orders/route.ts`) responsible for validating cart pricing, verifying promotion rules, executing atomic database quota increments via PostgreSQL RPC, and creating order records using service-role permissions.
 
 ### Quota Restoration
-The operational process of decrementing `usage_count` on a promotion when an order utilizing that promotional code is marked as `Cancelled` or `Refunded` in the administration dashboard.
+The operational process of decrementing `usage_count` on a promotion when an order utilizing that promotional code is marked as `Cancelled` in the administration dashboard.

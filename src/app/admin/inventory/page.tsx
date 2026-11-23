@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   Boxes,
@@ -12,15 +12,13 @@ import {
   Minus,
   History,
   SlidersHorizontal,
-  ChevronDown,
-  ChevronRight,
-  Layers,
   ArrowRight,
   RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
-import { Product } from "@/types/admin";
+import { Product, StockAdjustment, InventoryStats } from "@/types/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,91 +48,124 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PaginationControl } from "@/components/ui/pagination";
 import { formatDateTime, cn } from "@/lib/utils";
-import { computeInventoryStats } from "@/modules/analytics/metrics";
 
 export default function InventoryPage() {
-  const { products, categories, stockHistory, adjustStock, adjustVariantStock } =
-    useAdminStore();
+  const { categories, adjustStock } = useAdminStore();
+
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "low" | "out">("all");
-  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+
+  // Server-side Stock Levels state (strictly max 10 per page)
+  const [page, setPage] = useState(1);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<InventoryStats>({
+    total: 0,
+    inStock: 0,
+    lowStock: 0,
+    outOfStock: 0,
+  });
+
+  // Server-side Stock History state (strictly max 10 per page)
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyItems, setHistoryItems] = useState<StockAdjustment[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Adjustment Dialog state
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState<string>("parent");
   const [targetStock, setTargetStock] = useState<number>(0);
   const [targetStockInput, setTargetStockInput] = useState<string>("0");
   const [adjustReason, setAdjustReason] = useState("");
 
-  const currentStock = useMemo(() => {
-    if (!adjustTarget) return 0;
-    if (selectedVariantId !== "parent" && adjustTarget.variants?.length) {
-      const v = adjustTarget.variants.find((item) => item.id === selectedVariantId);
-      return v?.quantity ?? 0;
+  const fetchStock = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const sp = new URLSearchParams({
+        page: String(page),
+        limit: "10",
+      });
+      if (categoryFilter !== "all") sp.set("category", categoryFilter);
+      if (stockFilter !== "all") sp.set("stock", stockFilter);
+      if (search.trim()) sp.set("q", search.trim());
+
+      const res = await fetch(`/api/inventory?${sp.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data.products || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+        if (data.stats) setStats(data.stats);
+      }
+    } catch (err) {
+      console.error("Failed to load inventory:", err);
+      toast.error("Failed to load inventory");
+    } finally {
+      setIsLoading(false);
     }
-    return adjustTarget.stock ?? 0;
-  }, [adjustTarget, selectedVariantId]);
+  }, [page, categoryFilter, stockFilter, search]);
+
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const sp = new URLSearchParams({
+        page: String(historyPage),
+        limit: "10",
+      });
+      const res = await fetch(`/api/inventory/history?${sp.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryItems(data.history || []);
+        setHistoryTotal(data.total || 0);
+        setHistoryTotalPages(data.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Failed to load history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyPage]);
+
+  useEffect(() => {
+    fetchStock();
+  }, [fetchStock]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const currentStock = useMemo(() => {
+    return adjustTarget?.stock ?? 0;
+  }, [adjustTarget]);
 
   const stockDelta = targetStock - currentStock;
 
-  const toggleExpand = (id: string) => {
-    setExpandedProducts((prev) => ({ ...prev, [id]: !prev[id] }));
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
+    [categories]
+  );
+
+  const getCategoryName = (id: string) => {
+    const found = categories.find((c) => c.id === id || c.slug === id);
+    return found?.name ?? "Uncategorized";
   };
-
-  const stats = useMemo(() => computeInventoryStats(products), [products]);
-
-  const filteredProducts = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return products.filter((p) => {
-      if (stockFilter === "out" && p.stock !== 0) return false;
-      if (
-        stockFilter === "low" &&
-        (p.stock === 0 || p.stock > p.lowStockThreshold)
-      )
-        return false;
-      if (stockFilter === "in" && p.stock <= p.lowStockThreshold) return false;
-      if (q) {
-        return (
-          p.name.toLowerCase().includes(q) ||
-          p.sku.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [products, search, stockFilter]);
-
-  const getCategoryName = (id: string) =>
-    categories.find((c) => c.id === id)?.name ?? "Uncategorized";
 
   const openAdjust = (
     product: Product,
-    defaultType: "increase" | "decrease" = "increase",
-    variantId: string = "parent"
+    defaultType: "increase" | "decrease" = "increase"
   ) => {
     setAdjustTarget(product);
-    setSelectedVariantId(variantId);
-    let base = product.stock;
-    if (variantId !== "parent" && product.variants?.length) {
-      const v = product.variants.find((item) => item.id === variantId);
-      if (v) base = v.quantity;
-    }
+    const base = product.stock;
     const initialTarget = defaultType === "decrease" && base > 0 ? base - 1 : base;
     setTargetStock(initialTarget);
     setTargetStockInput(String(initialTarget));
     setAdjustReason("");
-  };
-
-  const handleVariantScopeChange = (val: string) => {
-    setSelectedVariantId(val);
-    if (!adjustTarget) return;
-    let base = adjustTarget.stock;
-    if (val !== "parent" && adjustTarget.variants?.length) {
-      const v = adjustTarget.variants.find((item) => item.id === val);
-      if (v) base = v.quantity;
-    }
-    setTargetStock(base);
-    setTargetStockInput(String(base));
   };
 
   const handleStepChange = (step: number) => {
@@ -159,7 +190,7 @@ export default function InventoryPage() {
     }
   };
 
-  const handleAdjustSubmit = (e: React.FormEvent) => {
+  const handleAdjustSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustTarget) return;
 
@@ -173,34 +204,21 @@ export default function InventoryPage() {
     const type: "increase" | "decrease" = delta > 0 ? "increase" : "decrease";
     const qty = Math.abs(delta);
 
-    if (selectedVariantId && selectedVariantId !== "parent") {
-      const variant = adjustTarget.variants.find((v) => v.id === selectedVariantId);
-      adjustVariantStock(
-        adjustTarget.id,
-        selectedVariantId,
-        type,
-        qty,
-        adjustReason.trim() ||
-          (type === "increase"
-            ? `Restock shipment (${variant?.label || "Variant"})`
-            : `Manual stock deduction (${variant?.label || "Variant"})`)
-      );
-      toast.success(
-        `Variant [${variant?.label || "Variant"}] stock ${type === "increase" ? "increased" : "decreased"} by ${qty} (New: ${targetStock})`
-      );
-    } else {
-      adjustStock(
-        adjustTarget.id,
-        type,
-        qty,
-        adjustReason.trim() ||
-          (type === "increase" ? "Restock shipment" : "Manual stock deduction")
-      );
-      toast.success(
-        `Stock ${type === "increase" ? "increased" : "decreased"} by ${qty} for ${adjustTarget.name} (New: ${targetStock})`
-      );
-    }
+    adjustStock(
+      adjustTarget.id,
+      type,
+      qty,
+      adjustReason.trim() ||
+        (type === "increase" ? "Restock shipment" : "Manual stock deduction")
+    );
+    toast.success(
+      `Stock ${type === "increase" ? "increased" : "decreased"} by ${qty} for ${adjustTarget.name} (New: ${targetStock})`
+    );
     setAdjustTarget(null);
+
+    // Refresh current paginated views
+    fetchStock();
+    fetchHistory();
   };
 
   return (
@@ -277,7 +295,7 @@ export default function InventoryPage() {
           </TabsTrigger>
           <TabsTrigger value="history">
             <History className="h-3.5 w-3.5 mr-1.5" /> Stock History (
-            {stockHistory.length})
+            {historyTotal})
           </TabsTrigger>
         </TabsList>
 
@@ -288,16 +306,40 @@ export default function InventoryPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#806B73]" />
                 <Input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
                   placeholder="Search product or SKU..."
                   className="pl-9"
                 />
               </div>
               <Select
+                value={categoryFilter}
+                onValueChange={(v) => {
+                  setCategoryFilter(v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="sm:w-44">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {sortedCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
                 value={stockFilter}
-                onValueChange={(v) =>
-                  setStockFilter(v as "all" | "in" | "low" | "out")
-                }
+                onValueChange={(v) => {
+                  setStockFilter(v as "all" | "in" | "low" | "out");
+                  setPage(1);
+                }}
               >
                 <SelectTrigger className="sm:w-52">
                   <SelectValue />
@@ -329,60 +371,53 @@ export default function InventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProducts.map((p) => {
-                    const isOut = p.stock === 0;
-                    const isLow = p.stock > 0 && p.stock <= p.lowStockThreshold;
-                    const hasVariants = Boolean(p.variants && p.variants.length > 0);
-                    const isExpanded = Boolean(expandedProducts[p.id]);
+                  {isLoading && products.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-12 text-[#806B73]">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
+                          <span className="text-xs">Fetching stock levels...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : products.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-12 text-[#806B73]">
+                        <p className="text-sm font-medium text-[#33272C]">
+                          No inventory records found
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    products.map((p) => {
+                      const isOut = p.stock === 0;
+                      const isLow = p.stock > 0 && p.stock <= p.lowStockThreshold;
 
-                    return (
-                      <React.Fragment key={p.id}>
-                        <TableRow className={cn(isExpanded && "bg-[#FDF6F8]/60")}>
+                      return (
+                        <TableRow key={p.id}>
                           <TableCell>
-                            <div className="flex items-center gap-2.5">
-                              {hasVariants ? (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleExpand(p.id)}
-                                  className="h-6 w-6 rounded-md hover:bg-[#F0E1E6]/60 flex items-center justify-center text-[#806B73] transition-colors cursor-pointer"
-                                  title={isExpanded ? "Collapse variants" : "Expand variants"}
-                                >
-                                  {isExpanded ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4" />
-                                  )}
-                                </button>
-                              ) : (
-                                <div className="w-6" />
-                              )}
+                            <div className="flex items-center gap-3">
                               <Image
-                                src={p.images[0]}
+                                src={p.images[0] || "/placeholder.png"}
                                 alt={p.name}
                                 width={40}
                                 height={40}
                                 className="h-10 w-10 rounded-lg border border-[#F0E1E6] shrink-0 object-cover"
                               />
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-[#33272C] truncate max-w-[200px]">
-                                    {p.name}
-                                  </span>
-                                  {hasVariants && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#FCEEF2] text-[#D96B91]">
-                                      <Layers className="h-3 w-3" />
-                                      {p.variants.length} vars
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="font-medium text-[#33272C] truncate max-w-[220px] block">
+                                  {p.name}
+                                </span>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell font-mono text-xs text-[#806B73]">
                             {p.sku}
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                            {getCategoryName(p.categoryId)}
+                          <TableCell className="hidden sm:table-cell text-xs">
+                            <span className="inline-flex items-center rounded-full bg-rose-50 border border-[#F2D4DE] px-2.5 py-0.5 text-xs font-medium text-[#D96B91]">
+                              {getCategoryName(p.categoryId)}
+                            </span>
                           </TableCell>
                           <TableCell className="font-semibold">
                             {p.stock} units
@@ -401,93 +436,32 @@ export default function InventoryPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
-                              variant="primarySoft"
                               size="sm"
+                              variant="outline"
                               onClick={() =>
-                                openAdjust(
-                                  p,
-                                  isOut || isLow ? "increase" : "decrease",
-                                  "parent"
-                                )
+                                openAdjust(p, isOut || isLow ? "increase" : "decrease")
                               }
                             >
                               Adjust Stock
                             </Button>
                           </TableCell>
                         </TableRow>
-
-                        {/* Expandable Variant Sub-rows (PC-IS-007) */}
-                        {hasVariants &&
-                          isExpanded &&
-                          p.variants.map((v) => {
-                            const variantThreshold = p.lowStockThreshold;
-                            const isVarOut = v.quantity === 0;
-                            const isVarLow =
-                              v.quantity > 0 && v.quantity <= variantThreshold;
-                            return (
-                              <TableRow
-                                key={v.id}
-                                className="bg-[#FAF2F5]/40 border-b border-[#F0E1E6]/40"
-                              >
-                                <TableCell className="pl-12">
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-[#D96B91]" />
-                                    <span className="text-xs font-medium text-[#33272C]">
-                                      {v.label}
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell font-mono text-[11px] text-[#806B73]">
-                                  {p.sku}-{v.skuSuffix || v.id}
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                                  Variant
-                                </TableCell>
-                                <TableCell className="text-xs font-semibold text-[#33272C]">
-                                  {v.quantity} units
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                                  {variantThreshold} units
-                                </TableCell>
-                                <TableCell>
-                                  {isVarOut ? (
-                                    <Badge variant="destructive" className="text-[10px] py-0 px-2">
-                                      Out
-                                    </Badge>
-                                  ) : isVarLow ? (
-                                    <Badge variant="warning" className="text-[10px] py-0 px-2">
-                                      Low
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="success" className="text-[10px] py-0 px-2">
-                                      Available
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 text-xs px-2.5 rounded-xl border-[#F0E1E6] hover:border-[#D96B91]"
-                                    onClick={() =>
-                                      openAdjust(
-                                        p,
-                                        isVarOut || isVarLow ? "increase" : "decrease",
-                                        v.id
-                                      )
-                                    }
-                                  >
-                                    Adjust Variant
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                      </React.Fragment>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
+
+              {/* Stock Levels Pagination (Max 10 per page, server-fetched) */}
+              <PaginationControl
+                page={page}
+                totalPages={totalPages}
+                totalItems={total}
+                limit={10}
+                isLoading={isLoading}
+                onPageChange={setPage}
+                itemLabel="inventory items"
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -507,52 +481,75 @@ export default function InventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stockHistory.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                  {historyLoading && historyItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Loader2 className="h-6 w-6 animate-spin text-[#D96B91]" />
+                          <span className="text-xs">Fetching history logs...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : historyItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12 text-[#806B73]">
+                        <p className="text-sm font-medium text-[#33272C]">
+                          No stock history logs yet
+                        </p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    historyItems.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell>
                           <p className="font-medium text-[#33272C]">
                             {entry.productName}
                           </p>
-                          {entry.variantLabel && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-[#FCEEF2] text-[#D96B91] text-[10px] font-semibold">
-                              {entry.variantLabel}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] font-mono text-[#806B73]">
-                          {entry.sku}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            entry.type === "increase" ? "success" : "destructive"
-                          }
-                        >
-                          {entry.type === "increase" ? "+" : "-"}
-                          {entry.quantity}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-[#806B73]">
-                        {entry.previousStock} →{" "}
-                        <span className="font-semibold text-[#33272C]">
-                          {entry.newStock}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-[#33272C]">
-                        {entry.reason}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
-                        {entry.performedBy}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-xs text-[#806B73]">
-                        {formatDateTime(entry.createdAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          <p className="text-[11px] font-mono text-[#806B73]">
+                            {entry.sku}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              entry.type === "increase" ? "success" : "destructive"
+                            }
+                          >
+                            {entry.type === "increase" ? "+" : "-"}
+                            {entry.quantity}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-[#806B73]">
+                          {entry.previousStock} →{" "}
+                          <span className="font-semibold text-[#33272C]">
+                            {entry.newStock}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-[#33272C]">
+                          {entry.reason}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs text-[#806B73]">
+                          {entry.performedBy}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-[#806B73]">
+                          {formatDateTime(entry.createdAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+
+              {/* Stock History Pagination (Max 10 per page, server-fetched) */}
+              <PaginationControl
+                page={historyPage}
+                totalPages={historyTotalPages}
+                totalItems={historyTotal}
+                limit={10}
+                isLoading={historyLoading}
+                onPageChange={setHistoryPage}
+                itemLabel="stock adjustments"
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -587,32 +584,6 @@ export default function InventoryPage() {
           </DialogHeader>
 
           <form onSubmit={handleAdjustSubmit} className="space-y-4 pt-1">
-            {adjustTarget && adjustTarget.variants && adjustTarget.variants.length > 0 && (
-              <div className="space-y-1.5">
-                <Label htmlFor="adj-variant" className="text-xs font-semibold text-[#38262E]">
-                  Adjustment Scope
-                </Label>
-                <Select
-                  value={selectedVariantId}
-                  onValueChange={handleVariantScopeChange}
-                >
-                  <SelectTrigger id="adj-variant" className="h-10 rounded-xl border-[#EEDFE5]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="parent">
-                      Entire Product Total ({adjustTarget.stock} units)
-                    </SelectItem>
-                    {adjustTarget.variants.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        Variant: {v.label} ({v.quantity} units)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
             {/* Main Interactive Stepper & Stock Editor Container */}
             <div className="bg-[#FAF7F8] p-4 rounded-[24px] border border-[#EEDFE5] space-y-3.5">
               <div className="flex items-center justify-between text-xs text-[#7A6870]">

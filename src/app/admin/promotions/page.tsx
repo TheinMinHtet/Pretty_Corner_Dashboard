@@ -8,7 +8,6 @@ import {
   Trash2,
   Tag,
   Calendar,
-  Sparkles,
   Image as ImageIcon,
   Upload,
   X,
@@ -107,7 +106,7 @@ export default function PromotionsPage() {
   const [minimumOrderAmount, setMinimumOrderAmount] = useState("");
   const [isOutOfStock, setIsOutOfStock] = useState(false);
   const [ctaText, setCtaText] = useState("");
-  const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
+  const [, setFeaturedProductIds] = useState<string[]>([]);
   const [bannerImage, setBannerImage] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -301,11 +300,6 @@ export default function PromotionsPage() {
       {/* Promotions Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {promotions.map((promo) => {
-          const featuredItems = products.filter((p) =>
-            (promo.featuredProductIds || []).includes(p.id)
-          );
-          const destination = deriveDestination(promo);
-
           return (
             <Card
               key={promo.id}
@@ -438,8 +432,8 @@ export default function PromotionsPage() {
                     )}
                   </div>
 
-                  {/* 4-Tier Target Routing Badge & Destination Preview */}
-                  <div className="bg-[#FAF7F8] rounded-2xl p-3 border border-[#F0E1E6] space-y-2">
+                  {/* Target Scope & Redemption Mode */}
+                  <div className="bg-[#FAF7F8] rounded-2xl p-3 border border-[#F0E1E6]">
                     <div className="flex items-center justify-between text-xs">
                       <span className="inline-flex items-center gap-1.5 font-bold text-[#33272C]">
                         {promo.targetType === "SINGLE_PRODUCT" && (
@@ -465,21 +459,6 @@ export default function PromotionsPage() {
                       <span className="text-[11px] font-medium text-[#806B73]">
                         {promo.redemptionMethod === "AUTOMATIC" ? "Auto-Applied" : "Voucher Code"}
                       </span>
-                    </div>
-
-                    {/* Derived Destination Route Chip */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F0E1E6]/70">
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#806B73] truncate">
-                        <Link2 className="h-3 w-3 text-[#B73D67] shrink-0" />
-                        <span className="font-mono text-[#38262E] truncate">{destination}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyRouteUrl(destination)}
-                        className="text-[11px] font-bold text-[#B73D67] hover:underline shrink-0 cursor-pointer"
-                      >
-                        Copy URL
-                      </button>
                     </div>
                   </div>
 

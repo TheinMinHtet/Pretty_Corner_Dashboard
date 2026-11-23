@@ -2,10 +2,12 @@ import {
   Category,
   Customer,
   Order,
+  OrderItem,
   OrderStatus,
   PaymentStatus,
   Product,
 } from "@/types/admin";
+import { resolveUnifiedOrderStatus } from "@/components/ui/status-badge";
 
 export type DateRange = "7d" | "30d" | "6m";
 
@@ -176,13 +178,20 @@ export interface DashboardMetricsResult {
   totalOrders: number;
   ordersChange: number | null;
   pending: number;
-  processing: number;
-  completed: number;
+  paid: number;
+  expired: number;
+  failed: number;
   cancelled: number;
   pendingShare: number;
+  paidShare: number;
+  expiredShare: number;
+  failedShare: number;
+  cancelledShare: number;
+  /** Deprecated backwards-compatibility fields */
+  processing: number;
+  completed: number;
   processingShare: number;
   completedShare: number;
-  cancelledShare: number;
   avgOrderValue: number;
   paidPayments: number;
   pendingPayments: number;
@@ -209,17 +218,24 @@ export function computeDashboardMetrics(
   const previousRevenue = sumRevenue(previous);
   const billable = current.filter((o) => o.orderStatus !== "Cancelled");
 
-  const countBy = (status: OrderStatus) =>
-    current.filter((o) => o.orderStatus === status).length;
+  let pending = 0;
+  let paid = 0;
+  let expired = 0;
+  let failed = 0;
+  let cancelled = 0;
+
+  for (const o of current) {
+    const key = resolveUnifiedOrderStatus(o.orderStatus, o.paymentStatus, o.paymentMethod);
+    if (key === "paid") paid++;
+    else if (key === "pending") pending++;
+    else if (key === "expired") expired++;
+    else if (key === "failed") failed++;
+    else if (key === "cancelled") cancelled++;
+  }
 
   const totalOrders = current.length;
   const share = (count: number) =>
     totalOrders === 0 ? 0 : Math.round((count / totalOrders) * 100);
-
-  const pending = countBy("Pending");
-  const processing = countBy("Processing");
-  const completed = countBy("Delivered");
-  const cancelled = countBy("Cancelled");
 
   return {
     revenue,
@@ -228,21 +244,33 @@ export function computeDashboardMetrics(
     totalOrders,
     ordersChange: percentChange(totalOrders, previous.length),
     pending,
-    processing,
-    completed,
+    paid,
+    expired,
+    failed,
     cancelled,
     pendingShare: share(pending),
-    processingShare: share(processing),
-    completedShare: share(completed),
+    paidShare: share(paid),
+    expiredShare: share(expired),
+    failedShare: share(failed),
     cancelledShare: share(cancelled),
+    processing: 0,
+    processingShare: 0,
+    completed: paid,
+    completedShare: share(paid),
     avgOrderValue: billable.length > 0 ? revenue / billable.length : 0,
-    paidPayments: current.filter((o) => o.paymentStatus === "Paid").length,
-    pendingPayments: current.filter((o) => o.paymentStatus === "Pending").length,
-    failedPayments: current.filter(
-      (o) => o.paymentStatus === "Failed" || o.paymentStatus === "Expired"
-    ).length,
-    topPayment: topShare(current.map((o) => o.paymentMethod)),
-    topCity: topShare(current.map((o) => o.city)),
+    paidPayments: paid,
+    pendingPayments: pending,
+    failedPayments: failed + expired,
+    topPayment: topShare(
+      current
+        .map((o) => o.paymentMethod)
+        .filter((method): method is NonNullable<typeof method> => Boolean(method && method.trim()))
+    ),
+    topCity: topShare(
+      current
+        .map((o) => o.city)
+        .filter((city): city is NonNullable<typeof city> => Boolean(city && city.trim()))
+    ),
   };
 }
 
@@ -266,7 +294,6 @@ export const PAYMENT_STATUS_COLORS: Record<PaymentStatus, string> = {
   Pending: "#F59E0B",
   Failed: "#EF4444",
   Expired: "#64748B",
-  Refunded: "#8B5CF6",
   Cancelled: "#F43F5E",
 };
 
@@ -295,7 +322,7 @@ export function computePaymentMethodStats(orders: Order[]): PaymentStatItem[] {
 }
 
 export function computePaymentStatusStats(orders: Order[]): PaymentStatItem[] {
-  const statuses: PaymentStatus[] = ["Paid", "Pending", "Failed", "Expired", "Refunded"];
+  const statuses: PaymentStatus[] = ["Paid", "Pending", "Failed", "Expired"];
 
   return statuses.map((s) => {
     const matched = orders.filter((o) => o.paymentStatus === s);
@@ -486,79 +513,112 @@ export function computeInventoryStats(products: Product[]): InventoryStatsResult
   return { total, inStock, lowStock, outOfStock };
 }
 
+export interface TopSellingProduct {
+  product: Product;
+  /** Units actually ordered for this product in the supplied order set. */
+  unitsSold: number;
+  /** Revenue from order line items (quantity × unit price at purchase). */
+  revenue: number;
+}
+
+export interface TopSellingOptions {
+  limit?: number;
+  /** "revenue" ranks by money earned, "units" ranks by unit velocity. */
+  sortBy?: "revenue" | "units";
+}
+
+/** Links an order line item back to a catalog product. */
+function findProductForItem(
+  item: OrderItem,
+  products: Product[]
+): Product | undefined {
+  return products.find((p) => {
+    if (
+      item.productId &&
+      (p.id === item.productId || p.slug === item.productId)
+    ) {
+      return true;
+    }
+    if (item.productName && p.name) {
+      const itemName = item.productName.trim().toLowerCase();
+      const productName = p.name.trim().toLowerCase();
+      if (!itemName) return false;
+      if (itemName === productName) return true;
+      if (productName.includes(itemName) || itemName.includes(productName)) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * Ranks products from real order line items. Units and revenue come from what
+ * customers actually ordered (cancellations excluded), never from a catalog
+ * `soldCount` baseline or today's list price.
+ */
 export function deriveTopSellingProducts(
   orders: Order[],
-  products: Product[],
-  limit: number = 6
-): Product[] {
-  const productMetrics = new Map<string, { unitsSold: number; revenue: number }>();
+  products: Product[] = [],
+  { limit = 10, sortBy = "units" }: TopSellingOptions = {}
+): TopSellingProduct[] {
+  const productMetrics = new Map<
+    string,
+    { product: Product; unitsSold: number; revenue: number }
+  >();
 
-  const validOrders = orders.filter(
-    (o) => o.paymentStatus === "Paid" || o.orderStatus !== "Cancelled"
-  );
-
-  for (const order of validOrders) {
+  for (const order of revenueOrders(orders)) {
     for (const item of order.items || []) {
       const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unitPrice) || 0;
-      const revenue = quantity * unitPrice;
+      if (quantity <= 0) continue;
 
-      const matchedProduct = products.find((p) => {
-        if (item.productId && p.id === item.productId) {
-          return true;
-        }
-        if (
-          item.productName &&
-          p.name &&
-          p.name.trim().toLowerCase() === item.productName.trim().toLowerCase()
-        ) {
-          return true;
-        }
-        return false;
-      });
+      const matchedProduct = findProductForItem(item, products);
+      const productKey = matchedProduct?.id || item.productId || item.productName;
+      if (!productKey) continue;
 
-      if (matchedProduct) {
-        const existing = productMetrics.get(matchedProduct.id) || {
-          unitsSold: 0,
-          revenue: 0,
-        };
+      const existing = productMetrics.get(productKey);
+      if (existing) {
         existing.unitsSold += quantity;
-        existing.revenue += revenue;
-        productMetrics.set(matchedProduct.id, existing);
+        existing.revenue += quantity * (Number(item.unitPrice) || 0);
+      } else {
+        const fallbackProduct: Product = matchedProduct ?? {
+          id: item.productId || productKey,
+          slug: item.productId || productKey,
+          name: item.productName || "Product",
+          description: "",
+          categoryId: "",
+          brand: "Pretty Corner",
+          sku: item.sku || productKey,
+          regularPrice: Number(item.unitPrice) || 0,
+          images: item.productImage
+            ? [item.productImage]
+            : ["/assets/dew-drop-serum.png"],
+          stock: 0,
+          lowStockThreshold: 10,
+          status: "Active",
+          soldCount: 0,
+          createdAt: order.createdAt || new Date().toISOString(),
+          updatedAt: order.createdAt || new Date().toISOString(),
+        };
+
+        productMetrics.set(productKey, {
+          product: fallbackProduct,
+          unitsSold: quantity,
+          revenue: quantity * (Number(item.unitPrice) || 0),
+        });
       }
     }
   }
 
-  const augmentedProducts = products.map((p) => {
-    const metrics = productMetrics.get(p.id);
-    const unitsSoldFromOrders = metrics ? metrics.unitsSold : 0;
-    const soldCount = Math.max(p.soldCount ?? 0, unitsSoldFromOrders);
-    if (unitsSoldFromOrders > 0) {
-      p.soldCount = soldCount;
-    }
-    const totalRevenue =
-      metrics && metrics.revenue > 0
-        ? metrics.revenue
-        : soldCount * (p.salePrice ?? p.regularPrice);
+  const ranked: TopSellingProduct[] = Array.from(productMetrics.values());
 
-    return {
-      product: {
-        ...p,
-        soldCount,
-      },
-      unitsSold: soldCount,
-      totalRevenue,
-    };
-  });
+  ranked.sort((a, b) =>
+    sortBy === "revenue"
+      ? b.revenue - a.revenue || b.unitsSold - a.unitsSold
+      : b.unitsSold - a.unitsSold || b.revenue - a.revenue
+  );
 
-  augmentedProducts.sort((a, b) => {
-    if (b.unitsSold !== a.unitsSold) {
-      return b.unitsSold - a.unitsSold;
-    }
-    return b.totalRevenue - a.totalRevenue;
-  });
-
-  return augmentedProducts.slice(0, limit).map((entry) => entry.product);
+  return ranked.slice(0, limit);
 }
 
 /**
@@ -575,7 +635,7 @@ export function getDashboardOverview(
   const rangeOrders = filterOrdersByRange(orders, range, now);
   const metrics = computeDashboardMetrics(orders, range, now);
   const series = buildOrderSeries(orders, range, now);
-  const topSelling = deriveTopSellingProducts(orders, products, 6);
+  const topSelling = deriveTopSellingProducts(rangeOrders, products, { limit: 6 });
   const inventory = computeInventoryStats(products);
 
   return {

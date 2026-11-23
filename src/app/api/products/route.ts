@@ -18,6 +18,40 @@ export async function GET(request: NextRequest) {
       searchParams.get("status") ??
       (audience === "storefront" ? "Active" : undefined);
     const q = searchParams.get("q") ?? undefined;
+    const pageParam = searchParams.get("page");
+    const limitParam = searchParams.get("limit");
+
+    if (pageParam !== null || limitParam !== null || audience !== "storefront") {
+      const page = pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : 1;
+      const limit = limitParam ? Math.min(10, Math.max(1, parseInt(limitParam, 10) || 10)) : 10;
+      const stock = (searchParams.get("stock") as "all" | "in" | "low" | "out" | "alert") || undefined;
+      const sortKey = (searchParams.get("sortKey") as "name" | "price" | "stock" | "createdAt" | null) || undefined;
+      const sortDir = (searchParams.get("sortDir") as "asc" | "desc" | null) || undefined;
+
+      const [paginated, categories] = await Promise.all([
+        repo.listProductsPaginated({
+          page,
+          limit,
+          category,
+          status,
+          stock,
+          q,
+          sortKey,
+          sortDir,
+        }),
+        repo.listCategories(),
+      ]);
+
+      return jsonWithCors({
+        products: paginated.items,
+        total: paginated.total,
+        page: paginated.page,
+        limit: paginated.limit,
+        totalPages: paginated.totalPages,
+        stats: paginated.stats,
+        categories,
+      });
+    }
 
     const [products, categories] = await Promise.all([
       repo.listProducts({ category, status, q }),

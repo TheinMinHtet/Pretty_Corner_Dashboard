@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-export const ProductStatusSchema = z.enum(["Active", "Draft", "Archived"]);
+export const ProductStatusSchema = z.enum(["Active", "Archived"]);
 
 export const OrderStatusSchema = z.enum([
   "Pending",
   "Confirmed",
   "Processing",
   "Shipped",
-  "Delivered",
+  "Expired",
   "Cancelled",
 ]);
 
@@ -16,19 +16,8 @@ export const PaymentStatusSchema = z.enum([
   "Paid",
   "Failed",
   "Expired",
-  "Refunded",
   "Cancelled",
 ]);
-
-export const ProductVariantSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  color: z.string().optional(),
-  lensPower: z.string().optional(),
-  quantity: z.number().int().min(0),
-  priceOverride: z.number().positive().optional(),
-  skuSuffix: z.string().optional(),
-});
 
 export const ProductSchema = z.object({
   id: z.string().min(1),
@@ -45,8 +34,6 @@ export const ProductSchema = z.object({
   stock: z.number().int().min(0),
   lowStockThreshold: z.number().int().min(0).default(10),
   status: ProductStatusSchema.default("Active"),
-  isContactLens: z.boolean().optional(),
-  variants: z.array(ProductVariantSchema).default([]),
   soldCount: z.number().int().min(0).default(0),
   badge: z.string().optional(),
   tagline: z.string().optional(),
@@ -78,7 +65,6 @@ export const CategorySchema = z.object({
   name: z.string().min(1, "Category name is required"),
   slug: z.string().min(1, "Category slug is required"),
   description: z.string().default(""),
-  image: z.string().default(""),
   active: z.boolean().default(true),
   createdAt: z.string(),
 });
@@ -96,7 +82,6 @@ export const OrderItemSchema = z.object({
   productName: z.string().min(1),
   productImage: z.string().default(""),
   sku: z.string().default(""),
-  variantLabel: z.string().optional(),
   quantity: z.number().int().positive(),
   unitPrice: z.number().nonnegative(),
 });
@@ -140,20 +125,10 @@ export const UpdateOrderSchema = z.object({
   paymentStatus: PaymentStatusSchema.optional(),
   transactionReference: z.string().optional(),
   note: z.string().optional(),
-  refund: z
-    .object({
-      amount: z.number().positive(),
-      isFullRefund: z.boolean(),
-      reason: z.string().min(1),
-      transactionReference: z.string().min(1),
-      notes: z.string().optional(),
-    })
-    .optional(),
 });
 
 export const StockAdjustmentRequestSchema = z.object({
   productId: z.string().min(1),
-  variantId: z.string().optional(),
   type: z.enum(["increase", "decrease"]),
   quantity: z.number().int().positive("Quantity must be greater than 0"),
   reason: z.string().min(1, "Reason is required"),

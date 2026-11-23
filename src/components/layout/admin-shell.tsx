@@ -88,8 +88,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const {
     orders,
-    products,
     notifications,
+    inventoryStats,
     markNotificationRead,
     markAllNotificationsRead,
     settings,
@@ -152,11 +152,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 
   const lowStockCount = useMemo(
-    () =>
-      products.filter(
-        (p) => p.status === "Active" && p.stock <= p.lowStockThreshold
-      ).length,
-    [products]
+    () => inventoryStats?.lowStock ?? 0,
+    [inventoryStats]
   );
 
   const unreadNotifications = useMemo(

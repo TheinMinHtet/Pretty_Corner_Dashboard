@@ -16,6 +16,8 @@ import {
   CheckCircle,
   Package,
   RefreshCw,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
@@ -53,15 +55,19 @@ import {
 } from "@/components/ui/dialog";
 import {
   UnifiedOrderStatusBadge,
+  UnifiedStatusSelector,
+  UNIFIED_STATUS_CONFIG,
+  UnifiedStatusKey,
+  resolveUnifiedOrderStatus,
 } from "@/components/ui/status-badge";
 import { formatDate, formatMMK } from "@/lib/utils";
 
 const UNIFIED_STATUS_OPTIONS = [
   "All",
-  "Pending COD",
-  "Paid (Upfront)",
-  "Delivered & Paid",
+  "Pending",
+  "Paid",
   "Failed",
+  "Time Expired",
   "Cancelled",
 ] as const;
 
@@ -71,7 +77,14 @@ type SortField = "createdAt" | "total" | "reference";
 type SortDir = "asc" | "desc";
 
 export default function OrdersPage() {
-  const { orders, updateOrderStatus, globalSearch, setGlobalSearch, refreshData } = useAdminStore();
+  const {
+    orders,
+    updateOrderStatus,
+    updateUnifiedStatus,
+    globalSearch,
+    setGlobalSearch,
+    refreshData,
+  } = useAdminStore();
   const [search, setSearch] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -134,29 +147,16 @@ export default function OrdersPage() {
     return orders
       .filter((o) => {
         if (unifiedFilter !== "All") {
-          if (unifiedFilter === "Pending COD") {
-            if (
-              o.paymentMethod !== "Cash on Delivery" ||
-              o.orderStatus === "Delivered" ||
-              o.orderStatus === "Cancelled" ||
-              o.paymentStatus === "Failed"
-            )
-              return false;
-          } else if (unifiedFilter === "Paid (Upfront)") {
-            if (
-              o.paymentMethod === "Cash on Delivery" ||
-              o.orderStatus === "Delivered" ||
-              o.orderStatus === "Cancelled" ||
-              o.paymentStatus !== "Paid"
-            )
-              return false;
-          } else if (unifiedFilter === "Delivered & Paid") {
-            if (o.orderStatus !== "Delivered") return false;
-          } else if (unifiedFilter === "Failed") {
-            if (o.paymentStatus !== "Failed") return false;
-          } else if (unifiedFilter === "Cancelled") {
-            if (o.orderStatus !== "Cancelled") return false;
-          }
+          const currentKey = resolveUnifiedOrderStatus(
+            o.orderStatus,
+            o.paymentStatus,
+            o.paymentMethod
+          );
+          if (unifiedFilter === "Pending" && currentKey !== "pending") return false;
+          if (unifiedFilter === "Paid" && currentKey !== "paid") return false;
+          if (unifiedFilter === "Failed" && currentKey !== "failed") return false;
+          if (unifiedFilter === "Time Expired" && currentKey !== "expired") return false;
+          if (unifiedFilter === "Cancelled" && currentKey !== "cancelled") return false;
         }
         if (townshipFilter !== "All" && o.township !== townshipFilter) return false;
         if (dateFilter !== "all" && clientNow !== null) {
@@ -221,12 +221,12 @@ export default function OrdersPage() {
     );
   };
 
-  const handleBatchStatus = (status: OrderStatus) => {
+  const handleBatchUnifiedStatus = (status: UnifiedStatusKey) => {
     if (selectedOrderIds.length === 0) return;
     selectedOrderIds.forEach((id) => {
-      updateOrderStatus(id, status, `Batch fulfillment transition to ${status}`);
+      updateUnifiedStatus(id, status, `Batch status transition to ${status}`);
     });
-    toast.success(`Batch updated ${selectedOrderIds.length} orders to ${status}`);
+    toast.success(`Batch updated ${selectedOrderIds.length} orders to ${UNIFIED_STATUS_CONFIG[status].label}`);
     setSelectedOrderIds([]);
   };
 
@@ -473,20 +473,28 @@ export default function OrdersPage() {
                         {formatMMK(order.total)}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                          <UnifiedOrderStatusBadge
+                        <div className="flex flex-col gap-1.5">
+                          <UnifiedStatusSelector
                             orderStatus={order.orderStatus}
                             paymentStatus={order.paymentStatus}
                             paymentMethod={order.paymentMethod}
+                            onStatusChange={(newKey) => {
+                              updateUnifiedStatus(order.id, newKey);
+                              const label = UNIFIED_STATUS_CONFIG[newKey].label;
+                              toast.success(`Order ${order.reference} updated to ${label}`);
+                            }}
                           />
-                          <span className="text-[10px] text-[#7A6870] pl-0.5">
-                            {order.paymentMethod}
-                          </span>
-                          {order.transactionReference && (
-                            <span className="text-[10px] font-mono text-[#B73D67] pl-0.5 truncate max-w-[130px]">
-                              {order.transactionReference}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1.5 text-[10px] text-[#7A6870] pl-0.5">
+                            <span>{order.paymentMethod}</span>
+                            {order.transactionReference && (
+                              <>
+                                <span>·</span>
+                                <span className="font-mono text-[#B73D67] truncate max-w-[110px]">
+                                  {order.transactionReference}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-right pr-4">
@@ -545,20 +553,29 @@ export default function OrdersPage() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => handleBatchStatus("Confirmed")}
-            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg"
+            onClick={() => handleBatchUnifiedStatus("paid")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
           >
             <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-400" />
-            Set Confirmed
+            Set Paid
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => handleBatchStatus("Processing")}
-            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg"
+            onClick={() => handleBatchUnifiedStatus("pending")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
           >
-            <Package className="h-3.5 w-3.5 mr-1 text-sky-400" />
-            Set Processing
+            <Clock className="h-3.5 w-3.5 mr-1 text-amber-400" />
+            Set Pending
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleBatchUnifiedStatus("expired")}
+            className="h-8 text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-lg cursor-pointer"
+          >
+            <AlertCircle className="h-3.5 w-3.5 mr-1 text-slate-300" />
+            Set Expired
           </Button>
           <Button
             size="sm"
