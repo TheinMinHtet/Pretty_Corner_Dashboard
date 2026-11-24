@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  "https://www.prettycornershopmm.com",
+  "https://prettycornershopmm.com",
+  "http://www.prettycornershopmm.com",
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
