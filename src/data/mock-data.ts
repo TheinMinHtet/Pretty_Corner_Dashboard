@@ -899,7 +899,7 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
     transactionReference: "MB-TRX-998811",
-    orderStatus: "Delivered",
+    orderStatus: "Shipped",
     timeline: [
       {
         status: "Pending",
@@ -908,7 +908,7 @@ export const INITIAL_ORDERS: Order[] = [
         actor: "Customer",
       },
       {
-        status: "Delivered",
+        status: "Shipped",
         timestamp: "2026-10-11T16:00:00Z",
         note: "Delivered successfully.",
         actor: "Rider",
@@ -948,7 +948,7 @@ export const INITIAL_ORDERS: Order[] = [
     paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
     transactionReference: "MB-TRX-332211",
-    orderStatus: "Delivered",
+    orderStatus: "Shipped",
     timeline: [
       {
         status: "Pending",
@@ -957,7 +957,7 @@ export const INITIAL_ORDERS: Order[] = [
         actor: "Customer",
       },
       {
-        status: "Delivered",
+        status: "Shipped",
         timestamp: "2026-10-07T11:00:00Z",
         note: "Delivered to Mandalay.",
         actor: "Rider",

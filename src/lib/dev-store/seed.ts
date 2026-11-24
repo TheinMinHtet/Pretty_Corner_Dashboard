@@ -576,7 +576,7 @@ export function createSeedData(): DevStoreData {
       paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
       transactionReference: "MB-261115-1102",
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       timeline: [
         {
           status: "Pending",
@@ -585,7 +585,7 @@ export function createSeedData(): DevStoreData {
           actor: "Customer",
         },
         {
-          status: "Delivered",
+          status: "Shipped",
           timestamp: "2026-11-16T15:30:00Z",
           note: "Delivered to reception",
           actor: "Rider",
@@ -634,7 +634,7 @@ export function createSeedData(): DevStoreData {
       paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
       transactionReference: "MB-261116-8901",
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       timeline: [
         {
           status: "Pending",
@@ -643,7 +643,7 @@ export function createSeedData(): DevStoreData {
           actor: "Customer",
         },
         {
-          status: "Delivered",
+          status: "Shipped",
           timestamp: "2026-11-17T14:00:00Z",
           note: "Delivered to office",
           actor: "Rider",
@@ -691,7 +691,7 @@ export function createSeedData(): DevStoreData {
       paymentMethod: "Mobile Banking",
       paymentStatus: "Paid",
       transactionReference: "MB-261114-5512",
-      orderStatus: "Delivered",
+      orderStatus: "Shipped",
       timeline: [
         {
           status: "Pending",
@@ -700,7 +700,7 @@ export function createSeedData(): DevStoreData {
           actor: "Customer",
         },
         {
-          status: "Delivered",
+          status: "Shipped",
           timestamp: "2026-11-15T16:00:00Z",
           note: "Delivered",
           actor: "Rider",

@@ -92,8 +92,8 @@ export function getCustomerDossiers(
     const rawPhone = (order.customerPhone || "").trim();
     const normPhone = normalizePhoneNumber(rawPhone);
     const matchedFallback =
-      (order.customerId && fallbackById.get(order.customerId)) ||
-      (normPhone && fallbackByPhone.get(normPhone));
+      (order.customerId ? fallbackById.get(order.customerId) : undefined) ||
+      (normPhone ? fallbackByPhone.get(normPhone) : undefined);
 
     const key =
       matchedFallback?.id ||

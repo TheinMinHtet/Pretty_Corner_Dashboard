@@ -45,7 +45,7 @@ function createMockOrder(overrides: Partial<Order> = {}): Order {
     total: 52000,
     paymentMethod: "Mobile Banking",
     paymentStatus: "Paid",
-    orderStatus: "Delivered",
+    orderStatus: "Shipped",
     timeline: [],
     createdAt: "2026-11-01T10:00:00Z",
     updatedAt: "2026-11-01T10:00:00Z",
