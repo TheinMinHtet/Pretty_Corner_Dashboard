@@ -229,12 +229,12 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center gap-2.5 self-start">
           <span className="rounded-full border border-[#F0E1E6] bg-white px-3.5 py-1 text-xs font-semibold text-[#33272C] shadow-xs">
-            {total} products
+            {total} {t.productsCountSuffix}
           </span>
           <Button asChild className="rounded-xl bg-[#B73D67] hover:bg-[#982F53] text-white shadow-xs">
             <Link href="/admin/products/new">
               <Plus className="h-4 w-4 mr-1.5" />
-              Add Product
+              {t.addProductBtn}
             </Link>
           </Button>
         </div>
