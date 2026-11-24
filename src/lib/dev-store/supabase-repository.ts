@@ -24,7 +24,8 @@ import {
 } from "./repository";
 import { executeOrderUpdate, OrderMutationResult } from "@/modules/orders/order-lifecycle";
 import { evaluatePromotionStockout } from "@/modules/catalog/catalog-sync";
-import { DevStoreData } from "./seed";
+import { createSeedData, DevStoreData } from "./seed";
+import { INITIAL_SETTINGS } from "@/data/mock-data";
 import {
   slugify,
   deriveCustomersFromOrders,
@@ -435,6 +436,54 @@ export class SupabaseStoreRepository implements StoreRepository {
   private localFallback = new JsonFileStoreRepository();
   private inMemoryReadNotificationIds = new Set<string>();
 
+  private async getLocalFallbackData(): Promise<DevStoreData> {
+    try {
+      return await this.localFallback.getAllData();
+    } catch {
+      return createSeedData();
+    }
+  }
+
+  async getSettings(): Promise<StoreSettings> {
+    try {
+      const sb = getSupabaseClient();
+      const { data, error } = await sb
+        .from("settings")
+        .select("*")
+        .eq("id", "default")
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          ...INITIAL_SETTINGS,
+          storeName: data.store_name || INITIAL_SETTINGS.storeName,
+          tagline: data.tagline || INITIAL_SETTINGS.tagline,
+          supportPhone: data.phone || data.support_phone || INITIAL_SETTINGS.supportPhone,
+          supportEmail: data.email || data.support_email || INITIAL_SETTINGS.supportEmail,
+          viberPhone: data.viber_phone || data.phone || INITIAL_SETTINGS.viberPhone,
+          address: data.address || INITIAL_SETTINGS.address,
+          currency: data.currency || INITIAL_SETTINGS.currency,
+          defaultLowStockThreshold:
+            Number(data.default_low_stock_threshold) ||
+            INITIAL_SETTINGS.defaultLowStockThreshold,
+          townshipDeliveryFees:
+            data.township_delivery_fees ||
+            INITIAL_SETTINGS.townshipDeliveryFees,
+          pickupOptions:
+            data.pickup_options || INITIAL_SETTINGS.pickupOptions,
+          paymentMethods:
+            data.payment_methods || INITIAL_SETTINGS.paymentMethods,
+          socialLinks: data.social_links || INITIAL_SETTINGS.socialLinks,
+          adminProfile:
+            data.admin_profile || INITIAL_SETTINGS.adminProfile,
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to fetch settings from Supabase, using fallback:", e);
+    }
+    return INITIAL_SETTINGS;
+  }
+
   private async getLiveSocialLinks(
     fallbackLinks: StoreSettings["socialLinks"]
   ): Promise<StoreSettings["socialLinks"]> {
@@ -466,18 +515,19 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async getAllData(): Promise<DevStoreData> {
-    const [local, categories, products, orders, promotions, stockHistory] = await Promise.all([
-      this.localFallback.getAllData(),
-      this.listCategories(),
-      this.listProducts(),
-      this.listOrders(),
-      this.listPromotions(),
-      this.listStockAdjustments(),
+    const local = await this.getLocalFallbackData();
+    const [categories, products, orders, promotions, stockHistory, dbSettings] = await Promise.all([
+      this.listCategories().catch(() => local.categories ?? []),
+      this.listProducts().catch(() => local.products ?? []),
+      this.listOrders().catch(() => local.orders ?? []),
+      this.listPromotions().catch(() => local.promotions ?? []),
+      this.listStockAdjustments().catch(() => local.stockHistory ?? []),
+      this.getSettings().catch(() => local.settings ?? INITIAL_SETTINGS),
     ]);
 
-    const liveSocial = await this.getLiveSocialLinks(local.settings.socialLinks);
+    const liveSocial = await this.getLiveSocialLinks(dbSettings.socialLinks);
     const settings = {
-      ...local.settings,
+      ...dbSettings,
       socialLinks: liveSocial,
     };
 
@@ -558,16 +608,17 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async getBootstrapData(): Promise<DevStoreData & { inventoryStats: InventoryStats }> {
-    const local = await this.localFallback.getAllData();
+    const local = await this.getLocalFallbackData();
     try {
       const fetchWithTimeout = async () => {
-        const [categories, orders, promotions, stockHistory, inventoryStats, products] = await Promise.all([
+        const [categories, orders, promotions, stockHistory, inventoryStats, products, dbSettings] = await Promise.all([
           this.listCategories(),
           this.listRecentOrders(200),
           this.listPromotions(),
           this.listStockAdjustments(),
           this.getInventoryStats(),
           this.listProducts().catch(() => local.products ?? []),
+          this.getSettings().catch(() => local.settings ?? INITIAL_SETTINGS),
         ]);
 
         const derivedCustomers = deriveCustomersFromOrders(orders);
@@ -592,9 +643,9 @@ export class SupabaseStoreRepository implements StoreRepository {
           categoryId: p.categoryId,
         }));
 
-        const liveSocial = await this.getLiveSocialLinks(local.settings.socialLinks);
+        const liveSocial = await this.getLiveSocialLinks(dbSettings.socialLinks);
         const settings = {
-          ...local.settings,
+          ...dbSettings,
           socialLinks: liveSocial,
         };
 
@@ -602,7 +653,7 @@ export class SupabaseStoreRepository implements StoreRepository {
           ...local,
           settings,
           categories,
-          products: [], // Exclude full product catalog at startup!
+          products,
           orders,
           promotions,
           customers,
@@ -616,7 +667,7 @@ export class SupabaseStoreRepository implements StoreRepository {
       return await Promise.race([
         fetchWithTimeout(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Supabase bootstrap timeout (6s)")), 6000)
+          setTimeout(() => reject(new Error("Supabase bootstrap timeout (12s)")), 12000)
         ),
       ]);
     } catch (err) {
@@ -930,7 +981,7 @@ export class SupabaseStoreRepository implements StoreRepository {
 
     if (error) {
       console.error("Supabase listStockAdjustments error:", error);
-      return (await this.localFallback.getAllData()).stockHistory ?? [];
+      return (await this.getLocalFallbackData()).stockHistory ?? [];
     }
 
     return ((data ?? []) as SbStockAdjustmentRow[]).map((row) => ({
@@ -960,7 +1011,7 @@ export class SupabaseStoreRepository implements StoreRepository {
         const orders = await this.listRecentOrders(200);
         const derived = deriveCustomersFromOrders(orders);
         if (derived.length > 0) return derived;
-        const local = await this.localFallback.getAllData();
+        const local = await this.getLocalFallbackData();
         return local.customers ?? [];
       }
 
@@ -984,7 +1035,7 @@ export class SupabaseStoreRepository implements StoreRepository {
         notes: row.notes ?? undefined,
       }));
     } catch {
-      const local = await this.localFallback.getAllData();
+      const local = await this.getLocalFallbackData();
       return local.customers ?? [];
     }
   }
@@ -1133,10 +1184,30 @@ export class SupabaseStoreRepository implements StoreRepository {
         : ["/assets/dew-drop-serum.png"]
     ).map(sanitizeProductImage);
 
+    let targetCategoryId: string | null = null;
+    if (input.categoryId) {
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          input.categoryId
+        );
+      if (isUuid) {
+        targetCategoryId = input.categoryId;
+      } else {
+        const cats = await this.listCategories();
+        const matched = cats.find(
+          (c) =>
+            c.id === input.categoryId ||
+            c.slug === input.categoryId ||
+            c.slug === input.categoryId.replace(/^cat-/, "")
+        );
+        targetCategoryId = matched?.id ?? null;
+      }
+    }
+
     const { data, error } = await sb
       .from("products")
       .insert({
-        category_id: input.categoryId || null,
+        category_id: targetCategoryId,
         slug: baseSlug,
         name: input.name,
         badge: input.badge || null,
@@ -1172,8 +1243,28 @@ export class SupabaseStoreRepository implements StoreRepository {
     if (updates.name !== undefined) patch.name = updates.name;
     if (updates.slug !== undefined) patch.slug = updates.slug;
     if (updates.description !== undefined) patch.description = updates.description;
-    if (updates.categoryId !== undefined)
-      patch.category_id = updates.categoryId || null;
+    if (updates.categoryId !== undefined) {
+      if (!updates.categoryId) {
+        patch.category_id = null;
+      } else {
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            updates.categoryId
+          );
+        if (isUuid) {
+          patch.category_id = updates.categoryId;
+        } else {
+          const cats = await this.listCategories();
+          const matched = cats.find(
+            (c) =>
+              c.id === updates.categoryId ||
+              c.slug === updates.categoryId ||
+              c.slug === updates.categoryId?.replace(/^cat-/, "")
+          );
+          patch.category_id = matched?.id ?? null;
+        }
+      }
+    }
     if (updates.badge !== undefined) patch.badge = updates.badge || null;
     if (updates.salePrice !== undefined || updates.regularPrice !== undefined) {
       patch.price =
@@ -1734,7 +1825,7 @@ export class SupabaseStoreRepository implements StoreRepository {
 
     if (error) {
       console.error("Supabase listPromotions error:", error);
-      return (await this.localFallback.getAllData()).promotions;
+      return (await this.getLocalFallbackData()).promotions;
     }
 
     return ((data ?? []) as SbPromotionRow[]).map(mapPromotionRow);
@@ -1861,7 +1952,45 @@ export class SupabaseStoreRepository implements StoreRepository {
   }
 
   async updateSettings(updates: Partial<StoreSettings>): Promise<StoreSettings> {
-    const updated = await this.localFallback.updateSettings(updates);
+    const current = await this.getSettings();
+    const merged: StoreSettings = {
+      ...current,
+      ...updates,
+      pickupOptions: { ...current.pickupOptions, ...(updates.pickupOptions || {}) },
+      paymentMethods: { ...current.paymentMethods, ...(updates.paymentMethods || {}) },
+      socialLinks: { ...current.socialLinks, ...(updates.socialLinks || {}) },
+      adminProfile: { ...current.adminProfile, ...(updates.adminProfile || {}) },
+      townshipDeliveryFees: updates.townshipDeliveryFees ?? current.townshipDeliveryFees,
+    };
+
+    try {
+      const sb = getSupabaseClient();
+      await sb.from("settings").upsert({
+        id: "default",
+        store_name: merged.storeName,
+        brand: merged.storeName,
+        tagline: merged.tagline,
+        phone: merged.supportPhone,
+        email: merged.supportEmail,
+        address: merged.address,
+        currency: merged.currency,
+        default_low_stock_threshold: merged.defaultLowStockThreshold,
+        township_delivery_fees: merged.townshipDeliveryFees,
+        pickup_options: merged.pickupOptions,
+        payment_methods: merged.paymentMethods,
+        social_links: merged.socialLinks,
+        admin_profile: merged.adminProfile,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn("Failed to persist settings in Supabase:", err);
+    }
+
+    try {
+      await this.localFallback.updateSettings(updates);
+    } catch (e) {
+      console.warn("Local fallback updateSettings suppressed:", e);
+    }
 
     try {
       const client = getSupabaseClient();
@@ -1892,7 +2021,7 @@ export class SupabaseStoreRepository implements StoreRepository {
       console.warn("Failed to sync social_channels to Supabase:", err);
     }
 
-    return updated;
+    return merged;
   }
 
   async markNotificationRead(id: string): Promise<void> {

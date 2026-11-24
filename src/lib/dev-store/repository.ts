@@ -222,12 +222,17 @@ function appendNotification(
 export class JsonFileStoreRepository implements StoreRepository {
   private filePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
+  private memoryCache: DevStoreData | null = null;
 
   constructor(filePath: string = STORE_FILE_PATH) {
     this.filePath = filePath;
   }
 
   private async ensureInitialized(): Promise<DevStoreData> {
+    if (this.memoryCache) {
+      return this.memoryCache;
+    }
+
     try {
       const raw = await fs.readFile(this.filePath, "utf-8");
       const parsed = JSON.parse(raw) as Partial<DevStoreData>;
@@ -235,7 +240,7 @@ export class JsonFileStoreRepository implements StoreRepository {
         const seed = createSeedData();
         const readNotificationIds = parsed.readNotificationIds ?? seed.readNotificationIds ?? [];
         const readSet = new Set(readNotificationIds);
-        return {
+        this.memoryCache = {
           products: parsed.products,
           categories: parsed.categories,
           orders: parsed.orders ?? seed.orders,
@@ -249,19 +254,30 @@ export class JsonFileStoreRepository implements StoreRepository {
           activity: parsed.activity ?? seed.activity,
           settings: parsed.settings ?? seed.settings,
         };
+        return this.memoryCache;
       }
     } catch {
       // File missing or invalid; create from seed below
     }
 
     const seed = createSeedData();
+    this.memoryCache = seed;
     await this.writeData(seed);
     return seed;
   }
 
   private async writeData(data: DevStoreData): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(data, null, 2), "utf-8");
+    this.memoryCache = data;
+    try {
+      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+      await fs.writeFile(this.filePath, JSON.stringify(data, null, 2), "utf-8");
+    } catch (err) {
+      // Catch read-only filesystem errors (EROFS, EACCES, etc.) on serverless platforms like Vercel Lambda
+      console.warn(
+        "JsonFileStoreRepository: disk write suppressed (read-only filesystem):",
+        (err as Error)?.message
+      );
+    }
   }
 
   private async withWriteLock<T>(
