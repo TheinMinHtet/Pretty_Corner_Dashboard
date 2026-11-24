@@ -103,6 +103,7 @@ export interface AdminTranslationSchema {
 
   productsPageTitle: string;
   productsPageSubtitle: string;
+  productsCountSuffix: string;
   addProductBtn: string;
   addNewProductTitle: string;
   editProductPrefix: string;
@@ -341,6 +342,7 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
 
     productsPageTitle: "Products",
     productsPageSubtitle: "Manage your beauty and skincare catalog, pricing, and stock.",
+    productsCountSuffix: "products",
     addProductBtn: "Add Product",
     addNewProductTitle: "Add New Product",
     editProductPrefix: "Edit",
@@ -578,6 +580,7 @@ export const adminTranslations: Record<Language, AdminTranslationSchema> = {
 
     productsPageTitle: "ကုန်ပစ္စည်းများ",
     productsPageSubtitle: "အလှကုန်ပစ္စည်း စာရင်း၊ ဈေးနှုန်းနှင့် လက်ကျန်ပမာဏများကို စီမံခန့်ခွဲပါ။",
+    productsCountSuffix: "မျိုး",
     addProductBtn: "ပစ္စည်းအသစ်ထည့်မည်",
     addNewProductTitle: "ကုန်ပစ္စည်းအသစ် ထည့်သွင်းရန်",
     editProductPrefix: "ပြင်ဆင်ရန် -",
