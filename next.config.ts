@@ -26,6 +26,14 @@ const nextConfig: NextConfig = {
         hostname: "images.unsplash.com",
       },
       {
+        protocol: "https",
+        hostname: "www.prettycornershopmm.com",
+      },
+      {
+        protocol: "https",
+        hostname: "prettycornershopmm.com",
+      },
+      {
         protocol: "http",
         hostname: "localhost",
       },
