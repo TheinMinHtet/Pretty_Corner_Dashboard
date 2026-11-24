@@ -28,6 +28,7 @@ export interface StorefrontProduct {
   regularPrice?: number;
   salePrice?: number;
   stockQuantity: number;
+  lowStockThreshold?: number;
   sizes: StorefrontProductSize[];
   image: string;
   gallery: string[];
@@ -123,6 +124,7 @@ export function toStorefrontProduct(
     regularPrice: product.regularPrice,
     salePrice: product.salePrice,
     stockQuantity: product.stock,
+    lowStockThreshold: product.lowStockThreshold,
     sizes,
     image: gallery[0],
     gallery,
