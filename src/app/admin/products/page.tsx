@@ -95,6 +95,7 @@ export default function ProductsPage() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [localCategories, setLocalCategories] = useState<Category[]>([]);
 
   // Pick up the header global search once, then clear it.
   useEffect(() => {
@@ -144,6 +145,9 @@ export default function ProductsPage() {
         setProducts(data.products || []);
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
+        if (data.categories?.length > 0) {
+          setLocalCategories(data.categories);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch products:", err);
@@ -178,13 +182,15 @@ export default function ProductsPage() {
     setPage(1);
   };
 
+  const effectiveCategories = categories?.length > 0 ? categories : localCategories;
+
   const sortedCategories = useMemo(
-    () => [...(categories || [])].sort((a: Category, b: Category) => a.name.localeCompare(b.name)),
-    [categories]
+    () => [...(effectiveCategories || [])].sort((a: Category, b: Category) => a.name.localeCompare(b.name)),
+    [effectiveCategories]
   );
 
   const getCategoryName = (catId: string) => {
-    const found = categories.find((c) => c.id === catId || c.slug === catId);
+    const found = effectiveCategories.find((c) => c.id === catId || c.slug === catId);
     return found?.name ?? "Uncategorized";
   };
 

@@ -7,7 +7,7 @@ import { ArrowLeft, Upload, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminStore } from "@/context/admin-store";
 import { useLanguage } from "@/context/language-context";
-import { Product, ProductStatus } from "@/types/admin";
+import { Category, Product, ProductStatus } from "@/types/admin";
 import {
   Card,
   CardContent,
@@ -46,13 +46,39 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
   const { categories, addProduct, updateProduct, settings } = useAdminStore();
   const { t } = useLanguage();
 
+  const [localCategories, setLocalCategories] = useState<Category[]>([]);
+
+  React.useEffect(() => {
+    if (categories.length === 0) {
+      fetch("/api/categories")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.categories?.length > 0) {
+            setLocalCategories(data.categories);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [categories.length]);
+
+  const activeCategories = categories.length > 0 ? categories : localCategories;
+
   const [name, setName] = useState(initialProduct?.name ?? "");
   const [description, setDescription] = useState(
     initialProduct?.description ?? ""
   );
   const [categoryId, setCategoryId] = useState(
-    initialProduct?.categoryId ?? categories[0]?.id ?? "cat-lenses"
+    initialProduct?.categoryId ?? activeCategories[0]?.id ?? ""
   );
+
+  React.useEffect(() => {
+    if (activeCategories.length > 0) {
+      const isCurrentValid = activeCategories.some((c) => c.id === categoryId);
+      if (!isCurrentValid && !initialProduct?.categoryId) {
+        setCategoryId(activeCategories[0].id);
+      }
+    }
+  }, [activeCategories, categoryId, initialProduct?.categoryId]);
   const [brand, setBrand] = useState(initialProduct?.brand ?? "Pretty Corner");
   const [sku, setSku] = useState(initialProduct?.sku ?? "");
   const [price, setPrice] = useState(
@@ -287,7 +313,7 @@ export function ProductForm({ initialProduct, mode }: ProductFormProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((c) => (
+                      {activeCategories.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name}
                         </SelectItem>
