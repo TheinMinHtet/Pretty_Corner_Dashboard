@@ -74,6 +74,15 @@ export function getCustomerDossiers(
     }
   >();
 
+  // Index known fallback customers for robust bidirectional linking
+  const fallbackById = new Map<string, Customer>();
+  const fallbackByPhone = new Map<string, Customer>();
+  for (const c of fallbackCustomers) {
+    if (c.id) fallbackById.set(c.id, c);
+    const np = normalizePhoneNumber(c.phone);
+    if (np) fallbackByPhone.set(np, c);
+  }
+
   // Sort orders chronologically ascending to build address and contact timeline
   const chronological = [...orders].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -82,7 +91,12 @@ export function getCustomerDossiers(
   for (const order of chronological) {
     const rawPhone = (order.customerPhone || "").trim();
     const normPhone = normalizePhoneNumber(rawPhone);
+    const matchedFallback =
+      (order.customerId ? fallbackById.get(order.customerId) : undefined) ||
+      (normPhone ? fallbackByPhone.get(normPhone) : undefined);
+
     const key =
+      matchedFallback?.id ||
       normPhone ||
       (order.customerId && order.customerId.trim()) ||
       (order.customerName && order.customerName.trim().toLowerCase());
@@ -90,9 +104,17 @@ export function getCustomerDossiers(
     if (!key) continue;
 
     const customerId =
-      order.customerId && order.customerId.startsWith("cust-")
+      matchedFallback?.id ||
+      (order.customerId && order.customerId.startsWith("cust-")
         ? order.customerId
-        : `cust-${normPhone ? normPhone.replace(/[^\w]/g, "") : key}`;
+        : `cust-${normPhone ? normPhone.replace(/[^\w]/g, "") : key}`);
+
+    const customerName =
+      matchedFallback?.name || order.customerName?.trim() || "Valued Shopper";
+    const customerPhone =
+      matchedFallback?.phone || order.customerPhone?.trim() || "N/A";
+    const customerEmail =
+      matchedFallback?.email || order.customerEmail?.trim();
 
     const orderTime = new Date(order.createdAt).getTime() || Date.now();
     const existing = customerMap.get(key);
@@ -116,12 +138,12 @@ export function getCustomerDossiers(
         orders: [order],
         customer: {
           id: customerId,
-          name: order.customerName?.trim() || "Valued Shopper",
-          phone: order.customerPhone?.trim() || "N/A",
-          email: order.customerEmail?.trim(),
+          name: customerName,
+          phone: customerPhone,
+          email: customerEmail,
           addresses,
-          joinedAt: order.createdAt || new Date().toISOString(),
-          notes: order.nearbyLandmark ? `Landmark: ${order.nearbyLandmark}` : undefined,
+          joinedAt: matchedFallback?.joinedAt || order.createdAt || new Date().toISOString(),
+          notes: matchedFallback?.notes || (order.nearbyLandmark ? `Landmark: ${order.nearbyLandmark}` : undefined),
         },
       });
     } else {
@@ -167,9 +189,11 @@ export function getCustomerDossiers(
 
   // Build the rich dossier objects
   const dossiers: CustomerDossier[] = [];
+  const seenCustomerIds = new Set<string>();
   const seenPhones = new Set<string>();
 
   customerMap.forEach(({ customer, orders: customerOrders }) => {
+    if (customer.id) seenCustomerIds.add(customer.id);
     const normPhone = normalizePhoneNumber(customer.phone);
     if (normPhone) seenPhones.add(normPhone);
 
@@ -207,6 +231,7 @@ export function getCustomerDossiers(
 
   // Merge any standalone customers (e.g. from seed/database) that haven't ordered yet
   for (const c of fallbackCustomers) {
+    if (c.id && seenCustomerIds.has(c.id)) continue;
     const normPhone = normalizePhoneNumber(c.phone);
     if (normPhone && seenPhones.has(normPhone)) continue;
 
@@ -254,12 +279,8 @@ export function getCustomerDossiers(
         if (tier === "repeat" && d.orderCount < 2) {
           return false;
         }
-        if (tier === "new") {
-          const joinedTime = d.joinedAt ? new Date(d.joinedAt).getTime() : 0;
-          const isRecent = joinedTime > 0 && Date.now() - joinedTime <= 30 * 24 * 60 * 60 * 1000;
-          if (d.orderCount > 1 && !isRecent) {
-            return false;
-          }
+        if (tier === "new" && d.orderCount > 1) {
+          return false;
         }
       }
       return true;
@@ -326,3 +347,41 @@ export function getCustomerDossierByPhoneOrId(
     ) ?? null
   );
 }
+
+export interface CustomerSegmentCounts {
+  all: number;
+  vip: number;
+  repeat: number;
+  new: number;
+}
+
+/**
+ * Computes live segment tallies for the customer segmentation filters.
+ */
+export function calculateCustomerSegmentCounts(
+  dossiers: CustomerDossier[]
+): CustomerSegmentCounts {
+  let vip = 0;
+  let repeat = 0;
+  let newShoppers = 0;
+
+  for (const d of dossiers) {
+    if (d.totalSpent >= 150000) {
+      vip++;
+    }
+    if (d.orderCount >= 2) {
+      repeat++;
+    }
+    if (d.orderCount <= 1) {
+      newShoppers++;
+    }
+  }
+
+  return {
+    all: dossiers.length,
+    vip,
+    repeat,
+    new: newShoppers,
+  };
+}
+

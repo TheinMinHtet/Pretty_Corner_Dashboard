@@ -47,6 +47,9 @@ import { formatDate, formatMMK, cn } from "@/lib/utils";
 import {
   CustomerDossier,
   getCustomerDossierByPhoneOrId,
+  getCustomerDossiers,
+  calculateCustomerSegmentCounts,
+  CustomerSegmentCounts,
 } from "@/modules/customers/customer-dossier";
 
 type CustomerTierFilter = "all" | "vip" | "repeat" | "new";
@@ -59,7 +62,7 @@ type CustomerSortOption =
   | "spent_asc";
 
 export default function CustomersPage() {
-  const { customers: storeCustomers, orders } = useAdminStore();
+  const { customers: storeCustomers, orders, session } = useAdminStore();
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<CustomerTierFilter>("all");
@@ -67,13 +70,19 @@ export default function CustomersPage() {
   const [sortOption, setSortOption] = useState<CustomerSortOption>("spent_desc");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  // Server-side customer pagination
+  // Server-side customer pagination & segment state
   const [page, setPage] = useState(1);
   const [customers, setCustomers] = useState<CustomerDossier[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [allTownships, setAllTownships] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [segmentCounts, setSegmentCounts] = useState<CustomerSegmentCounts>({
+    all: 0,
+    vip: 0,
+    repeat: 0,
+    new: 0,
+  });
 
   const { sortKey, sortDir } = useMemo(() => {
     switch (sortOption) {
@@ -106,26 +115,77 @@ export default function CustomersPage() {
       if (tierFilter !== "all") sp.set("tier", tierFilter);
       if (townshipFilter !== "All") sp.set("township", townshipFilter);
 
-      const res = await fetch(`/api/customers?${sp.toString()}`);
+      const headers: Record<string, string> = {};
+      if (session?.token) {
+        headers["Authorization"] = `Bearer ${session.token}`;
+      } else if (typeof window !== "undefined") {
+        try {
+          const raw =
+            localStorage.getItem("pretty_corner_auth_session_v1") ||
+            localStorage.getItem("pc_admin_session");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.token) headers["Authorization"] = `Bearer ${parsed.token}`;
+          }
+        } catch {}
+      }
+
+      const res = await fetch(`/api/customers?${sp.toString()}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setCustomers(data.customers || []);
         setTotal(data.total || 0);
         setTotalPages(data.totalPages || 1);
+        if (data.segmentCounts) {
+          setSegmentCounts(data.segmentCounts);
+        }
         if (Array.isArray(data.allTownships) && data.allTownships.length > 0) {
           setAllTownships(data.allTownships);
         }
+      } else {
+        // Fallback to client-side customer dossier derivation
+        const allDossiers = getCustomerDossiers(orders, storeCustomers || [], {
+          query: search.trim() || undefined,
+          township: townshipFilter !== "All" ? townshipFilter : undefined,
+        });
+        setSegmentCounts(calculateCustomerSegmentCounts(allDossiers));
+
+        const filtered = getCustomerDossiers(orders, storeCustomers || [], {
+          query: search.trim() || undefined,
+          tier: tierFilter,
+          township: townshipFilter !== "All" ? townshipFilter : undefined,
+          sortKey,
+          sortDir,
+        });
+        setTotal(filtered.length);
+        setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
+        setCustomers(filtered.slice((page - 1) * 10, page * 10));
       }
     } catch (err) {
-      console.error("Failed to load customers:", err);
-      toast.error("Failed to load customers");
+      console.warn("Customer API load failed, using local fallback:", err);
+      const allDossiers = getCustomerDossiers(orders, storeCustomers || [], {
+        query: search.trim() || undefined,
+        township: townshipFilter !== "All" ? townshipFilter : undefined,
+      });
+      setSegmentCounts(calculateCustomerSegmentCounts(allDossiers));
+
+      const filtered = getCustomerDossiers(orders, storeCustomers || [], {
+        query: search.trim() || undefined,
+        tier: tierFilter,
+        township: townshipFilter !== "All" ? townshipFilter : undefined,
+        sortKey,
+        sortDir,
+      });
+      setTotal(filtered.length);
+      setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
+      setCustomers(filtered.slice((page - 1) * 10, page * 10));
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, tierFilter, townshipFilter, sortKey, sortDir]);
+  }, [page, search, tierFilter, townshipFilter, sortKey, sortDir, session, orders, storeCustomers]);
 
   useEffect(() => {
-    fetchCustomers();
+    void fetchCustomers();
   }, [fetchCustomers]);
 
   const activeFilterCount = useMemo(() => {
@@ -274,13 +334,25 @@ export default function CustomersPage() {
                 setPage(1);
               }}
               className={cn(
-                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer",
+                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5",
                 tierFilter === "all"
                   ? "bg-[#B73D67] text-white shadow-xs font-semibold"
                   : "bg-[#FAF7F8] border border-[#EEDFE5] text-[#514149] hover:bg-[#FCEEF2] hover:text-[#B73D67]"
               )}
             >
-              All Shoppers
+              <span>All Shoppers</span>
+              {segmentCounts.all > 0 && (
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-semibold",
+                    tierFilter === "all"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#F0E1E6] text-[#806B73]"
+                  )}
+                >
+                  {segmentCounts.all}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -289,14 +361,26 @@ export default function CustomersPage() {
                 setPage(1);
               }}
               className={cn(
-                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1",
+                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5",
                 tierFilter === "vip"
                   ? "bg-[#B73D67] text-white shadow-xs font-semibold"
                   : "bg-[#FAF7F8] border border-[#EEDFE5] text-[#514149] hover:bg-[#FCEEF2] hover:text-[#B73D67]"
               )}
             >
               <Sparkles className="h-3 w-3" />
-              VIP Spenders (&gt;150k MMK)
+              <span>VIP Spenders (&gt;150k MMK)</span>
+              {segmentCounts.vip > 0 && (
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-semibold",
+                    tierFilter === "vip"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#FCEEF2] text-[#B73D67]"
+                  )}
+                >
+                  {segmentCounts.vip}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -305,14 +389,26 @@ export default function CustomersPage() {
                 setPage(1);
               }}
               className={cn(
-                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1",
+                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5",
                 tierFilter === "repeat"
                   ? "bg-[#B73D67] text-white shadow-xs font-semibold"
                   : "bg-[#FAF7F8] border border-[#EEDFE5] text-[#514149] hover:bg-[#FCEEF2] hover:text-[#B73D67]"
               )}
             >
               <Users className="h-3 w-3" />
-              Repeat Buyers (2+ Orders)
+              <span>Repeat Buyers (2+ Orders)</span>
+              {segmentCounts.repeat > 0 && (
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-semibold",
+                    tierFilter === "repeat"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#F0E1E6] text-[#806B73]"
+                  )}
+                >
+                  {segmentCounts.repeat}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -321,13 +417,25 @@ export default function CustomersPage() {
                 setPage(1);
               }}
               className={cn(
-                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer",
+                "h-7 px-3 rounded-full text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5",
                 tierFilter === "new"
                   ? "bg-[#B73D67] text-white shadow-xs font-semibold"
                   : "bg-[#FAF7F8] border border-[#EEDFE5] text-[#514149] hover:bg-[#FCEEF2] hover:text-[#B73D67]"
               )}
             >
-              New Shoppers
+              <span>New Shoppers</span>
+              {segmentCounts.new > 0 && (
+                <span
+                  className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-semibold",
+                    tierFilter === "new"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#F0E1E6] text-[#806B73]"
+                  )}
+                >
+                  {segmentCounts.new}
+                </span>
+              )}
             </button>
           </div>
         </CardContent>
